@@ -1,0 +1,27 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm audit *)",
+      "Bash(npm view *)",
+      "Bash(node -e \"let d='';process.stdin.on\\('data',c=>d+=c\\);process.stdin.on\\('end',\\(\\)=>{const v=JSON.parse\\(d\\);console.log\\(v.filter\\(x=>x.startsWith\\('5.4.'\\)\\).slice\\(-8\\).join\\('\\\\n'\\)\\)}\\)\")",
+      "Bash(curl -s -o /dev/null -w \"HTTP %{http_code}\\\\n\" http://localhost:4000/api/bills)",
+      "Bash(curl -s -o /dev/null -w \"HTTP %{http_code}\\\\n\" http://localhost:5173/)",
+      "Bash(curl -sv http://localhost:4000/)",
+      "Bash(sed -i \"s#http://localhost:4000#http://localhost:5173#g; s#'01-dashboard-user.png'#'05-vite-dashboard-user.png'#; s#'02-review-pending.png'#'06-vite-review-pending.png'#; s#'03-review-after-approve.png'#'07-vite-review-after-approve.png'#; s#'04-user-management.png'#'08-vite-user-management.png'#; s#'99-error-state.png'#'98-vite-error-state.png'#\" verify-ui-vite.cjs)",
+      "Bash(cp \"C:\\\\Users\\\\johnp\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\d--JP-IT-STUDENTS-SIA\\\\6a65c106-a056-41bf-9aba-3e510e937c0f\\\\scratchpad\\\\verify.js\" verify-ui-vite.cjs)",
+      "Bash(sed -i \"s#http://localhost:4000#http://localhost:5173#g; s#01-dashboard-user.png#05-vite-dashboard-user.png#; s#02-review-pending.png#06-vite-review-pending.png#; s#03-review-after-approve.png#07-vite-review-after-approve.png#; s#04-user-management.png#08-vite-user-management.png#; s#99-error-state.png#98-vite-error-state.png#\" verify-ui-vite.cjs)",
+      "Bash(node verify-ui-vite.cjs)",
+      "Bash(rm -f verify-ui-vite.cjs)",
+      "Bash(rm -rf node_modules/playwright node_modules/playwright-core node_modules/.bin/playwright)",
+      "Bash(curl -s -o /dev/null -w \"Vite HTTP %{http_code}\\\\n\" http://localhost:5173/)",
+      "Bash(curl -s -o /dev/null -w \"API HTTP %{http_code}\\\\n\" http://localhost:4000/)",
+      "Bash(node verify-dark.cjs)",
+      "Bash(rm -f verify-dark.cjs)",
+      "Bash(node verify-alerts.cjs)",
+      "Bash(rm -f verify-alerts.cjs)",
+      "Bash(node verify-account.cjs)",
+      "Bash(node verify-logout-only.cjs)",
+      "Bash(rm -f verify-account.cjs verify-logout-only.cjs)"
+    ]
+  }
+}

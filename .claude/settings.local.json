@@ -1,0 +1,25 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(mkdir -p \"/d/JP IT STUDENTS/SIA/server/models\" \"/d/JP IT STUDENTS/SIA/server/routes\" \"/d/JP IT STUDENTS/SIA/server/middleware\" && ls -la \"/d/JP IT STUDENTS/SIA\")",
+      "Bash(npm install *)",
+      "Bash(npm run *)",
+      "Bash(npm start *)",
+      "Read(//tmp/**)",
+      "Bash(curl -s -o /dev/null -w \"HTTP %{http_code}\\\\n\" http://localhost:4000/)",
+      "Bash(node \"C:\\\\Users\\\\johnp\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\d--JP-IT-STUDENTS-SIA\\\\6a65c106-a056-41bf-9aba-3e510e937c0f\\\\scratchpad\\\\verify.js\")",
+      "Bash(cp \"C:\\\\Users\\\\johnp\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\d--JP-IT-STUDENTS-SIA\\\\6a65c106-a056-41bf-9aba-3e510e937c0f\\\\scratchpad\\\\verify.js\" \"/d/JP IT STUDENTS/SIA/verify-ui.cjs\")",
+      "Bash(node verify-ui.cjs)",
+      "Bash(rm -rf node_modules/playwright node_modules/playwright-core node_modules/.bin/playwright)",
+      "Bash(npm ls *)",
+      "Bash(mongosh fintrack_stark --quiet --eval \"db.users.deleteMany\\({email: /^newuser1756/}\\); print\\('remaining users:'\\); db.users.find\\({}, {name:1,email:1,role:1,_id:0}\\).forEach\\(u => printjson\\(u\\)\\);\")",
+      "Bash(mongosh fintrack_stark --quiet --eval ' *)",
+      "Bash(mongosh fintrack_stark --quiet --eval \"db.dropDatabase\\(\\); print\\('dropped'\\);\")",
+      "Bash(node verify-names.cjs)",
+      "Bash(rm -f verify-names.cjs)"
+    ],
+    "additionalDirectories": [
+      "D:\\JP IT STUDENTS\\SIA\\server"
+    ]
+  }
+}

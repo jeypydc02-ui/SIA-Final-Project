@@ -1,0 +1,1034 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>FinTrack Stark</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
+<style>
+  :root{
+    --bg:#F4F5F7;
+    --panel:#FFFFFF;
+    --line:#DDE1E6;
+    --text:#242A31;
+    --text-dim:#6B7280;
+    --primary:#2F6FED;
+    --primary-dark:#2557C7;
+    --ok:#1E8E5A;
+    --warn:#B5760A;
+    --danger:#C6362E;
+    --sans: "Inter", -apple-system, "Segoe UI", sans-serif;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;height:100%;}
+  body{
+    background:var(--bg);
+    color:var(--text);
+    font-family:var(--sans);
+    -webkit-font-smoothing:antialiased;
+  }
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+  #root{min-height:100vh;}
+  .shell{display:flex;min-height:100vh;}
+
+  /* Sidebar */
+  .side{
+    width:220px; flex:none;
+    background:var(--panel);
+    border-right:1px solid var(--line);
+    display:flex;flex-direction:column;
+    padding:18px 0 16px;
+  }
+  .brand{padding:0 18px 16px; border-bottom:1px solid var(--line); margin-bottom:10px;}
+  .brand .mark{font-size:18px; font-weight:700; color:var(--text);}
+  .brand .sub{font-size:11px; color:var(--text-dim); margin-top:2px;}
+  .nav-group{padding:10px 10px 4px;}
+  .nav-label{font-size:10.5px; text-transform:uppercase; letter-spacing:0.5px; color:var(--text-dim); padding:8px 8px 6px;}
+  .nav-item{
+    display:flex; align-items:center; gap:10px;
+    padding:8px 10px; margin:1px 0; border-radius:6px;
+    color:var(--text-dim); font-size:13.5px; font-weight:500; cursor:pointer;
+    border-left:2px solid transparent;
+  }
+  .nav-item:hover{background:#F1F3F6; color:var(--text);}
+  .nav-item.active{background:#EAF1FF; color:var(--primary); border-left:2px solid var(--primary); font-weight:600;}
+  .nav-ico{width:18px; text-align:center; font-size:11px; color:var(--text-dim);}
+  .side-foot{margin-top:auto; padding:14px 18px 0; border-top:1px solid var(--line);}
+  .role-pill{
+    font-size:11px; color:var(--primary);
+    background:#EAF1FF; border:1px solid #C9DBFF;
+    padding:4px 8px; border-radius:5px; display:inline-block; margin-top:8px; cursor:pointer;
+  }
+  .role-pill:hover{background:#DCE9FF;}
+
+  /* Main */
+  .main{flex:1; min-width:0; display:flex; flex-direction:column;}
+  .topbar{
+    display:flex; align-items:center; justify-content:space-between;
+    padding:16px 28px; border-bottom:1px solid var(--line);
+    background:var(--panel);
+  }
+  .topbar h1{font-size:18px; margin:0; font-weight:700; color:var(--text);}
+  .topbar .path{font-size:11.5px; color:var(--text-dim); margin-top:2px;}
+  .content{padding:24px 28px 60px; overflow-y:auto;}
+
+  /* Cards / grid */
+  .grid{display:grid; gap:14px;}
+  .grid-4{grid-template-columns:repeat(4,1fr);}
+  .grid-3{grid-template-columns:repeat(3,1fr);}
+  .grid-2{grid-template-columns:2fr 1fr;}
+  @media(max-width:1000px){.grid-4{grid-template-columns:repeat(2,1fr);} .grid-2{grid-template-columns:1fr;}}
+
+  .card{
+    background:var(--panel); border:1px solid var(--line); border-radius:8px;
+    padding:16px 18px;
+  }
+  .card h3{margin:0 0 12px; font-size:12.5px; color:var(--text-dim); font-weight:600;}
+  .stat .value{font-size:24px; color:var(--text); font-weight:700;}
+  .stat .label{font-size:12px; color:var(--text-dim); margin-top:4px;}
+  .stat .delta{font-size:11.5px; margin-top:8px;}
+  .up{color:var(--ok);} .down{color:var(--danger);} .mid{color:var(--warn);}
+
+  table{width:100%; border-collapse:collapse; font-size:13px;}
+  th{text-align:left; font-size:11px; text-transform:uppercase; letter-spacing:0.3px; color:var(--text-dim); padding:8px 10px; border-bottom:1px solid var(--line); font-weight:600;}
+  td{padding:10px 10px; border-bottom:1px solid var(--line); color:var(--text);}
+  tr:last-child td{border-bottom:none;}
+  tr:hover td{background:#FAFBFC;}
+
+  .badge{font-size:11px; font-weight:600; padding:3px 9px; border-radius:4px; display:inline-block;}
+  .badge.ok{background:#E6F6ED; color:var(--ok);}
+  .badge.warn{background:#FDF1DE; color:var(--warn);}
+  .badge.danger{background:#FBEAE9; color:var(--danger);}
+  .badge.neutral{background:#EEF0F3; color:var(--text-dim);}
+
+  button.btn{
+    font-family:var(--sans); font-weight:600; font-size:13px;
+    background:var(--primary); color:#fff; border:none;
+    padding:9px 16px; border-radius:6px; cursor:pointer;
+  }
+  button.btn:hover{background:var(--primary-dark);}
+  button.btn.ghost{background:transparent; color:var(--text-dim); border:1px solid var(--line);}
+  button.btn.ghost:hover{color:var(--text); border-color:var(--primary);}
+  button.btn.small{padding:5px 10px; font-size:11.5px;}
+  button.btn.danger{background:var(--danger); color:#fff;}
+
+  input, select{
+    background:#fff; border:1px solid var(--line); color:var(--text);
+    padding:8px 10px; border-radius:6px; font-size:13px; font-family:var(--sans);
+    width:100%;
+  }
+  input:focus, select:focus{outline:none; border-color:var(--primary);}
+  label.field{display:block; font-size:12px; color:var(--text-dim); margin-bottom:5px;}
+  .form-row{margin-bottom:14px;}
+  .form-grid{display:grid; grid-template-columns:1fr 1fr; gap:14px;}
+
+  .login-wrap{min-height:100vh; display:flex; align-items:center; justify-content:center; background:var(--bg);}
+  .login-card{width:360px; background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:32px 30px;}
+  .login-mark{font-size:22px; font-weight:700; color:var(--text); text-align:center;}
+  .login-sub{font-size:12px; color:var(--text-dim); text-align:center; margin-top:5px; margin-bottom:24px;}
+  .demo-note{margin-top:16px; font-size:12px; color:var(--text-dim); background:#F4F5F7; padding:10px 12px; border-radius:6px; border:1px solid var(--line); line-height:1.6;}
+
+  .pagehead{display:flex; align-items:center; justify-content:space-between; margin-bottom:16px;}
+  .pagehead h2{font-size:18px; margin:0; color:var(--text);}
+  .pagehead .desc{font-size:12.5px; color:var(--text-dim); margin-top:3px;}
+
+  .modal-overlay{position:fixed; inset:0; background:rgba(20,24,29,0.45); display:flex; align-items:center; justify-content:center; z-index:50;}
+  .modal{width:440px; background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:22px;}
+  .modal h3{margin:0 0 16px; font-size:16px; color:var(--text);}
+  .modal .actions{display:flex; justify-content:flex-end; gap:10px; margin-top:18px;}
+
+  .empty{text-align:center; padding:40px 20px; color:var(--text-dim); font-size:13px;}
+  .empty .big{font-size:24px; margin-bottom:8px;}
+
+  .progress-track{height:6px; background:#EEF0F3; border-radius:4px; overflow:hidden;}
+  .progress-fill{height:100%; background:var(--primary); border-radius:4px;}
+
+  .flow-badge{font-size:10.5px; color:var(--text-dim); border:1px dashed var(--line); padding:2px 7px; border-radius:4px;}
+
+  .toast{
+    position:fixed; bottom:22px; right:22px; background:var(--text); border:none;
+    color:#fff; padding:12px 18px; border-radius:6px; font-size:13px;
+    box-shadow:0 4px 16px rgba(0,0,0,0.2); z-index:100; max-width:340px;
+  }
+  .log-line{font-size:12.5px; color:var(--text-dim); padding:7px 0; border-bottom:1px solid var(--line);}
+  .log-line .tag{color:var(--primary); margin-right:8px; font-weight:600;}
+
+  ::-webkit-scrollbar{width:10px; height:10px;}
+  ::-webkit-scrollbar-track{background:transparent;}
+  ::-webkit-scrollbar-thumb{background:var(--line); border-radius:6px;}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel" data-presets="react">
+const {useState, useMemo, useEffect} = React;
+
+/* ---------- seed data ---------- */
+async function api(path, opts={}){
+  const token = sessionStorage.getItem("fts_token");
+  const headers = {"Content-Type":"application/json"};
+  if(token) headers.Authorization = "Bearer "+token;
+  const res = await fetch(path, {
+    method: opts.method || "GET",
+    headers,
+    body: opts.body ? JSON.stringify(opts.body) : undefined,
+  });
+  let data = null;
+  try { data = await res.json(); } catch(e){ /* empty body */ }
+  if(!res.ok) throw new Error((data && data.error) || ("Request failed ("+res.status+")"));
+  return data;
+}
+
+const todayISO = () => new Date().toISOString().slice(0,10);
+const addDays = (n) => { const d = new Date(); d.setDate(d.getDate()+n); return d.toISOString().slice(0,10); };
+const peso = (n) => "₱" + Number(n).toLocaleString(undefined,{minimumFractionDigits:2, maximumFractionDigits:2});
+const fmtDate = (iso) => new Date(String(iso).slice(0,10)+"T00:00:00").toLocaleDateString("en-PH",{month:"short", day:"numeric", year:"numeric"});
+
+function billStatus(due, paid){
+  if(paid) return "Paid";
+  const d = new Date(due+"T00:00:00"), t = new Date(todayISO()+"T00:00:00");
+  const diff = Math.round((d-t)/86400000);
+  if(diff < 0) return "Overdue";
+  if(diff === 0) return "Due Today";
+  return "Upcoming";
+}
+function statusBadgeClass(s){
+  return {Paid:"ok", "Due Today":"warn", Overdue:"danger", Upcoming:"neutral"}[s] || "neutral";
+}
+function txStatusBadge(s){
+  return {"Approved":"ok", "Pending Review":"warn", "Rejected":"danger", "Needs Revision":"danger", "Superseded":"neutral"}[s] || "neutral";
+}
+
+/* ---------- App ---------- */
+function App(){
+  const [session, setSession] = useState(null); // {id,name,email,role,token}
+  const [screen, setScreen] = useState("dashboard");
+  const [users, setUsers] = useState([]);
+  const [bills, setBills] = useState([]);
+  const [tx, setTx] = useState([]);
+  const [budgets, setBudgets] = useState([]);
+  const [notifs, setNotifs] = useState([]);
+  const [auditLog, setAuditLog] = useState([]);
+  const [comments, setComments] = useState([]);
+  const [toast, setToast] = useState(null);
+  const [loadError, setLoadError] = useState("");
+
+  useEffect(()=>{
+    if(!toast) return;
+    const t = setTimeout(()=>setToast(null), 3200);
+    return ()=>clearTimeout(t);
+  },[toast]);
+
+  function fireToast(msg){ setToast(msg); }
+  function fireError(err){ setToast("⚠ " + (err.message || "Something went wrong.")); }
+
+  async function refreshAll(activeSession){
+    const s = activeSession || session;
+    try{
+      const [billsData, txData, budgetsData, notifsData, commentsData] = await Promise.all([
+        api("/api/bills"), api("/api/transactions"), api("/api/budgets"), api("/api/notifications"), api("/api/comments"),
+      ]);
+      setBills(billsData); setTx(txData); setBudgets(budgetsData); setNotifs(notifsData); setComments(commentsData);
+      if(s && (s.role==="Admin" || s.role==="Reviewer")){
+        setAuditLog(await api("/api/audit-log"));
+      }
+      if(s && s.role==="Admin"){
+        setUsers(await api("/api/users"));
+      }
+      setLoadError("");
+    } catch(err){
+      setLoadError(err.message);
+    }
+  }
+
+  async function login(email, password){
+    try{
+      const data = await api("/api/auth/login", {method:"POST", body:{email, password}});
+      const sess = {...data.user, token:data.token};
+      sessionStorage.setItem("fts_token", data.token);
+      setSession(sess);
+      setScreen("dashboard");
+      await refreshAll(sess);
+      return true;
+    } catch(err){
+      return false;
+    }
+  }
+  async function logout(){
+    try{ await api("/api/auth/logout", {method:"POST"}); } catch(e){ /* ignore */ }
+    sessionStorage.removeItem("fts_token");
+    setSession(null);
+    setBills([]); setTx([]); setBudgets([]); setNotifs([]); setAuditLog([]); setUsers([]); setComments([]);
+  }
+
+  // ---- Integration component: workflow automation + webhook simulation, now backed by the API ----
+  async function markPaid(billId, amount){
+    try{
+      await api("/api/bills/"+billId+"/pay", {method:"POST", body:{amount}});
+      fireToast("✓ Bill marked as paid — dashboard & logs updated.");
+      await refreshAll();
+    } catch(err){ fireError(err); }
+  }
+
+  async function addBill(b){
+    try{
+      await api("/api/bills", {method:"POST", body:b});
+      fireToast("Bill added — reminder scheduled.");
+      await refreshAll();
+    } catch(err){ fireError(err); }
+  }
+
+  async function addTx(t){
+    try{
+      await api("/api/transactions", {method:"POST", body:t});
+      fireToast(`${t.type} of ${peso(t.amount)} submitted for review.`);
+      await refreshAll();
+    } catch(err){ fireError(err); }
+  }
+  async function reviewTx(id, action, comment){
+    try{
+      await api("/api/transactions/"+id+"/review", {method:"POST", body:{action, comment}});
+      fireToast("Review recorded.");
+      await refreshAll();
+    } catch(err){ fireError(err); }
+  }
+  async function resubmitTx(id, patch){
+    try{
+      await api("/api/transactions/"+id+"/resubmit", {method:"POST", body:patch});
+      fireToast("Resubmitted for review.");
+      await refreshAll();
+    } catch(err){ fireError(err); }
+  }
+  async function addComment(text){
+    try{
+      await api("/api/comments", {method:"POST", body:{text}});
+      await refreshAll();
+    } catch(err){ fireError(err); }
+  }
+
+  if(!session){
+    return <LoginScreen onLogin={login} />;
+  }
+
+  return (
+    <div className="shell">
+      <Sidebar screen={screen} setScreen={setScreen} session={session} logout={logout}/>
+      <div className="main">
+        <Topbar screen={screen} session={session}/>
+        <div className="content">
+          {loadError && (
+            <div className="card" style={{marginBottom:16, borderColor:"var(--danger)"}}>
+              <div style={{color:"var(--danger)", fontSize:13}}>⚠ Could not reach the server: {loadError}</div>
+            </div>
+          )}
+          {screen==="dashboard" && <Dashboard bills={bills} tx={tx} budgets={budgets} notifs={notifs}/>}
+          {screen==="projects" && <ProjectList bills={bills}/>}
+          {screen==="projectDetails" && <ProjectDetails bills={bills}/>}
+          {screen==="bills" && <BillsScreen bills={bills} addBill={addBill} markPaid={markPaid}/>}
+          {screen==="history" && <PaymentHistory bills={bills}/>}
+          {screen==="submission" && <SubmissionForm addTx={addTx}/>}
+          {screen==="versions" && <VersionHistory bills={bills}/>}
+          {screen==="review" && <ReviewApproval tx={tx} session={session} reviewTx={reviewTx} resubmitTx={resubmitTx}/>}
+          {screen==="comments" && <CommentsScreen comments={comments} addComment={addComment}/>}
+          {screen==="notifications" && <NotificationsScreen notifs={notifs}/>}
+          {screen==="audit" && <AuditLogScreen auditLog={auditLog}/>}
+          {screen==="reports" && <ReportsScreen tx={tx} bills={bills} budgets={budgets}/>}
+          {screen==="users" && <UserManagement users={users} session={session}/>}
+        </div>
+      </div>
+      {toast && <div className="toast">{toast}</div>}
+    </div>
+  );
+}
+
+/* ---------- Login ---------- */
+function LoginScreen({onLogin}){
+  const [email, setEmail] = useState("jp@fintrackstark.app");
+  const [password, setPassword] = useState("demo123");
+  const [err, setErr] = useState("");
+  const [busy, setBusy] = useState(false);
+  async function submit(e){
+    e.preventDefault();
+    setBusy(true);
+    const ok = await onLogin(email, password);
+    setBusy(false);
+    if(!ok) setErr("Invalid credentials, or the server is unreachable. Try a demo account below.");
+  }
+  return (
+    <div className="login-wrap">
+      <div className="login-card">
+        <div className="login-mark">FinTrack Stark</div>
+        <div className="login-sub">Personal Finance · Bill Reminder · Payment Tracking</div>
+        <form onSubmit={submit}>
+          <div className="form-row">
+            <label className="field">Email</label>
+            <input value={email} onChange={e=>setEmail(e.target.value)} />
+          </div>
+          <div className="form-row">
+            <label className="field">Password</label>
+            <input type="password" value={password} onChange={e=>setPassword(e.target.value)} />
+          </div>
+          {err && <div style={{color:"var(--danger)", fontSize:12, marginBottom:12}}>{err}</div>}
+          <button className="btn" style={{width:"100%"}} type="submit" disabled={busy}>{busy?"Signing in…":"Log In"}</button>
+        </form>
+        <div className="demo-note">
+          DEMO ACCOUNTS<br/>
+          User &nbsp;→ jp@fintrackstark.app / demo123<br/>
+          Reviewer → reviewer@fintrackstark.app / reviewer123<br/>
+          Admin → admin@fintrackstark.app / admin123
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ---------- Sidebar / Topbar ---------- */
+const NAV = [
+  {group:"Overview", items:[
+    {id:"dashboard", label:"Dashboard", ico:"01"},
+  ]},
+  {group:"Finance Records", items:[
+    {id:"projects", label:"Bill Categories", ico:"02"},
+    {id:"projectDetails", label:"Category Detail", ico:"03"},
+    {id:"submission", label:"Log Income/Expense", ico:"04"},
+  ]},
+  {group:"Bills & Payments", items:[
+    {id:"bills", label:"Bill Reminders", ico:"05"},
+    {id:"versions", label:"Bill Status History", ico:"06"},
+    {id:"review", label:"Review & Approval", ico:"07"},
+    {id:"comments", label:"Notes / Feedback", ico:"08"},
+    {id:"history", label:"Payment History", ico:"09"},
+  ]},
+  {group:"System", items:[
+    {id:"notifications", label:"Notification Log", ico:"10"},
+    {id:"audit", label:"Audit Log", ico:"11", roles:["Admin","Reviewer"]},
+    {id:"reports", label:"Reports", ico:"12"},
+    {id:"users", label:"User & Role Mgmt", ico:"13", roles:["Admin"]},
+  ]},
+];
+const LABELS = Object.fromEntries(NAV.flatMap(g=>g.items).map(i=>[i.id,i.label]));
+
+function Sidebar({screen, setScreen, session, logout}){
+  return (
+    <div className="side">
+      <div className="brand">
+        <div className="mark">FinTrack Stark</div>
+        <div className="sub">Integration System</div>
+      </div>
+      {NAV.map(g => (
+        <div className="nav-group" key={g.group}>
+          <div className="nav-label">{g.group}</div>
+          {g.items.filter(it => !it.roles || it.roles.includes(session.role)).map(it => (
+            <div key={it.id} className={"nav-item"+(screen===it.id?" active":"")} onClick={()=>setScreen(it.id)}>
+              <span className="nav-ico">{it.ico}</span>{it.label}
+            </div>
+          ))}
+        </div>
+      ))}
+      <div className="side-foot">
+        <div style={{fontSize:12.5, color:"var(--text)"}}>{session.name}</div>
+        <div className="role-pill" onClick={logout}>{session.role} · Log out</div>
+      </div>
+    </div>
+  );
+}
+
+function Topbar({screen, session}){
+  return (
+    <div className="topbar">
+      <div>
+        <h1>{LABELS[screen]}</h1>
+        <div className="path">fintrackstark / {screen}</div>
+      </div>
+      <div style={{fontSize:11.5, color:"var(--text-dim)"}}>
+        {new Date().toLocaleDateString("en-PH",{weekday:"long", month:"long", day:"numeric", year:"numeric"})}
+      </div>
+    </div>
+  );
+}
+
+/* ---------- Dashboard ---------- */
+function Dashboard({bills, tx, budgets, notifs}){
+  const approved = tx.filter(t=>t.status==="Approved");
+  const pendingCount = tx.filter(t=>t.status==="Pending Review").length;
+  const income = approved.filter(t=>t.type==="Income").reduce((s,t)=>s+t.amount,0);
+  const expense = approved.filter(t=>t.type==="Expense").reduce((s,t)=>s+t.amount,0);
+  const balance = income - expense;
+  const upcoming = bills.filter(b=>!b.paid);
+  const overdueCount = upcoming.filter(b=>billStatus(b.due,b.paid)==="Overdue").length;
+  const dueSoonCount = upcoming.filter(b=>{const s=billStatus(b.due,b.paid); return s==="Due Today"||s==="Upcoming";}).length;
+
+  return (
+    <div>
+      <div className="grid grid-4" style={{marginBottom:16}}>
+        <div className="card stat">
+          <h3>Balance</h3>
+          <div className="value">{peso(balance)}</div>
+          <div className="label">Approved income minus expenses</div>
+          <div className="delta up">{approved.length} approved · {pendingCount} pending review</div>
+        </div>
+        <div className="card stat">
+          <h3>Total Income</h3>
+          <div className="value">{peso(income)}</div>
+          <div className="label">Approved, this period</div>
+        </div>
+        <div className="card stat">
+          <h3>Total Expenses</h3>
+          <div className="value">{peso(expense)}</div>
+          <div className="label">Approved, this period</div>
+        </div>
+        <div className="card stat">
+          <h3>Bills Pending</h3>
+          <div className="value" style={{color: overdueCount ? "var(--danger)" : "var(--text)"}}>{upcoming.length}</div>
+          <div className="label">{overdueCount} overdue · {dueSoonCount} upcoming</div>
+        </div>
+      </div>
+
+      <div className="grid grid-2">
+        <div className="card">
+          <h3>Upcoming &amp; Overdue Bills</h3>
+          <table>
+            <thead><tr><th>Bill</th><th>Category</th><th>Due</th><th>Amount</th><th>Status</th></tr></thead>
+            <tbody>
+              {upcoming.slice(0,6).map(b=>{
+                const s = billStatus(b.due, b.paid);
+                return (
+                  <tr key={b._id}>
+                    <td>{b.name}</td><td>{b.category}</td><td>{fmtDate(b.due)}</td><td>{peso(b.amount)}</td>
+                    <td><span className={"badge "+statusBadgeClass(s)}>{s}</span></td>
+                  </tr>
+                );
+              })}
+              {upcoming.length===0 && <tr><td colSpan="5"><div className="empty">All bills settled. Nothing pending.</div></td></tr>}
+            </tbody>
+          </table>
+        </div>
+        <div className="card">
+          <h3>Recent Notifications</h3>
+          {notifs.slice(0,5).map(n=>(
+            <div key={n._id} className="log-line"><span className="tag">[{n.type}]</span>{n.message}</div>
+          ))}
+          {notifs.length===0 && <div className="empty">No notifications yet.</div>}
+        </div>
+      </div>
+
+      <div className="grid grid-3" style={{marginTop:16}}>
+        {budgets.map(b=>{
+          const spent = approved.filter(t=>t.type==="Expense" && t.category===b.category).reduce((s,t)=>s+t.amount,0);
+          const pct = Math.min(100, Math.round(spent/b.limit*100));
+          return (
+            <div className="card" key={b.category}>
+              <h3>{b.category} Budget</h3>
+              <div style={{display:"flex", justifyContent:"space-between", fontSize:12, marginBottom:8}}>
+                <span>{peso(spent)}</span><span style={{color:"var(--text-dim)"}}>of {peso(b.limit)}</span>
+              </div>
+              <div className="progress-track"><div className="progress-fill" style={{width:pct+"%", background: pct>=100?"var(--danger)":pct>=75?"var(--warn)":"var(--primary)"}}></div></div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+/* ---------- Bill Categories (Project List) ---------- */
+const CATEGORY_DESC = {
+  Utilities: "Electricity, water, and related recurring bills.",
+  Housing: "Rent, association dues, and property-related bills.",
+  Internet: "Broadband and connectivity subscriptions.",
+  Credit: "Credit card and loan obligations.",
+  Subscription: "Streaming and recurring service subscriptions.",
+};
+function ProjectList({bills}){
+  const counts = {};
+  bills.forEach(b => { counts[b.category] = (counts[b.category]||0) + 1; });
+  const cats = Object.keys(counts).length ? Object.keys(counts) : Object.keys(CATEGORY_DESC);
+  return (
+    <div>
+      <div className="pagehead"><div><h2>Bill Categories</h2><div className="desc">Groupings used to organize bills, budgets, and reports.</div></div></div>
+      <div className="grid grid-3">
+        {cats.map(name=>{
+          const count = counts[name] || 0;
+          return (
+            <div className="card" key={name}>
+              <h3>{name}</h3>
+              <p style={{fontSize:13, color:"var(--text-dim)", margin:"0 0 12px"}}>{CATEGORY_DESC[name] || "Bills grouped under this category."}</p>
+              <span className="badge neutral">{count} bill{count===1?"":"s"}</span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function ProjectDetails({bills}){
+  const rows = bills.filter(b=>b.category==="Utilities");
+  return (
+    <div>
+      <div className="pagehead"><div><h2>Category Detail — Utilities</h2><div className="desc">All bills, statuses, and totals within this category.</div></div></div>
+      <div className="card">
+        <table>
+          <thead><tr><th>Bill</th><th>Due Date</th><th>Amount</th><th>Status</th></tr></thead>
+          <tbody>
+            {rows.map(b=>{
+              const s = billStatus(b.due,b.paid);
+              return <tr key={b._id}><td>{b.name}</td><td>{fmtDate(b.due)}</td><td>{peso(b.amount)}</td><td><span className={"badge "+statusBadgeClass(s)}>{s}</span></td></tr>;
+            })}
+            {rows.length===0 && <tr><td colSpan="4"><div className="empty">No bills in this category yet.</div></td></tr>}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+/* ---------- Bills / Bill Reminder ---------- */
+function BillsScreen({bills, addBill, markPaid}){
+  const [showAdd, setShowAdd] = useState(false);
+  const [payTarget, setPayTarget] = useState(null);
+  const [payAmount, setPayAmount] = useState("");
+  const [form, setForm] = useState({name:"", category:"Utilities", amount:"", due: addDays(7)});
+
+  function submitAdd(e){
+    e.preventDefault();
+    if(!form.name || !form.amount) return;
+    addBill({name:form.name, category:form.category, amount:Number(form.amount), due:form.due});
+    setShowAdd(false);
+    setForm({name:"", category:"Utilities", amount:"", due: addDays(7)});
+  }
+  function openPay(b){ setPayTarget(b); setPayAmount(String(b.amount)); }
+  function confirmPay(){
+    markPaid(payTarget._id, Number(payAmount) || payTarget.amount);
+    setPayTarget(null);
+  }
+
+  return (
+    <div>
+      <div className="pagehead">
+        <div><h2>Bill Reminders</h2><div className="desc">Status auto-updates daily: Upcoming → Due Today → Overdue → Paid.</div></div>
+        <button className="btn" onClick={()=>setShowAdd(true)}>+ Add Bill</button>
+      </div>
+      <div className="card">
+        <table>
+          <thead><tr><th>Bill</th><th>Category</th><th>Due Date</th><th>Amount</th><th>Status</th><th></th></tr></thead>
+          <tbody>
+            {bills.map(b=>{
+              const s = billStatus(b.due,b.paid);
+              return (
+                <tr key={b._id}>
+                  <td>{b.name}</td><td>{b.category}</td><td>{fmtDate(b.due)}</td><td>{peso(b.amount)}</td>
+                  <td><span className={"badge "+statusBadgeClass(s)}>{s}</span></td>
+                  <td>{!b.paid && <button className="btn small ghost" onClick={()=>openPay(b)}>Mark Paid</button>}</td>
+                </tr>
+              );
+            })}
+            {bills.length===0 && <tr><td colSpan="6"><div className="empty">No bills yet.</div></td></tr>}
+          </tbody>
+        </table>
+      </div>
+
+      {showAdd && (
+        <div className="modal-overlay" onClick={()=>setShowAdd(false)}>
+          <div className="modal" onClick={e=>e.stopPropagation()}>
+            <h3>Add Bill</h3>
+            <form onSubmit={submitAdd}>
+              <div className="form-row"><label className="field">Bill name</label><input value={form.name} onChange={e=>setForm({...form,name:e.target.value})} required/></div>
+              <div className="form-grid">
+                <div className="form-row"><label className="field">Category</label>
+                  <select value={form.category} onChange={e=>setForm({...form,category:e.target.value})}>
+                    <option>Utilities</option><option>Housing</option><option>Internet</option><option>Credit</option><option>Subscription</option><option>Other</option>
+                  </select>
+                </div>
+                <div className="form-row"><label className="field">Amount (₱)</label><input type="number" value={form.amount} onChange={e=>setForm({...form,amount:e.target.value})} required/></div>
+              </div>
+              <div className="form-row"><label className="field">Due date</label><input type="date" value={form.due} onChange={e=>setForm({...form,due:e.target.value})} /></div>
+              <div className="actions">
+                <button type="button" className="btn ghost" onClick={()=>setShowAdd(false)}>Cancel</button>
+                <button className="btn" type="submit">Save Bill</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {payTarget && (
+        <div className="modal-overlay" onClick={()=>setPayTarget(null)}>
+          <div className="modal" onClick={e=>e.stopPropagation()}>
+            <h3>Mark "{payTarget.name}" as Paid</h3>
+            <p style={{fontSize:12.5, color:"var(--text-dim)"}}>
+              <span className="flow-badge">integration</span> &nbsp;This will log an approved expense entry, generate a notification, and write an audit log entry automatically.
+            </p>
+            <div className="form-row"><label className="field">Amount paid (₱)</label><input type="number" value={payAmount} onChange={e=>setPayAmount(e.target.value)} /></div>
+            <div className="actions">
+              <button className="btn ghost" onClick={()=>setPayTarget(null)}>Cancel</button>
+              <button className="btn" onClick={confirmPay}>Confirm Payment</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ---------- Payment History ---------- */
+function PaymentHistory({bills}){
+  const paid = bills.filter(b=>b.paid);
+  return (
+    <div>
+      <div className="pagehead"><div><h2>Payment History</h2><div className="desc">All completed bill payments, most recent first.</div></div></div>
+      <div className="card">
+        {paid.length===0 ? <div className="empty"><div className="big">—</div>No payments recorded yet.</div> : (
+          <table>
+            <thead><tr><th>Bill</th><th>Category</th><th>Paid On</th><th>Amount Paid</th><th>Ref.</th></tr></thead>
+            <tbody>
+              {paid.map(b=>(
+                <tr key={b._id}><td>{b.name}</td><td>{b.category}</td><td>{fmtDate(b.paidOn)}</td><td>{peso(b.paidAmount)}</td><td style={{fontSize:11.5, color:"var(--text-dim)"}}>{b._id.slice(-8)}</td></tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ---------- Submission Form (Income/Expense) ---------- */
+function SubmissionForm({addTx}){
+  const [form, setForm] = useState({type:"Expense", category:"Food", amount:"", date: todayISO(), note:""});
+  function submit(e){
+    e.preventDefault();
+    if(!form.amount) return;
+    addTx({...form, amount:Number(form.amount)});
+    setForm({type:"Expense", category:"Food", amount:"", date: todayISO(), note:""});
+  }
+  return (
+    <div>
+      <div className="pagehead"><div><h2>Log Income / Expense</h2><div className="desc">Manual entry — goes to Review &amp; Approval, then feeds the Dashboard and Reports once approved.</div></div></div>
+      <div className="card" style={{maxWidth:520}}>
+        <form onSubmit={submit}>
+          <div className="form-grid">
+            <div className="form-row"><label className="field">Type</label>
+              <select value={form.type} onChange={e=>setForm({...form,type:e.target.value})}>
+                <option>Expense</option><option>Income</option>
+              </select>
+            </div>
+            <div className="form-row"><label className="field">Category</label>
+              <select value={form.category} onChange={e=>setForm({...form,category:e.target.value})}>
+                <option>Food</option><option>Transport</option><option>Utilities</option><option>Subscription</option><option>Salary</option><option>Freelance</option><option>Other</option>
+              </select>
+            </div>
+          </div>
+          <div className="form-grid">
+            <div className="form-row"><label className="field">Amount (₱)</label><input type="number" value={form.amount} onChange={e=>setForm({...form,amount:e.target.value})} required/></div>
+            <div className="form-row"><label className="field">Date</label><input type="date" value={form.date} onChange={e=>setForm({...form,date:e.target.value})} /></div>
+          </div>
+          <div className="form-row"><label className="field">Note</label><input value={form.note} onChange={e=>setForm({...form,note:e.target.value})} placeholder="e.g. Groceries at SM"/></div>
+          <button className="btn" type="submit">Submit for Review</button>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+/* ---------- Version / Status History ---------- */
+function VersionHistory({bills}){
+  const history = bills.flatMap(b=>{
+    const events = [{label:"Created", status:"Upcoming"}];
+    if(b.paid) events.push({label:"Marked Paid on "+fmtDate(b.paidOn), status:"Paid"});
+    else events.push({label:"Current status", status: billStatus(b.due,b.paid)});
+    return events.map((e,i)=>({...e, bill:b.name, id:b._id+"-"+i}));
+  });
+  return (
+    <div>
+      <div className="pagehead"><div><h2>Bill Status History</h2><div className="desc">Version/status trail per bill — Upcoming → Due Today → Overdue → Paid.</div></div></div>
+      <div className="card">
+        <table>
+          <thead><tr><th>Bill</th><th>Event</th><th>Status</th></tr></thead>
+          <tbody>
+            {history.map(h=>(
+              <tr key={h.id}><td>{h.bill}</td><td>{h.label}</td><td><span className={"badge "+statusBadgeClass(h.status)}>{h.status}</span></td></tr>
+            ))}
+            {history.length===0 && <tr><td colSpan="3"><div className="empty">No bill history yet.</div></td></tr>}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+/* ---------- Review & Approval ---------- */
+function ReviewApproval({tx, session, reviewTx, resubmitTx}){
+  const isReviewer = session.role==="Reviewer" || session.role==="Admin";
+  const [target, setTarget] = useState(null); // {t, action}
+  const [comment, setComment] = useState("");
+  const [resubmitTarget, setResubmitTarget] = useState(null);
+  const [form, setForm] = useState({amount:"", note:""});
+
+  const pending = tx.filter(t=>t.status==="Pending Review");
+  const ACTION_LABEL = {approve:"Approve", reject:"Reject", revise:"Request Revision on"};
+
+  function openAction(t, action){ setTarget({t,action}); setComment(""); }
+  function confirmAction(){
+    reviewTx(target.t._id, target.action, comment);
+    setTarget(null);
+  }
+  function openResubmit(t){ setResubmitTarget(t); setForm({amount:String(t.amount), note:t.note||""}); }
+  function confirmResubmit(){
+    resubmitTx(resubmitTarget._id, {amount:Number(form.amount), note:form.note});
+    setResubmitTarget(null);
+  }
+
+  return (
+    <div>
+      <div className="pagehead">
+        <div>
+          <h2>Review &amp; Approval</h2>
+          <div className="desc">{isReviewer ? "Approve, reject, or request revision on submitted income/expense entries." : "Track the review status of your submitted entries."}</div>
+        </div>
+      </div>
+
+      {isReviewer && (
+        <div className="card" style={{marginBottom:16}}>
+          <h3>Pending Review ({pending.length})</h3>
+          {pending.length===0 ? <div className="empty">Nothing waiting for review.</div> : (
+            <table>
+              <thead><tr><th>Type</th><th>Category</th><th>Amount</th><th>Date</th><th>Note</th><th></th></tr></thead>
+              <tbody>
+                {pending.map(t=>(
+                  <tr key={t._id}>
+                    <td>{t.type}</td><td>{t.category}</td><td>{peso(t.amount)}</td><td>{fmtDate(t.date)}</td>
+                    <td style={{color:"var(--text-dim)"}}>{t.note || "—"}</td>
+                    <td style={{display:"flex", gap:6}}>
+                      <button className="btn small" onClick={()=>openAction(t,"approve")}>Approve</button>
+                      <button className="btn small ghost" onClick={()=>openAction(t,"revise")}>Revise</button>
+                      <button className="btn small danger" onClick={()=>openAction(t,"reject")}>Reject</button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      )}
+
+      <div className="card">
+        <h3>{isReviewer ? "All Submissions" : "My Submissions"}</h3>
+        <table>
+          <thead><tr><th>Type</th><th>Category</th><th>Amount</th><th>Status</th><th>Reviewer Note</th><th></th></tr></thead>
+          <tbody>
+            {tx.map(t=>(
+              <tr key={t._id}>
+                <td>{t.type}</td><td>{t.category}</td><td>{peso(t.amount)}</td>
+                <td><span className={"badge "+txStatusBadge(t.status)}>{t.status}{t.version>1?" · v"+t.version:""}</span></td>
+                <td style={{color:"var(--text-dim)"}}>{t.reviewComment || "—"}</td>
+                <td>{!isReviewer && t.status==="Needs Revision" && <button className="btn small ghost" onClick={()=>openResubmit(t)}>Resubmit</button>}</td>
+              </tr>
+            ))}
+            {tx.length===0 && <tr><td colSpan="6"><div className="empty">No submissions yet.</div></td></tr>}
+          </tbody>
+        </table>
+      </div>
+
+      {target && (
+        <div className="modal-overlay" onClick={()=>setTarget(null)}>
+          <div className="modal" onClick={e=>e.stopPropagation()}>
+            <h3>{ACTION_LABEL[target.action]} Entry</h3>
+            <p style={{fontSize:12.5, color:"var(--text-dim)"}}>{target.t.category} — {peso(target.t.amount)}</p>
+            <div className="form-row"><label className="field">Comment (optional)</label><input value={comment} onChange={e=>setComment(e.target.value)} placeholder="Reason or note for the submitter"/></div>
+            <div className="actions">
+              <button className="btn ghost" onClick={()=>setTarget(null)}>Cancel</button>
+              <button className="btn" onClick={confirmAction}>Confirm</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {resubmitTarget && (
+        <div className="modal-overlay" onClick={()=>setResubmitTarget(null)}>
+          <div className="modal" onClick={e=>e.stopPropagation()}>
+            <h3>Resubmit Entry</h3>
+            <p style={{fontSize:12.5, color:"var(--text-dim)"}}>Reviewer note: {resubmitTarget.reviewComment || "—"}</p>
+            <div className="form-row"><label className="field">Amount (₱)</label><input type="number" value={form.amount} onChange={e=>setForm({...form,amount:e.target.value})}/></div>
+            <div className="form-row"><label className="field">Note</label><input value={form.note} onChange={e=>setForm({...form,note:e.target.value})}/></div>
+            <div className="actions">
+              <button className="btn ghost" onClick={()=>setResubmitTarget(null)}>Cancel</button>
+              <button className="btn" onClick={confirmResubmit}>Resubmit</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ---------- Comments / Feedback ---------- */
+function CommentsScreen({comments, addComment}){
+  const [text, setText] = useState("");
+  function add(e){
+    e.preventDefault();
+    if(!text.trim()) return;
+    addComment(text.trim());
+    setText("");
+  }
+  return (
+    <div>
+      <div className="pagehead"><div><h2>Notes / Feedback</h2><div className="desc">Personal notes, plus reviewer comments left on submitted entries.</div></div></div>
+      <div className="card" style={{marginBottom:16}}>
+        <form onSubmit={add} style={{display:"flex", gap:10}}>
+          <input value={text} onChange={e=>setText(e.target.value)} placeholder="Add a note..." />
+          <button className="btn" type="submit">Post</button>
+        </form>
+      </div>
+      <div className="card">
+        {comments.length===0 ? <div className="empty">No notes yet.</div> : comments.map(n=>(
+          <div key={n._id} style={{padding:"10px 0", borderBottom:"1px solid var(--line)"}}>
+            <div style={{fontSize:13}}>{n.text}</div>
+            <div style={{fontSize:11, color:"var(--text-dim)", marginTop:4}}>{n.author} · {fmtDate(n.ts)}</div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/* ---------- Notifications ---------- */
+function NotificationsScreen({notifs}){
+  return (
+    <div>
+      <div className="pagehead"><div><h2>Notification Log</h2><div className="desc">Auto-generated alerts from the Bill Reminder, Payment Tracking, and Review workflow integration.</div></div></div>
+      <div className="card">
+        {notifs.length===0 ? <div className="empty">No notifications yet.</div> :
+          notifs.map(n=>(
+            <div key={n._id} className="log-line"><span className="tag">[{n.type}]</span>{n.message} <span style={{float:"right", color:"var(--text-dim)"}}>{new Date(n.ts).toLocaleTimeString()}</span></div>
+          ))
+        }
+      </div>
+    </div>
+  );
+}
+
+/* ---------- Audit Log ---------- */
+function AuditLogScreen({auditLog}){
+  return (
+    <div>
+      <div className="pagehead"><div><h2>Audit Log</h2><div className="desc">Immutable record of key actions — logins, bill changes, payments, submissions, and reviews.</div></div></div>
+      <div className="card">
+        <table>
+          <thead><tr><th>Timestamp</th><th>User</th><th>Action</th><th>Detail</th></tr></thead>
+          <tbody>
+            {auditLog.map(l=>(
+              <tr key={l._id}><td style={{fontSize:11.5, color:"var(--text-dim)"}}>{new Date(l.ts).toLocaleString()}</td><td>{l.user}</td><td><span className="badge neutral">{l.action}</span></td><td style={{color:"var(--text-dim)"}}>{l.detail}</td></tr>
+            ))}
+            {auditLog.length===0 && <tr><td colSpan="4"><div className="empty">No audit entries yet.</div></td></tr>}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+/* ---------- Reports ---------- */
+function ReportsScreen({tx, bills, budgets}){
+  const approved = tx.filter(t=>t.status==="Approved");
+  const byCat = {};
+  approved.filter(t=>t.type==="Expense").forEach(t=>{ byCat[t.category]=(byCat[t.category]||0)+t.amount; });
+  const max = Math.max(1,...Object.values(byCat));
+  const totalPaid = bills.filter(b=>b.paid).reduce((s,b)=>s+b.paidAmount,0);
+  const totalPending = bills.filter(b=>!b.paid).reduce((s,b)=>s+b.amount,0);
+
+  return (
+    <div>
+      <div className="pagehead"><div><h2>Reports</h2><div className="desc">Summarized spending and bill-payment performance (approved entries only).</div></div></div>
+      <div className="grid grid-2">
+        <div className="card">
+          <h3>Expenses by Category</h3>
+          {Object.entries(byCat).map(([cat,amt])=>(
+            <div key={cat} style={{marginBottom:12}}>
+              <div style={{display:"flex", justifyContent:"space-between", fontSize:12.5, marginBottom:5}}>
+                <span>{cat}</span><span style={{fontWeight:600}}>{peso(amt)}</span>
+              </div>
+              <div className="progress-track"><div className="progress-fill" style={{width:(amt/max*100)+"%"}}></div></div>
+            </div>
+          ))}
+          {Object.keys(byCat).length===0 && <div className="empty">No approved expenses yet.</div>}
+        </div>
+        <div className="card">
+          <h3>Bill Payment Summary</h3>
+          <div style={{marginBottom:14}}>
+            <div className="stat"><div className="value" style={{fontSize:22}}>{peso(totalPaid)}</div><div className="label">Total paid to date</div></div>
+          </div>
+          <div>
+            <div className="stat"><div className="value" style={{fontSize:22, color:"var(--warn)"}}>{peso(totalPending)}</div><div className="label">Total pending across {bills.filter(b=>!b.paid).length} bills</div></div>
+          </div>
+        </div>
+      </div>
+
+      <div className="card" style={{marginTop:16}}>
+        <h3>Budget vs. Actual</h3>
+        <table>
+          <thead><tr><th>Category</th><th>Budget Limit</th><th>Actual Spent</th><th>Variance</th><th>Status</th></tr></thead>
+          <tbody>
+            {budgets.map(b=>{
+              const spent = byCat[b.category] || 0;
+              const variance = b.limit - spent;
+              const over = variance < 0;
+              return (
+                <tr key={b._id}>
+                  <td>{b.category}</td><td>{peso(b.limit)}</td><td>{peso(spent)}</td>
+                  <td style={{color: over ? "var(--danger)" : "var(--ok)"}}>{over ? "-" : "+"}{peso(Math.abs(variance))}</td>
+                  <td><span className={"badge "+(over?"danger":"ok")}>{over?"Over Budget":"Within Budget"}</span></td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+/* ---------- User & Role Management ---------- */
+function UserManagement({users, session}){
+  if(session.role !== "Admin"){
+    return <div className="card"><div className="empty">Restricted — Admin role required to view this page.</div></div>;
+  }
+  const rbac = [
+    {role:"Admin", access:"Full access: manage users, view all audit logs, all reports, system settings."},
+    {role:"Reviewer", access:"Reviews submitted entries (approve/reject/request revision), views audit log; cannot manage users."},
+    {role:"User", access:"Submits own bills and transactions for review; views own reports, history, and notes only."},
+  ];
+  return (
+    <div>
+      <div className="pagehead"><div><h2>User &amp; Role Management</h2><div className="desc">Admin-only. Manage accounts and review role-based access.</div></div></div>
+      <div className="card" style={{marginBottom:16}}>
+        <h3>Registered Users</h3>
+        <table>
+          <thead><tr><th>Name</th><th>Email</th><th>Role</th></tr></thead>
+          <tbody>
+            {users.map(u=>(
+              <tr key={u._id}><td>{u.name}</td><td>{u.email}</td><td><span className="badge neutral">{u.role}</span></td></tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <div className="card">
+        <h3>Role-Based Access Control Matrix</h3>
+        <table>
+          <thead><tr><th>Role</th><th>Access</th></tr></thead>
+          <tbody>
+            {rbac.map(r=>(<tr key={r.role}><td>{r.role}</td><td style={{color:"var(--text-dim)"}}>{r.access}</td></tr>))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+</script>
+</body>
+</html>
