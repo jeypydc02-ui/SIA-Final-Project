@@ -3,20 +3,16 @@
   "version": "1.0.0",
   "private": true,
   "description": "FinTrack Stark - Personal Finance, Bill Reminder, and Payment Tracking Integration System",
-  "main": "server/server.js",
+  "workspaces": [
+    "apps/*"
+  ],
   "scripts": {
-    "start": "node server/server.js",
-    "seed": "node server/seed.js",
-    "server": "node server/server.js",
-    "client": "npm run dev --prefix frontend",
+    "start": "node apps/server/server.js",
+    "server": "node apps/server/server.js",
+    "client": "npm run dev --workspace apps/client",
     "dev": "concurrently -n API,WEB -c blue,magenta \"npm:server\" \"npm:client\"",
-    "build": "npm run build --prefix frontend",
-    "install:all": "npm install && npm install --prefix frontend"
-  },
-  "dependencies": {
-    "bcryptjs": "^2.4.3",
-    "express": "^4.19.2",
-    "mongoose": "^8.5.0"
+    "build": "npm run build --workspace apps/client",
+    "seed": "node scripts/seed.js"
   },
   "devDependencies": {
     "concurrently": "^10.0.5"
