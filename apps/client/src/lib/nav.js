@@ -1,31 +1,42 @@
+// Every screen has a URL. The sidebar, the page titles, and the router all
+// read from this one list, so a screen cannot exist in the menu without an
+// address you can bookmark, share, or reload.
 export const NAV = [
   { group: "Overview", items: [
-    { id: "dashboard", label: "Dashboard" },
+    { path: "/dashboard", label: "Dashboard" },
   ]},
   { group: "Finance Records", items: [
-    { id: "projects", label: "Bill Categories" },
-    { id: "submission", label: "Log Income/Expense" },
-    { id: "budgets", label: "Budgets" },
+    { path: "/categories", label: "Bill Categories" },
+    { path: "/submit", label: "Log Income/Expense" },
+    { path: "/budgets", label: "Budgets" },
   ]},
   { group: "Bills & Payments", items: [
-    { id: "bills", label: "Bill Reminders" },
-    { id: "versions", label: "Revision History" },
-    { id: "review", label: "Review & Approval" },
-    { id: "comments", label: "Notes / Feedback" },
-    { id: "history", label: "Payment History" },
+    { path: "/bills", label: "Bill Reminders" },
+    { path: "/revisions", label: "Revision History" },
+    { path: "/review", label: "Review & Approval" },
+    { path: "/notes", label: "Notes / Feedback" },
+    { path: "/payments", label: "Payment History" },
   ]},
   { group: "System", items: [
-    { id: "notifications", label: "Notification Log" },
-    { id: "audit", label: "Audit Log", roles: ["Admin", "Reviewer"] },
-    { id: "reports", label: "Reports" },
-    { id: "users", label: "User & Role Mgmt", roles: ["Admin"] },
-    { id: "settings", label: "Settings" },
+    { path: "/notifications", label: "Notification Log" },
+    { path: "/audit", label: "Audit Log", roles: ["Admin", "Reviewer"] },
+    { path: "/reports", label: "Reports" },
+    { path: "/users", label: "User & Role Mgmt", roles: ["Admin"] },
+    { path: "/settings", label: "Settings" },
   ]},
 ];
 
-// "Category Detail" is reached by opening a category rather than from the
+export const NAV_ITEMS = NAV.flatMap((g) => g.items);
+
+// Category Detail is reached by opening a category rather than from the
 // sidebar, so it is not a NAV item — but the top bar still needs its title.
-export const LABELS = {
-  ...Object.fromEntries(NAV.flatMap(g => g.items).map(i => [i.id, i.label])),
-  projectDetails: "Category Detail",
+export const TITLES = {
+  ...Object.fromEntries(NAV_ITEMS.map((i) => [i.path, i.label])),
+  "/categories/:name": "Category Detail",
 };
+
+// Which roles may open a given path, for the route guards. Paths not listed
+// are open to every signed-in user.
+export const PATH_ROLES = Object.fromEntries(
+  NAV_ITEMS.filter((i) => i.roles).map((i) => [i.path, i.roles])
+);

@@ -141,6 +141,84 @@ test.describe("Functional", () => {
     await expect(page.locator(".card", { hasText: "Food Budget" })).toBeVisible();
   });
 
+  test("FT-09 every screen has its own address", async ({ page }) => {
+    await signIn(page, "user");
+    // Signing in lands on a named page, not on a bare origin.
+    await expect(page).toHaveURL(/\/dashboard$/);
+
+    const screens = [
+      ["Bill Categories", "/categories"],
+      ["Log Income/Expense", "/submit"],
+      ["Budgets", "/budgets"],
+      ["Bill Reminders", "/bills"],
+      ["Revision History", "/revisions"],
+      ["Review & Approval", "/review"],
+      ["Notes / Feedback", "/notes"],
+      ["Payment History", "/payments"],
+      ["Notification Log", "/notifications"],
+      ["Reports", "/reports"],
+      ["Settings", "/settings"],
+    ];
+
+    for (const [label, path] of screens) {
+      await gotoScreen(page, label);
+      await expect(page, `${label} should live at ${path}`).toHaveURL(new RegExp(path.replace("/", "\\/") + "$"));
+      // The breadcrumb agrees with the address bar.
+      await expect(page.locator(".topbar .path")).toHaveText("fintrackstark" + path);
+    }
+
+    // Opening a category is an address too, so a single category can be shared.
+    await gotoScreen(page, "Bill Categories");
+    await page.locator(".card-link", { hasText: "Housing" }).click();
+    await expect(page).toHaveURL(/\/categories\/Housing$/);
+    await expect(page.locator(".pagehead h2")).toContainText("Housing");
+  });
+
+  test("FT-10 addresses survive a reload, and the browser's own buttons work", async ({ page }) => {
+    await signIn(page, "user");
+
+    // Deep link: typing an address goes straight there, not to the dashboard.
+    await page.goto("/settings");
+    await page.waitForSelector(".shell");
+    await expect(page.locator(".pagehead h2")).toHaveText("Settings");
+
+    // Reloading keeps you on the page you were reading. Before routing, a
+    // refresh dropped you back at the landing page.
+    await page.reload();
+    await page.waitForSelector(".shell");
+    await expect(page).toHaveURL(/\/settings$/);
+    await expect(page.locator(".pagehead h2")).toHaveText("Settings");
+
+    // Back and forward move through the screens visited.
+    await gotoScreen(page, "Budgets");
+    await expect(page).toHaveURL(/\/budgets$/);
+    await page.goBack();
+    await expect(page).toHaveURL(/\/settings$/);
+    await page.goForward();
+    await expect(page).toHaveURL(/\/budgets$/);
+
+    // An address that does not exist is handled, not left blank.
+    await page.goto("/nonsense");
+    await page.waitForSelector(".shell");
+    await expect(page.locator(".empty")).toContainText("does not exist");
+
+    // A restricted address typed by hand is refused in the interface as well
+    // as by the API (the sidebar never offers it to a User).
+    await page.goto("/users");
+    await page.waitForSelector(".shell");
+    await expect(page.locator(".empty")).toContainText("Restricted");
+    await expect(page.locator(".nav-item", { hasText: "User & Role Mgmt" })).toHaveCount(0);
+
+    // An Admin opening the same address gets the page.
+    const adminPage = await page.context().newPage();
+    const { admin } = accounts();
+    await adminPage.addInitScript((t) => window.sessionStorage.setItem("fts_token", t), admin.token);
+    await adminPage.goto("/users");
+    await adminPage.waitForSelector(".shell");
+    await expect(adminPage.locator(".pagehead h2")).toContainText("User & Role Management");
+    await adminPage.close();
+  });
+
   test("FT-08 (FR-010) important actions are written to the audit log", async ({ page }) => {
     await signIn(page, "admin");
     await gotoScreen(page, "Audit Log");

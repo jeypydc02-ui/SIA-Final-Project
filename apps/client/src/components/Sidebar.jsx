@@ -1,7 +1,8 @@
+import { NavLink } from "react-router-dom";
 import { NAV } from "../lib/nav.js";
 import ThemeToggle from "./ThemeToggle.jsx";
 
-export default function Sidebar({ screen, setScreen, session, logout, theme, setTheme, notifs = [] }) {
+export default function Sidebar({ session, logout, theme, setTheme, notifs = [] }) {
   const unread = notifs.filter((n) => !n.read).length;
 
   // Number the items this role can actually see. Numbering them in nav.js
@@ -27,11 +28,15 @@ export default function Sidebar({ screen, setScreen, session, logout, theme, set
         <div className="nav-group" key={g.group}>
           <div className="nav-label">{g.group}</div>
           {g.items.map(it => (
-            <div key={it.id} className={"nav-item" + (screen === it.id ? " active" : "")} onClick={() => setScreen(it.id)}>
+            <NavLink
+              key={it.path}
+              to={it.path}
+              className={({ isActive }) => "nav-item" + (isActive ? " active" : "")}
+            >
               <span className="nav-ico">{it.ico}</span>
               {it.label}
-              {it.id === "notifications" && unread > 0 && <span className="nav-badge">{unread}</span>}
-            </div>
+              {it.path === "/notifications" && unread > 0 && <span className="nav-badge">{unread}</span>}
+            </NavLink>
           ))}
         </div>
       ))}

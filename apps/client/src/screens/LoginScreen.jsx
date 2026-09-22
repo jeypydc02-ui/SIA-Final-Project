@@ -3,8 +3,8 @@ import ThemeToggle from "../components/ThemeToggle.jsx";
 
 const FEATURE_PILLS = ["Bill Reminders", "Payment Tracking", "Review Workflow"];
 
-export default function LoginScreen({ onLogin, onRegister, theme, setTheme, initialMode = "login", onBack }) {
-  const [mode, setMode] = useState(initialMode);
+export default function LoginScreen({ onLogin, onRegister, theme, setTheme, initialMode = "login", onBack, onSwitchMode }) {
+  const mode = initialMode;
   const [email, setEmail] = useState("jp@fintrackstark.app");
   const [password, setPassword] = useState("demo123");
   const [firstName, setFirstName] = useState("");
@@ -15,9 +15,11 @@ export default function LoginScreen({ onLogin, onRegister, theme, setTheme, init
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
 
+  // Signing in and registering are separate addresses (/login and /register),
+  // so switching between them is a navigation, not local state.
   function switchMode(next) {
-    setMode(next);
     setErr("");
+    onSwitchMode(next);
   }
 
   async function submitLogin(e) {
