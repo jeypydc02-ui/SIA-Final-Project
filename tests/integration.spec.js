@@ -131,17 +131,30 @@ test.describe("Integration", () => {
       method: "POST", token: reviewer.token, body: { action: "approve" },
     });
 
+    // Derive the expected figures from the data rather than hardcoding them,
+    // so the assertion tests the invariant and not the current seed.
+    const peso = (n) => "₱" + n.toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const allTx = await api("/api/transactions", { token: user.token });
+    const expectedSpent = allTx.data
+      .filter((t) => t.status === "Approved" && t.type === "Expense" && t.category === "Transport")
+      .reduce((s, t) => s + t.amount, 0);
+    const budgets = await api("/api/budgets", { token: user.token });
+    const transportBudget = budgets.data.find((b) => b.category === "Transport");
+
+    expect(expectedSpent).toBeGreaterThanOrEqual(900); // the entry just approved is in there
+
     await signIn(page, "user");
     await gotoScreen(page, "Budgets");
 
     const card = page.locator(".card", { hasText: "Transport" }).first();
-    await expect(card).toContainText("of ₱2,500.00");
-    await expect(card).toContainText("remaining");
+    await expect(card).toContainText(peso(expectedSpent));
+    await expect(card).toContainText("of " + peso(transportBudget.limit));
 
     // The Reports screen must agree with the Budgets screen.
     await gotoScreen(page, "Reports");
     const budgetRow = page.locator("tr", { hasText: "Transport" });
-    await expect(budgetRow).toContainText("₱2,500.00");
+    await expect(budgetRow).toContainText(peso(transportBudget.limit));
+    await expect(budgetRow).toContainText(peso(expectedSpent));
   });
 
   test("IT-06 the reminder service raises overdue alerts on its own schedule", async ({ page }) => {

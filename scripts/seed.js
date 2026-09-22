@@ -80,7 +80,7 @@ async function seed() {
   // Budgets are per-user, so the demo User gets their own set.
   await Budget.insertMany([
     { user: jp._id, category: "Food", limit: 6000 },
-    { user: jp._id, category: "Transport", limit: 2500 },
+    { user: jp._id, category: "Transport", limit: 3500 },
     { user: jp._id, category: "Utilities", limit: 5000 },
     { user: jp._id, category: "Subscription", limit: 1000 },
   ]);
@@ -102,6 +102,30 @@ async function seed() {
     { type: "Expense", category: "Utilities", amount: 549, date: addDays(-6), note: "Netflix", status: "Approved", autoApproved: true, submittedBy: jp._id, reviewedBy: jp._id, reviewComment: "Auto-approved via bill payment workflow." },
     { type: "Expense", category: "Food", amount: 1200, date: todayISO(), note: "Weekly market run", status: "Pending Review", submittedBy: jp._id },
   ]);
+
+  // One entry that has been through the full revision loop, so the Revision
+  // History screen has a real v1 -> v2 chain to show at demo time rather than
+  // a table of single-version rows. Created in two steps because the second
+  // version has to reference the first.
+  const originalClaim = await Transaction.create({
+    type: "Expense", category: "Transport", amount: 2400, date: addDays(-8),
+    note: "Airport transfer (original claim)",
+    status: "Superseded", version: 1,
+    submittedBy: jp._id, reviewedBy: reviewer._id,
+    reviewComment: "Amount looks high for this route — please check the receipt.",
+  });
+  await Transaction.create({
+    type: "Expense", category: "Transport", amount: 1650, date: addDays(-8),
+    note: "Airport transfer (corrected)",
+    status: "Approved", version: 2, parentId: originalClaim._id,
+    submittedBy: jp._id, reviewedBy: reviewer._id,
+    reviewComment: "Approved after revision.",
+  });
+  await Comment.create({
+    transactionId: originalClaim._id,
+    author: reviewer.name, authorId: reviewer._id,
+    text: "Amount looks high for this route — please check the receipt.",
+  });
 
   // Notifications are addressed to a recipient. Bill reminders are deliberately
   // NOT seeded: the reminder service raises those itself on its first sweep,

@@ -4,6 +4,16 @@ import ThemeToggle from "./ThemeToggle.jsx";
 export default function Sidebar({ screen, setScreen, session, logout, theme, setTheme, notifs = [] }) {
   const unread = notifs.filter((n) => !n.read).length;
 
+  // Number the items this role can actually see. Numbering them in nav.js
+  // instead would leave visible gaps wherever a restricted screen is hidden.
+  let position = 0;
+  const numbered = NAV.map((g) => ({
+    group: g.group,
+    items: g.items
+      .filter((it) => !it.roles || it.roles.includes(session.role))
+      .map((it) => ({ ...it, ico: String(++position).padStart(2, "0") })),
+  })).filter((g) => g.items.length > 0);
+
   return (
     <div className="side">
       <div className="brand">
@@ -13,10 +23,10 @@ export default function Sidebar({ screen, setScreen, session, logout, theme, set
           <div className="sub">Integration System</div>
         </div>
       </div>
-      {NAV.map(g => (
+      {numbered.map(g => (
         <div className="nav-group" key={g.group}>
           <div className="nav-label">{g.group}</div>
-          {g.items.filter(it => !it.roles || it.roles.includes(session.role)).map(it => (
+          {g.items.map(it => (
             <div key={it.id} className={"nav-item" + (screen === it.id ? " active" : "")} onClick={() => setScreen(it.id)}>
               <span className="nav-ico">{it.ico}</span>
               {it.label}

@@ -1,25 +1,25 @@
 export const NAV = [
   { group: "Overview", items: [
-    { id: "dashboard", label: "Dashboard", ico: "01" },
+    { id: "dashboard", label: "Dashboard" },
   ]},
   { group: "Finance Records", items: [
-    { id: "projects", label: "Bill Categories", ico: "02" },
-    { id: "submission", label: "Log Income/Expense", ico: "03" },
-    { id: "budgets", label: "Budgets", ico: "04" },
+    { id: "projects", label: "Bill Categories" },
+    { id: "submission", label: "Log Income/Expense" },
+    { id: "budgets", label: "Budgets" },
   ]},
   { group: "Bills & Payments", items: [
-    { id: "bills", label: "Bill Reminders", ico: "05" },
-    { id: "versions", label: "Revision History", ico: "06" },
-    { id: "review", label: "Review & Approval", ico: "07" },
-    { id: "comments", label: "Notes / Feedback", ico: "08" },
-    { id: "history", label: "Payment History", ico: "09" },
+    { id: "bills", label: "Bill Reminders" },
+    { id: "versions", label: "Revision History" },
+    { id: "review", label: "Review & Approval" },
+    { id: "comments", label: "Notes / Feedback" },
+    { id: "history", label: "Payment History" },
   ]},
   { group: "System", items: [
-    { id: "notifications", label: "Notification Log", ico: "10" },
-    { id: "audit", label: "Audit Log", ico: "11", roles: ["Admin", "Reviewer"] },
-    { id: "reports", label: "Reports", ico: "12" },
-    { id: "users", label: "User & Role Mgmt", ico: "13", roles: ["Admin"] },
-    { id: "settings", label: "Settings", ico: "14" },
+    { id: "notifications", label: "Notification Log" },
+    { id: "audit", label: "Audit Log", roles: ["Admin", "Reviewer"] },
+    { id: "reports", label: "Reports" },
+    { id: "users", label: "User & Role Mgmt", roles: ["Admin"] },
+    { id: "settings", label: "Settings" },
   ]},
 ];
 
