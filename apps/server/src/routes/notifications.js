@@ -1,12 +1,12 @@
 const express = require("express");
-const Notification = require("../models/Notification");
+const { wrap } = require("../middleware/asyncHandler");
 const { requireAuth } = require("../middleware/auth");
+const notificationController = wrap(require("../controllers/notificationController"));
 
 const router = express.Router();
 
-router.get("/", requireAuth, async (req, res) => {
-  const notifs = await Notification.find().sort({ ts: -1 }).limit(100);
-  res.json(notifs);
-});
+router.get("/", requireAuth, notificationController.list);
+router.put("/read-all", requireAuth, notificationController.markAllRead);
+router.put("/:id/read", requireAuth, notificationController.markRead);
 
 module.exports = router;
