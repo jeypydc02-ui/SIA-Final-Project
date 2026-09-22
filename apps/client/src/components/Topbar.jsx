@@ -1,20 +1,21 @@
-import { LABELS } from "../lib/nav.js";
+import { useLocation, useParams } from "react-router-dom";
+import { TITLES } from "../lib/nav.js";
 
-// A readable breadcrumb. The screen keys are internal identifiers, so they are
-// turned into words rather than printed raw ("projectDetails" was leaking into
-// the interface as-is).
-function slug(screen) {
-  return String(screen)
-    .replace(/([a-z])([A-Z])/g, "$1-$2")
-    .toLowerCase();
-}
+export default function Topbar() {
+  const { pathname } = useLocation();
+  const { name } = useParams();
 
-export default function Topbar({ screen }) {
+  // Category Detail is the one screen whose title depends on the URL segment.
+  const title = name
+    ? `Category Detail — ${decodeURIComponent(name)}`
+    : TITLES[pathname] || "FinTrack Stark";
+
   return (
     <div className="topbar">
       <div>
-        <h1>{LABELS[screen] || "FinTrack Stark"}</h1>
-        <div className="path">fintrackstark / {slug(screen)}</div>
+        <h1>{title}</h1>
+        {/* Mirrors the address bar, so the breadcrumb and the URL always agree. */}
+        <div className="path">fintrackstark{pathname}</div>
       </div>
       <div style={{ fontSize: 11.5, color: "var(--text-dim)" }}>
         {new Date().toLocaleDateString("en-PH", { weekday: "long", month: "long", day: "numeric", year: "numeric" })}

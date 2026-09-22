@@ -1,6 +1,6 @@
 import { peso, fmtDate, billStatus, statusBadgeClass } from "../lib/utils.js";
 
-export default function Dashboard({ bills, tx, budgets, notifs, setScreen }) {
+export default function Dashboard({ bills, tx, budgets, notifs, onOpenBudgets }) {
   const approved = tx.filter(t => t.status === "Approved");
   const pendingCount = tx.filter(t => t.status === "Pending Review").length;
   const income = approved.filter(t => t.type === "Income").reduce((s, t) => s + t.amount, 0);
@@ -69,7 +69,7 @@ export default function Dashboard({ bills, tx, budgets, notifs, setScreen }) {
           <h3>Budgets</h3>
           <div className="empty">
             No budgets set yet.
-            {setScreen && <> <button className="linkbtn" onClick={() => setScreen("budgets")}>Add your first budget</button> to track spending against a limit.</>}
+            {onOpenBudgets && <> <button className="linkbtn" onClick={onOpenBudgets}>Add your first budget</button> to track spending against a limit.</>}
           </div>
         </div>
       )}
