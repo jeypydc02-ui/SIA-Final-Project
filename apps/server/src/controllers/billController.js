@@ -30,7 +30,7 @@ async function create(req, res) {
     name, category, amount: Number(amount), due, paid: false, createdBy: req.user.id,
   });
   await logAction(req.user.name, "Bill Created", `${bill.name} added, due ${bill.due}, amount ${bill.amount}.`);
-  await notify("reminder", `New bill "${bill.name}" scheduled — due ${bill.due}.`, req.user.id);
+  await notify("bill", `Bill "${bill.name}" added — due ${bill.due}. The reminder service will alert you as the date approaches.`, req.user.id);
   res.status(201).json(bill);
 }
 

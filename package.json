@@ -4,17 +4,20 @@
   "private": true,
   "description": "FinTrack Stark - Personal Finance, Bill Reminder, and Payment Tracking Integration System",
   "workspaces": [
-    "apps/*"
+    "apps/*",
+    "services/*"
   ],
   "scripts": {
     "start": "node apps/server/server.js",
     "server": "node apps/server/server.js",
     "client": "npm run dev --workspace apps/client",
-    "dev": "concurrently -n API,WEB -c blue,magenta \"npm:server\" \"npm:client\"",
+    "dev": "concurrently -n API,WEB,CRON -c blue,magenta,yellow \"npm:server\" \"npm:client\" \"npm:reminder\"",
     "build": "npm run build --workspace apps/client",
     "seed": "node scripts/seed.js",
     "test": "playwright test",
-    "test:report": "playwright show-report tests/report"
+    "test:report": "playwright show-report tests/report",
+    "reminder": "node services/reminder/index.js",
+    "reminder:once": "node services/reminder/index.js --once"
   },
   "devDependencies": {
     "@playwright/test": "^1.63.0",
