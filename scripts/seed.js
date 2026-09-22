@@ -103,11 +103,10 @@ async function seed() {
     { type: "Expense", category: "Food", amount: 1200, date: todayISO(), note: "Weekly market run", status: "Pending Review", submittedBy: jp._id },
   ]);
 
-  // Notifications are addressed: the bill alerts belong to the bill owner,
-  // while the "needs review" alert goes to the reviewer who must act on it.
+  // Notifications are addressed to a recipient. Bill reminders are deliberately
+  // NOT seeded: the reminder service raises those itself on its first sweep,
+  // which is what makes them real rather than sample text.
   await Notification.insertMany([
-    { user: jp._id, type: "reminder", message: "Condo Rent is due today." },
-    { user: jp._id, type: "overdue", message: "Maynilad Water is overdue by 1 day." },
     { user: reviewer._id, type: "submission", message: "John Paul Dela Cruz submitted an expense of 1200 for review." },
   ]);
 

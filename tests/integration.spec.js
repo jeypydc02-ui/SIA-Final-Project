@@ -1,5 +1,16 @@
 const { test, expect } = require("@playwright/test");
-const { api, accounts, signIn, gotoScreen } = require("./helpers");
+const { execFileSync } = require("child_process");
+const path = require("path");
+const { api, accounts, signIn, gotoScreen, registerUser } = require("./helpers");
+
+// Runs the reminder worker exactly as the deployment does, as a separate
+// process against the same database.
+function runReminderSweep() {
+  return execFileSync("node", [path.join(__dirname, "..", "services", "reminder", "index.js"), "--once"], {
+    cwd: path.join(__dirname, ".."),
+    encoding: "utf8",
+  });
+}
 
 // Integration test cases (spec section 16: minimum 5).
 // These cover the integration component itself (section 6): the workflow
@@ -131,5 +142,63 @@ test.describe("Integration", () => {
     await gotoScreen(page, "Reports");
     const budgetRow = page.locator("tr", { hasText: "Transport" });
     await expect(budgetRow).toContainText("₱2,500.00");
+  });
+
+  test("IT-06 the reminder service raises overdue alerts on its own schedule", async ({ page }) => {
+    const owner = await registerUser("billowner");
+    const bystander = await registerUser("bystander");
+
+    // Two bills for the owner: one overdue, one comfortably in the future.
+    const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+    const nextYear = "2027-12-31";
+    await api("/api/bills", {
+      method: "POST", token: owner.token,
+      body: { name: "Scheduled Sweep Overdue", category: "Utilities", amount: 1500, due: yesterday },
+    });
+    await api("/api/bills", {
+      method: "POST", token: owner.token,
+      body: { name: "Scheduled Sweep Far Off", category: "Credit", amount: 2000, due: nextYear },
+    });
+
+    // Adding a bill already acknowledges it, so only notifications that did
+    // not exist before the sweep count as the sweep's work.
+    const before = await api("/api/notifications", { token: owner.token });
+    const seen = new Set(before.data.map((n) => n._id));
+
+    // Nobody is using the app — the worker runs against the clock.
+    const output = runReminderSweep();
+    expect(output).toContain("raised");
+
+    const after = await api("/api/notifications", { token: owner.token });
+    const raised = after.data.filter((n) => !seen.has(n._id));
+
+    // The overdue bill produced an alert; the one due next year did not.
+    expect(raised.length).toBe(1);
+    expect(raised[0].type).toBe("overdue");
+    expect(raised[0].message).toContain("Scheduled Sweep Overdue");
+    expect(raised.some((n) => n.message.includes("Scheduled Sweep Far Off"))).toBe(false);
+
+    // The alert is addressed: it reaches the bill's owner and nobody else.
+    const bystanderInbox = await api("/api/notifications", { token: bystander.token });
+    expect(bystanderInbox.data.some((n) => n.message.includes("Scheduled Sweep"))).toBe(false);
+
+    // Running again the same day must not duplicate the alert.
+    const secondOutput = runReminderSweep();
+    expect(secondOutput).toContain("none need a new alert");
+    const afterSecond = await api("/api/notifications", { token: owner.token });
+    expect(afterSecond.data.filter((n) => !seen.has(n._id)).length).toBe(1);
+
+    // The sweep itself is in the audit trail, attributed to the service.
+    const { admin } = accounts();
+    const audit = await api("/api/audit-log", { token: admin.token });
+    expect(audit.data.some((l) => l.user === "Reminder Service" && l.action === "Reminder Sweep")).toBe(true);
+
+    // And the owner sees it in the interface without doing anything.
+    await page.addInitScript((t) => window.sessionStorage.setItem("fts_token", t), owner.token);
+    await page.goto("/");
+    await page.waitForSelector(".shell");
+    await gotoScreen(page, "Notification Log");
+    await expect(page.locator(".card")).toContainText("Scheduled Sweep Overdue");
+    await expect(page.locator(".card")).toContainText("overdue by 1 day");
   });
 });
