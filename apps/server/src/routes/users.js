@@ -1,12 +1,12 @@
 const express = require("express");
-const User = require("../models/User");
+const { wrap } = require("../middleware/asyncHandler");
 const { requireAuth, requireRole } = require("../middleware/auth");
+const userController = wrap(require("../controllers/userController"));
 
 const router = express.Router();
 
-router.get("/", requireAuth, requireRole("Admin"), async (req, res) => {
-  const users = await User.find().select("-passwordHash").sort({ role: 1, name: 1 });
-  res.json(users);
-});
+router.get("/", requireAuth, requireRole("Admin"), userController.list);
+router.put("/:id/role", requireAuth, requireRole("Admin"), userController.setRole);
+router.delete("/:id", requireAuth, requireRole("Admin"), userController.remove);
 
 module.exports = router;

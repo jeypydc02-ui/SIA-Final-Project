@@ -1,12 +1,10 @@
 const express = require("express");
-const AuditLog = require("../models/AuditLog");
+const { wrap } = require("../middleware/asyncHandler");
 const { requireAuth, requireRole } = require("../middleware/auth");
+const auditLogController = wrap(require("../controllers/auditLogController"));
 
 const router = express.Router();
 
-router.get("/", requireAuth, requireRole("Admin", "Reviewer"), async (req, res) => {
-  const logs = await AuditLog.find().sort({ ts: -1 }).limit(300);
-  res.json(logs);
-});
+router.get("/", requireAuth, requireRole("Admin", "Reviewer"), auditLogController.list);
 
 module.exports = router;

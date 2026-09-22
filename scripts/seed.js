@@ -6,6 +6,11 @@ const Transaction = require("../apps/server/src/models/Transaction");
 const Budget = require("../apps/server/src/models/Budget");
 const Notification = require("../apps/server/src/models/Notification");
 const AuditLog = require("../apps/server/src/models/AuditLog");
+const Comment = require("../apps/server/src/models/Comment");
+
+// `npm run seed -- --reset` wipes the collections first. Used when the schema
+// changes and when demonstrating the recovery plan (spec section 10.4).
+const RESET = process.argv.includes("--reset");
 
 function addDays(n) {
   const d = new Date();
@@ -19,9 +24,24 @@ function todayISO() {
 async function seed() {
   await connectDB();
 
+  if (RESET) {
+    await Promise.all([
+      User.deleteMany({}), Bill.deleteMany({}), Transaction.deleteMany({}),
+      Budget.deleteMany({}), Notification.deleteMany({}), AuditLog.deleteMany({}),
+      Comment.deleteMany({}),
+    ]);
+    // Indexes are rebuilt from the current schemas, so a changed unique
+    // constraint does not survive from the previous shape of the data.
+    await Promise.all([
+      User.syncIndexes(), Bill.syncIndexes(), Transaction.syncIndexes(),
+      Budget.syncIndexes(), Notification.syncIndexes(), Comment.syncIndexes(),
+    ]);
+    console.log("[seed] --reset: all collections cleared and indexes rebuilt.");
+  }
+
   const existing = await User.countDocuments();
   if (existing > 0) {
-    console.log("[seed] data already present, skipping. Drop the database to reseed.");
+    console.log("[seed] data already present, skipping. Run with --reset to rebuild.");
     await mongoose.disconnect();
     return;
   }
@@ -57,11 +77,12 @@ async function seed() {
     role: "Admin",
   });
 
+  // Budgets are per-user, so the demo User gets their own set.
   await Budget.insertMany([
-    { category: "Food", limit: 6000 },
-    { category: "Transport", limit: 2500 },
-    { category: "Utilities", limit: 5000 },
-    { category: "Subscription", limit: 1000 },
+    { user: jp._id, category: "Food", limit: 6000 },
+    { user: jp._id, category: "Transport", limit: 2500 },
+    { user: jp._id, category: "Utilities", limit: 5000 },
+    { user: jp._id, category: "Subscription", limit: 1000 },
   ]);
 
   await Bill.insertMany([
@@ -82,10 +103,12 @@ async function seed() {
     { type: "Expense", category: "Food", amount: 1200, date: todayISO(), note: "Weekly market run", status: "Pending Review", submittedBy: jp._id },
   ]);
 
+  // Notifications are addressed: the bill alerts belong to the bill owner,
+  // while the "needs review" alert goes to the reviewer who must act on it.
   await Notification.insertMany([
-    { type: "reminder", message: "Condo Rent is due today." },
-    { type: "overdue", message: "Maynilad Water is overdue by 1 day." },
-    { type: "submission", message: "John Paul Dela Cruz submitted an expense of 1200 for review." },
+    { user: jp._id, type: "reminder", message: "Condo Rent is due today." },
+    { user: jp._id, type: "overdue", message: "Maynilad Water is overdue by 1 day." },
+    { user: reviewer._id, type: "submission", message: "John Paul Dela Cruz submitted an expense of 1200 for review." },
   ]);
 
   await AuditLog.create({ user: "System", action: "Seed", detail: "Sample data initialized for demo." });

@@ -2,6 +2,7 @@ const path = require("path");
 const fs = require("fs");
 const express = require("express");
 const { connectDB } = require("./src/config/db");
+const { securityHeaders } = require("./src/middleware/securityHeaders");
 
 const authRoutes = require("./src/routes/auth");
 const billRoutes = require("./src/routes/bills");
@@ -18,7 +19,13 @@ async function main() {
   await connectDB();
 
   const app = express();
-  app.use(express.json());
+  // Trust the Vite dev proxy / any reverse proxy so req.ip is the real client
+  // address rather than the proxy's — the rate limiter keys on it.
+  app.set("trust proxy", 1);
+  app.use(securityHeaders);
+  // A cap on body size: nothing this API accepts is anywhere near 100kb, and
+  // an unbounded parser is a free denial-of-service.
+  app.use(express.json({ limit: "100kb" }));
 
   app.use("/api/auth", authRoutes);
   app.use("/api/bills", billRoutes);
@@ -50,8 +57,28 @@ async function main() {
   }
 
   // Central error handler: keep failures as clean JSON, never leak stack traces.
+  // Bad input reaching the database layer is the caller's fault, not a server
+  // fault, so it comes back as 4xx with a usable message (spec section 7.5).
   app.use((err, req, res, next) => {
-    console.error(err);
+    console.error(`[error] ${req.method} ${req.originalUrl}:`, err.message);
+
+    if (err.name === "CastError") {
+      return res.status(400).json({ error: "That record id is not valid." });
+    }
+    if (err.name === "ValidationError") {
+      const first = Object.values(err.errors || {})[0];
+      return res.status(400).json({ error: first ? first.message : "Some fields are invalid." });
+    }
+    if (err.code === 11000) {
+      return res.status(409).json({ error: "That record already exists." });
+    }
+    if (err.type === "entity.too.large") {
+      return res.status(413).json({ error: "That request is too large." });
+    }
+    if (err.type === "entity.parse.failed") {
+      return res.status(400).json({ error: "The request body is not valid JSON." });
+    }
+
     res.status(500).json({ error: "Unexpected server error." });
   });
 
