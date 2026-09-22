@@ -1,6 +1,6 @@
 import { peso, fmtDate, billStatus, statusBadgeClass } from "../lib/utils.js";
 
-export default function Dashboard({ bills, tx, budgets, notifs }) {
+export default function Dashboard({ bills, tx, budgets, notifs, setScreen }) {
   const approved = tx.filter(t => t.status === "Approved");
   const pendingCount = tx.filter(t => t.status === "Pending Review").length;
   const income = approved.filter(t => t.type === "Income").reduce((s, t) => s + t.amount, 0);
@@ -64,10 +64,21 @@ export default function Dashboard({ bills, tx, budgets, notifs }) {
         </div>
       </div>
 
+      {budgets.length === 0 && (
+        <div className="card" style={{ marginTop: 16 }}>
+          <h3>Budgets</h3>
+          <div className="empty">
+            No budgets set yet.
+            {setScreen && <> <button className="linkbtn" onClick={() => setScreen("budgets")}>Add your first budget</button> to track spending against a limit.</>}
+          </div>
+        </div>
+      )}
+
       <div className="grid grid-3" style={{ marginTop: 16 }}>
         {budgets.map(b => {
           const spent = approved.filter(t => t.type === "Expense" && t.category === b.category).reduce((s, t) => s + t.amount, 0);
-          const pct = Math.min(100, Math.round(spent / b.limit * 100));
+          // Guard against a zero limit so the bar never renders as Infinity.
+          const pct = b.limit > 0 ? Math.min(100, Math.round(spent / b.limit * 100)) : 0;
           return (
             <div className="card" key={b.category}>
               <h3>{b.category} Budget</h3>

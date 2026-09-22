@@ -18,13 +18,17 @@ import CommentsScreen from "./screens/CommentsScreen.jsx";
 import NotificationsScreen from "./screens/NotificationsScreen.jsx";
 import AuditLogScreen from "./screens/AuditLogScreen.jsx";
 import ReportsScreen from "./screens/ReportsScreen.jsx";
+import BudgetsScreen from "./screens/BudgetsScreen.jsx";
 import UserManagement from "./screens/UserManagement.jsx";
+import SettingsScreen from "./screens/SettingsScreen.jsx";
 
 export default function App() {
   const [session, setSession] = useState(null); // {id,name,email,role,token}
+  const [restoring, setRestoring] = useState(true);
   const [authView, setAuthView] = useState("landing"); // "landing" | "auth"
   const [authMode, setAuthMode] = useState("login"); // "login" | "register"
   const [screen, setScreen] = useState("dashboard");
+  const [category, setCategory] = useState(null); // which category the detail screen shows
   const [users, setUsers] = useState([]);
   const [bills, setBills] = useState([]);
   const [tx, setTx] = useState([]);
@@ -51,6 +55,29 @@ export default function App() {
     const t = setTimeout(() => setToast(null), 3200);
     return () => clearTimeout(t);
   }, [toast]);
+
+  // Restore the session on a page refresh. The token survives in
+  // sessionStorage, but only the server can say whether it is still valid,
+  // so the app asks before deciding the visitor is logged out.
+  useEffect(() => {
+    const token = sessionStorage.getItem("fts_token");
+    if (!token) { setRestoring(false); return; }
+    let cancelled = false;
+    (async () => {
+      try {
+        const data = await api("/api/auth/me");
+        if (cancelled) return;
+        const sess = { ...data.user, token };
+        setSession(sess);
+        await refreshAll(sess);
+      } catch {
+        sessionStorage.removeItem("fts_token");
+      } finally {
+        if (!cancelled) setRestoring(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
 
   function fireToast(msg) { setToast(msg); }
   function fireError(err) { setToast("⚠ " + (err.message || "Something went wrong.")); }
@@ -110,6 +137,7 @@ export default function App() {
     sessionStorage.removeItem("fts_token");
     setSession(null);
     setAuthView("landing");
+    setScreen("dashboard");
     setBills([]); setTx([]); setBudgets([]); setNotifs([]); setAuditLog([]); setUsers([]); setComments([]);
     fireToast("You have been logged out.");
   }
@@ -135,12 +163,46 @@ export default function App() {
       await refreshAll();
     } catch (err) { fireError(err); }
   }
+  async function editBill(id, patch) {
+    try {
+      await api("/api/bills/" + id, { method: "PUT", body: patch });
+      fireToast("Bill updated.");
+      await refreshAll();
+    } catch (err) { fireError(err); }
+  }
+  function deleteBill(bill) {
+    askConfirm(`Delete "${bill.name}"? This cannot be undone.`, async () => {
+      setConfirmDialog(null);
+      try {
+        await api("/api/bills/" + bill._id, { method: "DELETE" });
+        fireToast("Bill deleted.");
+        await refreshAll();
+      } catch (err) { fireError(err); }
+    }, "Delete Bill");
+  }
   async function addTx(t) {
     try {
       await api("/api/transactions", { method: "POST", body: t });
       fireToast(`${t.type} of ${peso(t.amount)} submitted for review.`);
       await refreshAll();
     } catch (err) { fireError(err); }
+  }
+  async function editTx(id, patch) {
+    try {
+      await api("/api/transactions/" + id, { method: "PUT", body: patch });
+      fireToast("Entry updated.");
+      await refreshAll();
+    } catch (err) { fireError(err); }
+  }
+  function deleteTx(entry) {
+    askConfirm(`Withdraw this ${entry.type.toLowerCase()} of ${peso(entry.amount)}?`, async () => {
+      setConfirmDialog(null);
+      try {
+        await api("/api/transactions/" + entry._id, { method: "DELETE" });
+        fireToast("Entry withdrawn.");
+        await refreshAll();
+      } catch (err) { fireError(err); }
+    }, "Withdraw Entry");
   }
   async function reviewTx(id, action, comment) {
     try {
@@ -162,6 +224,96 @@ export default function App() {
       fireToast("Note posted.");
       await refreshAll();
     } catch (err) { fireError(err); }
+  }
+
+  // ---- Budgets ----
+  async function addBudget(b) {
+    try {
+      await api("/api/budgets", { method: "POST", body: b });
+      fireToast(`Budget for ${b.category} set.`);
+      await refreshAll();
+    } catch (err) { fireError(err); }
+  }
+  async function editBudget(id, patch) {
+    try {
+      await api("/api/budgets/" + id, { method: "PUT", body: patch });
+      fireToast("Budget updated.");
+      await refreshAll();
+    } catch (err) { fireError(err); }
+  }
+  function deleteBudget(budget) {
+    askConfirm(`Remove the ${budget.category} budget?`, async () => {
+      setConfirmDialog(null);
+      try {
+        await api("/api/budgets/" + budget._id, { method: "DELETE" });
+        fireToast("Budget removed.");
+        await refreshAll();
+      } catch (err) { fireError(err); }
+    }, "Remove Budget");
+  }
+
+  // ---- Notifications ----
+  async function markNotifRead(id) {
+    try {
+      await api("/api/notifications/" + id + "/read", { method: "PUT" });
+      await refreshAll();
+    } catch (err) { fireError(err); }
+  }
+  async function markAllNotifsRead() {
+    try {
+      await api("/api/notifications/read-all", { method: "PUT" });
+      fireToast("All notifications marked as read.");
+      await refreshAll();
+    } catch (err) { fireError(err); }
+  }
+
+  // ---- Account settings ----
+  async function updateProfile(patch) {
+    try {
+      const data = await api("/api/auth/me", { method: "PUT", body: patch });
+      setSession((s) => ({ ...s, ...data.user }));
+      fireToast("Profile updated.");
+      await refreshAll();
+      return null;
+    } catch (err) { return err.message; }
+  }
+  async function changePassword(currentPassword, newPassword) {
+    try {
+      const data = await api("/api/auth/me/password", { method: "PUT", body: { currentPassword, newPassword } });
+      // The server invalidates every other session and hands back a fresh token.
+      sessionStorage.setItem("fts_token", data.token);
+      setSession((s) => ({ ...s, ...data.user, token: data.token }));
+      fireToast("Password changed — other devices were signed out.");
+      return null;
+    } catch (err) { return err.message; }
+  }
+
+  // ---- Admin ----
+  async function setUserRole(userId, role) {
+    try {
+      await api("/api/users/" + userId + "/role", { method: "PUT", body: { role } });
+      fireToast("Role updated.");
+      await refreshAll();
+    } catch (err) { fireError(err); }
+  }
+  function deleteUser(user) {
+    askConfirm(`Delete the account for ${user.name}? This cannot be undone.`, async () => {
+      setConfirmDialog(null);
+      try {
+        await api("/api/users/" + user._id, { method: "DELETE" });
+        fireToast("Account deleted.");
+        await refreshAll();
+      } catch (err) { fireError(err); }
+    }, "Delete Account");
+  }
+
+  function openCategory(name) {
+    setCategory(name);
+    setScreen("projectDetails");
+  }
+
+  if (restoring) {
+    return <div className="boot"><div className="boot-mark">FS</div><div className="boot-text">Restoring your session…</div></div>;
   }
 
   return (
@@ -187,7 +339,7 @@ export default function App() {
         )
       ) : (
         <div className="shell">
-          <Sidebar screen={screen} setScreen={setScreen} session={session} logout={requestLogout} theme={theme} setTheme={setTheme} />
+          <Sidebar screen={screen} setScreen={setScreen} session={session} logout={requestLogout} theme={theme} setTheme={setTheme} notifs={notifs} />
           <div className="main">
             <Topbar screen={screen} />
             <div className="content">
@@ -196,20 +348,22 @@ export default function App() {
                   <div style={{ color: "var(--danger)", fontSize: 13 }}>⚠ Could not reach the server: {loadError}</div>
                 </div>
               )}
-              <div className="screen-fade" key={screen}>
-                {screen === "dashboard" && <Dashboard bills={bills} tx={tx} budgets={budgets} notifs={notifs} />}
-                {screen === "projects" && <ProjectList bills={bills} />}
-                {screen === "projectDetails" && <ProjectDetails bills={bills} />}
-                {screen === "bills" && <BillsScreen bills={bills} addBill={addBill} markPaid={markPaid} />}
+              <div className="screen-fade" key={screen + (category || "")}>
+                {screen === "dashboard" && <Dashboard bills={bills} tx={tx} budgets={budgets} notifs={notifs} setScreen={setScreen} />}
+                {screen === "projects" && <ProjectList bills={bills} onOpen={openCategory} />}
+                {screen === "projectDetails" && <ProjectDetails bills={bills} category={category} onBack={() => setScreen("projects")} onPick={setCategory} />}
+                {screen === "bills" && <BillsScreen bills={bills} addBill={addBill} markPaid={markPaid} editBill={editBill} deleteBill={deleteBill} />}
                 {screen === "history" && <PaymentHistory bills={bills} />}
                 {screen === "submission" && <SubmissionForm addTx={addTx} />}
-                {screen === "versions" && <VersionHistory bills={bills} />}
-                {screen === "review" && <ReviewApproval tx={tx} session={session} reviewTx={reviewTx} resubmitTx={resubmitTx} />}
-                {screen === "comments" && <CommentsScreen comments={comments} addComment={addComment} />}
-                {screen === "notifications" && <NotificationsScreen notifs={notifs} />}
+                {screen === "versions" && <VersionHistory tx={tx} />}
+                {screen === "review" && <ReviewApproval tx={tx} session={session} reviewTx={reviewTx} resubmitTx={resubmitTx} editTx={editTx} deleteTx={deleteTx} />}
+                {screen === "comments" && <CommentsScreen comments={comments} addComment={addComment} tx={tx} />}
+                {screen === "notifications" && <NotificationsScreen notifs={notifs} markRead={markNotifRead} markAllRead={markAllNotifsRead} />}
                 {screen === "audit" && <AuditLogScreen auditLog={auditLog} />}
                 {screen === "reports" && <ReportsScreen tx={tx} bills={bills} budgets={budgets} />}
-                {screen === "users" && <UserManagement users={users} session={session} />}
+                {screen === "budgets" && <BudgetsScreen budgets={budgets} tx={tx} addBudget={addBudget} editBudget={editBudget} deleteBudget={deleteBudget} />}
+                {screen === "users" && <UserManagement users={users} session={session} setUserRole={setUserRole} deleteUser={deleteUser} />}
+                {screen === "settings" && <SettingsScreen session={session} updateProfile={updateProfile} changePassword={changePassword} theme={theme} setTheme={setTheme} />}
               </div>
             </div>
           </div>
