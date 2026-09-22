@@ -56,6 +56,7 @@ async function main() {
 }
 
 main().catch((err) => {
-  console.error("[reminder] failed to start:", err);
+  // `handled` means the cause was already reported in readable form.
+  if (!err.handled) console.error("[reminder] failed to start:", err);
   process.exit(1);
 });
