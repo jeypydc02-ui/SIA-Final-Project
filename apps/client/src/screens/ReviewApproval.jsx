@@ -69,11 +69,12 @@ export default function ReviewApproval({ tx, session, reviewTx, resubmitTx, edit
       <div className="card">
         <h3>{isReviewer ? "All Submissions" : "My Submissions"}</h3>
         <table>
-          <thead><tr><th>Type</th><th>Category</th><th>Amount</th><th>Status</th><th>Reviewer Note</th><th></th></tr></thead>
+          <thead><tr><th>Type</th><th>Category</th><th>Amount</th><th>Note</th><th>Status</th><th>Reviewer Note</th><th></th></tr></thead>
           <tbody>
             {tx.map(t => (
               <tr key={t._id}>
                 <td>{t.type}</td><td>{t.category}</td><td>{peso(t.amount)}</td>
+                <td style={{ color: "var(--text-dim)" }}>{t.note || "—"}</td>
                 <td><span className={"badge " + txStatusBadge(t.status)}>{t.status}{t.version > 1 ? " · v" + t.version : ""}</span></td>
                 <td style={{ color: "var(--text-dim)" }}>{t.reviewComment || "—"}</td>
                 <td style={{ display: "flex", gap: 6 }}>
@@ -87,7 +88,7 @@ export default function ReviewApproval({ tx, session, reviewTx, resubmitTx, edit
                 </td>
               </tr>
             ))}
-            {tx.length === 0 && <tr><td colSpan="6"><div className="empty">No submissions yet.</div></td></tr>}
+            {tx.length === 0 && <tr><td colSpan="7"><div className="empty">No submissions yet.</div></td></tr>}
           </tbody>
         </table>
       </div>

@@ -1,7 +1,7 @@
 const path = require("path");
 const fs = require("fs");
 const express = require("express");
-const { connectDB } = require("./src/config/db");
+const { connectDB, mongoose } = require("./src/config/db");
 const { securityHeaders } = require("./src/middleware/securityHeaders");
 
 const authRoutes = require("./src/routes/auth");
@@ -26,6 +26,17 @@ async function main() {
   // A cap on body size: nothing this API accepts is anywhere near 100kb, and
   // an unbounded parser is a free denial-of-service.
   app.use(express.json({ limit: "100kb" }));
+
+  // Unauthenticated liveness probe: used by the test runner to know the API is
+  // up, and by the deployment evidence to show the service responding.
+  app.get("/api/health", (req, res) => {
+    res.json({
+      status: "ok",
+      service: "fintrack-stark-api",
+      db: mongoose.connection.readyState === 1 ? "connected" : "disconnected",
+      time: new Date().toISOString(),
+    });
+  });
 
   app.use("/api/auth", authRoutes);
   app.use("/api/bills", billRoutes);

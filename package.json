@@ -12,9 +12,12 @@
     "client": "npm run dev --workspace apps/client",
     "dev": "concurrently -n API,WEB -c blue,magenta \"npm:server\" \"npm:client\"",
     "build": "npm run build --workspace apps/client",
-    "seed": "node scripts/seed.js"
+    "seed": "node scripts/seed.js",
+    "test": "playwright test",
+    "test:report": "playwright show-report tests/report"
   },
   "devDependencies": {
+    "@playwright/test": "^1.63.0",
     "concurrently": "^10.0.5"
   }
 }

@@ -4,3 +4,8 @@ build/
 .env
 .env.local
 *.log
+
+# test artefacts
+tests/.auth.json
+tests/report/
+test-results/

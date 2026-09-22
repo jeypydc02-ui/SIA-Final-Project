@@ -8,6 +8,12 @@ function todayISO() {
 
 const REVIEWER_ROLES = ["Reviewer", "Admin"];
 
+// "an expense" / "an income" — both entry types start with a vowel, but pick
+// the article from the word so the messages stay correct if a type is added.
+function article(word) {
+  return /^[aeiou]/i.test(word) ? "an" : "a";
+}
+
 // Reviewers/Admins see everything (needed to run the approval queue);
 // a regular User only sees their own submissions (NFR-002).
 async function list(req, res) {
@@ -39,7 +45,7 @@ async function create(req, res) {
   await logAction(req.user.name, `${type} Submitted`, `${category}: ${amount} — submitted for review.`);
   await notifyRoles(
     "submission",
-    `${req.user.name} submitted a ${type.toLowerCase()} of ${amount} for review.`,
+    `${req.user.name} submitted ${article(type)} ${type.toLowerCase()} of ${amount} for review.`,
     REVIEWER_ROLES
   );
   res.status(201).json(tx);
