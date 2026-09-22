@@ -1,0 +1,15 @@
+{
+  "name": "fintrack-stark-server",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Express REST API for FinTrack Stark",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "express": "^4.19.2",
+    "mongoose": "^8.5.0"
+  }
+}
