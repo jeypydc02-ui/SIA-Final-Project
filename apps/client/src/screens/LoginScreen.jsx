@@ -33,7 +33,7 @@ export default function LoginScreen({ onLogin, onRegister, theme, setTheme, init
     e.preventDefault();
     setErr("");
     if (!firstName.trim() || !lastName.trim() || !regEmail.trim() || !regPassword) { setErr("All fields are required."); return; }
-    if (regPassword.length < 6) { setErr("Password must be at least 6 characters."); return; }
+    if (regPassword.length < 8) { setErr("Password must be at least 8 characters."); return; }
     if (regPassword !== regConfirm) { setErr("Passwords do not match."); return; }
     setBusy(true);
     const errMsg = await onRegister(firstName.trim(), lastName.trim(), regEmail.trim(), regPassword);

@@ -1,0 +1,135 @@
+const { test, expect } = require("@playwright/test");
+const { api, accounts, signIn, gotoScreen } = require("./helpers");
+
+// Integration test cases (spec section 16: minimum 5).
+// These cover the integration component itself (section 6): the workflow
+// automation and webhook-style cascade that fires when a bill is paid, and
+// the messaging simulation that routes events to the right recipient.
+
+test.describe("Integration", () => {
+  test("IT-01 paying a bill cascades into an expense, a notification, and an audit entry", async ({ page }) => {
+    const { user, admin } = accounts();
+
+    const before = await api("/api/transactions", { token: user.token });
+    const bill = await api("/api/bills", {
+      method: "POST", token: user.token,
+      body: { name: "Cascade Test Bill", category: "Utilities", amount: 1234, due: "2026-12-31" },
+    });
+
+    await signIn(page, "user");
+    await gotoScreen(page, "Bill Reminders");
+
+    const row = page.locator("tr", { hasText: "Cascade Test Bill" });
+    await row.getByRole("button", { name: "Mark Paid" }).click();
+    await page.getByRole("button", { name: "Confirm Payment" }).click();
+    await expect(page.locator(".toast")).toContainText("marked as paid");
+
+    // 1. the bill itself moved to Paid
+    await expect(page.locator("tr", { hasText: "Cascade Test Bill" })).toContainText("Paid");
+
+    // 2. an auto-approved expense transaction was created by the workflow
+    const after = await api("/api/transactions", { token: user.token });
+    expect(after.data.length).toBe(before.data.length + 1);
+    const generated = after.data.find((t) => t.note === "Bill payment: Cascade Test Bill");
+    expect(generated).toBeTruthy();
+    expect(generated.status).toBe("Approved");
+    expect(generated.autoApproved).toBe(true);
+    expect(generated.amount).toBe(1234);
+
+    // 3. a notification was raised for the payer
+    const notifs = await api("/api/notifications", { token: user.token });
+    expect(notifs.data.some((n) => n.type === "payment" && n.message.includes("Cascade Test Bill"))).toBe(true);
+
+    // 4. the action was recorded in the audit trail
+    const audit = await api("/api/audit-log", { token: admin.token });
+    expect(audit.data.some((l) => l.action === "Payment Recorded" && l.detail.includes("Cascade Test Bill"))).toBe(true);
+  });
+
+  test("IT-02 a new submission is routed to reviewers, not to everyone", async () => {
+    const { user, reviewer, admin } = accounts();
+
+    await api("/api/transactions", {
+      method: "POST", token: user.token,
+      body: { type: "Income", category: "Freelance", amount: 4321, note: "routing check" },
+    });
+
+    const reviewerInbox = await api("/api/notifications", { token: reviewer.token });
+    const adminInbox = await api("/api/notifications", { token: admin.token });
+    const submitterInbox = await api("/api/notifications", { token: user.token });
+
+    expect(reviewerInbox.data.some((n) => n.type === "submission" && n.message.includes("4321"))).toBe(true);
+    expect(adminInbox.data.some((n) => n.type === "submission" && n.message.includes("4321"))).toBe(true);
+    // The submitter is not told about their own submission.
+    expect(submitterInbox.data.some((n) => n.type === "submission" && n.message.includes("4321"))).toBe(false);
+  });
+
+  test("IT-03 a review outcome is delivered only to the submitter", async () => {
+    const { user, reviewer } = accounts();
+
+    const created = await api("/api/transactions", {
+      method: "POST", token: user.token,
+      body: { type: "Expense", category: "Food", amount: 8888, note: "outcome routing" },
+    });
+    await api(`/api/transactions/${created.data._id}/review`, {
+      method: "POST", token: reviewer.token,
+      body: { action: "approve", comment: "Looks right." },
+    });
+
+    const submitterInbox = await api("/api/notifications", { token: user.token });
+    const reviewerInbox = await api("/api/notifications", { token: reviewer.token });
+
+    expect(submitterInbox.data.some((n) => n.type === "approved" && n.message.includes("8888"))).toBe(true);
+    expect(reviewerInbox.data.some((n) => n.type === "approved" && n.message.includes("8888"))).toBe(false);
+  });
+
+  test("IT-04 an approved entry flows through to the dashboard totals", async ({ page }) => {
+    const { user, reviewer } = accounts();
+
+    await signIn(page, "user");
+    const balanceBefore = await page.locator(".card.stat", { hasText: "Balance" }).locator(".value").innerText();
+
+    const created = await api("/api/transactions", {
+      method: "POST", token: user.token,
+      body: { type: "Income", category: "Salary", amount: 10000, note: "dashboard flow" },
+    });
+
+    // Still pending: it must not count yet.
+    await page.reload();
+    await page.waitForSelector(".shell");
+    const balancePending = await page.locator(".card.stat", { hasText: "Balance" }).locator(".value").innerText();
+    expect(balancePending).toBe(balanceBefore);
+
+    await api(`/api/transactions/${created.data._id}/review`, {
+      method: "POST", token: reviewer.token, body: { action: "approve" },
+    });
+
+    await page.reload();
+    await page.waitForSelector(".shell");
+    const balanceAfter = await page.locator(".card.stat", { hasText: "Balance" }).locator(".value").innerText();
+    expect(balanceAfter).not.toBe(balanceBefore);
+  });
+
+  test("IT-05 approved expenses are counted against the matching budget", async ({ page }) => {
+    const { user, reviewer } = accounts();
+
+    const created = await api("/api/transactions", {
+      method: "POST", token: user.token,
+      body: { type: "Expense", category: "Transport", amount: 900, note: "budget flow" },
+    });
+    await api(`/api/transactions/${created.data._id}/review`, {
+      method: "POST", token: reviewer.token, body: { action: "approve" },
+    });
+
+    await signIn(page, "user");
+    await gotoScreen(page, "Budgets");
+
+    const card = page.locator(".card", { hasText: "Transport" }).first();
+    await expect(card).toContainText("of ₱2,500.00");
+    await expect(card).toContainText("remaining");
+
+    // The Reports screen must agree with the Budgets screen.
+    await gotoScreen(page, "Reports");
+    const budgetRow = page.locator("tr", { hasText: "Transport" });
+    await expect(budgetRow).toContainText("₱2,500.00");
+  });
+});
