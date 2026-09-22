@@ -9,3 +9,6 @@ build/
 tests/.auth.json
 tests/report/
 test-results/
+
+# local database backups (one sample is committed under docs/appendices)
+backups/
