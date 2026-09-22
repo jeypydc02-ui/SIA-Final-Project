@@ -1,7 +1,9 @@
 import { NAV } from "../lib/nav.js";
 import ThemeToggle from "./ThemeToggle.jsx";
 
-export default function Sidebar({ screen, setScreen, session, logout, theme, setTheme }) {
+export default function Sidebar({ screen, setScreen, session, logout, theme, setTheme, notifs = [] }) {
+  const unread = notifs.filter((n) => !n.read).length;
+
   return (
     <div className="side">
       <div className="brand">
@@ -16,7 +18,9 @@ export default function Sidebar({ screen, setScreen, session, logout, theme, set
           <div className="nav-label">{g.group}</div>
           {g.items.filter(it => !it.roles || it.roles.includes(session.role)).map(it => (
             <div key={it.id} className={"nav-item" + (screen === it.id ? " active" : "")} onClick={() => setScreen(it.id)}>
-              <span className="nav-ico">{it.ico}</span>{it.label}
+              <span className="nav-ico">{it.ico}</span>
+              {it.label}
+              {it.id === "notifications" && unread > 0 && <span className="nav-badge">{unread}</span>}
             </div>
           ))}
         </div>

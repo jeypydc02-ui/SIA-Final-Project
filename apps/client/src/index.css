@@ -306,3 +306,92 @@ label.field{display:block; font-size:12px; color:var(--text-dim); margin-bottom:
   .landing-hero h1{font-size:28px;}
   .landing-nav-actions .btn.ghost{display:none;}
 }
+
+/* ---- Session restore splash ---- */
+.boot{
+  min-height:100vh; display:flex; flex-direction:column; align-items:center;
+  justify-content:center; gap:14px; background:var(--bg);
+}
+.boot-mark{
+  width:44px; height:44px; border-radius:8px; background:var(--primary);
+  color:#fff; font-weight:700; font-size:15px;
+  display:flex; align-items:center; justify-content:center;
+}
+.boot-text{font-size:13px; color:var(--text-dim);}
+
+/* ---- Clickable card (category tiles) ---- */
+button.card-link{
+  display:block; width:100%; text-align:left; font:inherit; color:inherit;
+  cursor:pointer;
+}
+button.card-link:hover{border-color:var(--primary); background:var(--surface-hover);}
+button.card-link h3{color:var(--text); font-size:14px;}
+
+/* ---- Tab strip ---- */
+.tabrow{display:flex; gap:6px; flex-wrap:wrap;}
+.tab{
+  font:inherit; font-size:12.5px; cursor:pointer;
+  padding:6px 12px; border-radius:6px;
+  background:transparent; color:var(--text-dim);
+  border:1px solid var(--line);
+  display:inline-flex; align-items:center; gap:7px;
+}
+.tab:hover{color:var(--text); background:var(--surface-hover);}
+.tab.active{
+  background:var(--accent-tint); color:var(--primary);
+  border-color:var(--accent-tint-border);
+}
+.tab-count{
+  font-size:10.5px; padding:1px 5px; border-radius:4px;
+  background:var(--tint-neutral); color:var(--text-dim);
+}
+.tab.active .tab-count{background:var(--accent-tint-hover); color:var(--primary);}
+
+/* ---- Revision timeline ---- */
+.timeline{padding:6px 0 6px 4px;}
+.timeline-item{
+  display:flex; gap:12px; padding:8px 0;
+  border-left:1px solid var(--line); margin-left:5px; padding-left:16px;
+  position:relative;
+}
+.timeline-item:last-child{border-left-color:transparent;}
+.timeline-dot{
+  position:absolute; left:-4px; top:13px;
+  width:7px; height:7px; border-radius:50%;
+  background:var(--primary);
+}
+.row-link{cursor:pointer;}
+.row-link:hover td{background:var(--row-hover);}
+
+/* ---- Inline form feedback ---- */
+.form-msg{
+  font-size:12.5px; padding:8px 10px; border-radius:6px; margin-bottom:12px;
+  border:1px solid transparent;
+}
+.form-msg.ok{background:var(--tint-ok); color:var(--ok); border-color:var(--tint-ok);}
+.form-msg.error{background:var(--tint-danger); color:var(--danger); border-color:var(--tint-danger);}
+.hint{font-size:11.5px; color:var(--text-dim); margin-top:5px;}
+
+/* ---- Settings rows ---- */
+.settings-row{
+  display:flex; align-items:center; justify-content:space-between;
+  gap:16px; padding:6px 0;
+}
+
+/* ---- Unread notification cues ---- */
+.nav-badge{
+  margin-left:auto; font-size:10.5px; font-weight:600;
+  min-width:18px; height:18px; padding:0 5px; border-radius:9px;
+  background:var(--primary); color:#fff;
+  display:inline-flex; align-items:center; justify-content:center;
+}
+.unread-dot{
+  display:inline-block; width:6px; height:6px; border-radius:50%;
+  background:var(--primary); margin-right:8px; vertical-align:middle;
+}
+.log-line.read{color:var(--text-dim);}
+.linkbtn{
+  font:inherit; font-size:11.5px; cursor:pointer;
+  background:none; border:none; padding:0; color:var(--primary);
+}
+.linkbtn:hover{text-decoration:underline;}

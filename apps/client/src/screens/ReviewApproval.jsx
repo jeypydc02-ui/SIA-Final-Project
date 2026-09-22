@@ -3,12 +3,13 @@ import { peso, fmtDate, txStatusBadge } from "../lib/utils.js";
 
 const ACTION_LABEL = { approve: "Approve", reject: "Reject", revise: "Request Revision on" };
 
-export default function ReviewApproval({ tx, session, reviewTx, resubmitTx }) {
+export default function ReviewApproval({ tx, session, reviewTx, resubmitTx, editTx, deleteTx }) {
   const isReviewer = session.role === "Reviewer" || session.role === "Admin";
   const [target, setTarget] = useState(null); // {t, action}
   const [comment, setComment] = useState("");
   const [resubmitTarget, setResubmitTarget] = useState(null);
   const [form, setForm] = useState({ amount: "", note: "" });
+  const [editTarget, setEditTarget] = useState(null);
 
   const pending = tx.filter(t => t.status === "Pending Review");
 
@@ -21,6 +22,15 @@ export default function ReviewApproval({ tx, session, reviewTx, resubmitTx }) {
   function confirmResubmit() {
     resubmitTx(resubmitTarget._id, { amount: Number(form.amount), note: form.note });
     setResubmitTarget(null);
+  }
+  function confirmEdit(e) {
+    e.preventDefault();
+    editTx(editTarget._id, {
+      category: editTarget.category,
+      amount: Number(editTarget.amount),
+      note: editTarget.note,
+    });
+    setEditTarget(null);
   }
 
   return (
@@ -66,7 +76,15 @@ export default function ReviewApproval({ tx, session, reviewTx, resubmitTx }) {
                 <td>{t.type}</td><td>{t.category}</td><td>{peso(t.amount)}</td>
                 <td><span className={"badge " + txStatusBadge(t.status)}>{t.status}{t.version > 1 ? " · v" + t.version : ""}</span></td>
                 <td style={{ color: "var(--text-dim)" }}>{t.reviewComment || "—"}</td>
-                <td>{!isReviewer && t.status === "Needs Revision" && <button className="btn small ghost" onClick={() => openResubmit(t)}>Resubmit</button>}</td>
+                <td style={{ display: "flex", gap: 6 }}>
+                  {!isReviewer && t.status === "Needs Revision" && <button className="btn small ghost" onClick={() => openResubmit(t)}>Resubmit</button>}
+                  {String(t.submittedBy) === String(session.id) && t.status === "Pending Review" && (
+                    <>
+                      <button className="btn small ghost" onClick={() => setEditTarget({ ...t, amount: String(t.amount) })}>Edit</button>
+                      <button className="btn small danger" onClick={() => deleteTx(t)}>Withdraw</button>
+                    </>
+                  )}
+                </td>
               </tr>
             ))}
             {tx.length === 0 && <tr><td colSpan="6"><div className="empty">No submissions yet.</div></td></tr>}
@@ -84,6 +102,30 @@ export default function ReviewApproval({ tx, session, reviewTx, resubmitTx }) {
               <button className="btn ghost" onClick={() => setTarget(null)}>Cancel</button>
               <button className="btn" onClick={confirmAction}>Confirm</button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {editTarget && (
+        <div className="modal-overlay" onClick={() => setEditTarget(null)}>
+          <div className="modal" onClick={e => e.stopPropagation()}>
+            <h3>Edit Entry</h3>
+            <p style={{ fontSize: 12.5, color: "var(--text-dim)" }}>
+              Only entries still waiting for review can be edited.
+            </p>
+            <form onSubmit={confirmEdit}>
+              <div className="form-row"><label className="field">Category</label>
+                <select value={editTarget.category} onChange={e => setEditTarget({ ...editTarget, category: e.target.value })}>
+                  <option>Food</option><option>Transport</option><option>Utilities</option><option>Subscription</option><option>Salary</option><option>Freelance</option><option>Other</option>
+                </select>
+              </div>
+              <div className="form-row"><label className="field">Amount (₱)</label><input type="number" min="1" value={editTarget.amount} onChange={e => setEditTarget({ ...editTarget, amount: e.target.value })} required /></div>
+              <div className="form-row"><label className="field">Note</label><input value={editTarget.note || ""} onChange={e => setEditTarget({ ...editTarget, note: e.target.value })} /></div>
+              <div className="actions">
+                <button type="button" className="btn ghost" onClick={() => setEditTarget(null)}>Cancel</button>
+                <button className="btn" type="submit">Save Changes</button>
+              </div>
+            </form>
           </div>
         </div>
       )}

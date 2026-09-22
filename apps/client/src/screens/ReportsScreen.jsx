@@ -5,7 +5,9 @@ export default function ReportsScreen({ tx, bills, budgets }) {
   const byCat = {};
   approved.filter(t => t.type === "Expense").forEach(t => { byCat[t.category] = (byCat[t.category] || 0) + t.amount; });
   const max = Math.max(1, ...Object.values(byCat));
-  const totalPaid = bills.filter(b => b.paid).reduce((s, b) => s + b.paidAmount, 0);
+  // paidAmount defaults to null on the model, so coerce before summing —
+  // one legacy row without it would otherwise turn the whole total into NaN.
+  const totalPaid = bills.filter(b => b.paid).reduce((s, b) => s + (Number(b.paidAmount) || 0), 0);
   const totalPending = bills.filter(b => !b.paid).reduce((s, b) => s + b.amount, 0);
 
   return (
