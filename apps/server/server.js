@@ -22,6 +22,8 @@ async function main() {
   // Trust the Vite dev proxy / any reverse proxy so req.ip is the real client
   // address rather than the proxy's — the rate limiter keys on it.
   app.set("trust proxy", 1);
+  // Do not advertise the framework and version to anyone scanning the host.
+  app.disable("x-powered-by");
   app.use(securityHeaders);
   // A cap on body size: nothing this API accepts is anywhere near 100kb, and
   // an unbounded parser is a free denial-of-service.

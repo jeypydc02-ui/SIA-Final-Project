@@ -60,11 +60,9 @@ test("E2E-01 a new account's entry travels from submission to approval", async (
   const reviewerPage = await reviewerContext.newPage();
   const { reviewer } = accounts();
   await reviewerPage.addInitScript((t) => window.sessionStorage.setItem("fts_token", t), reviewer.token);
-  await reviewerPage.goto("/");
+  await reviewerPage.goto("/notifications");
   await reviewerPage.waitForSelector(".shell");
-
-  await reviewerPage.locator(".nav-item", { hasText: "Notification Log" }).click();
-  await expect(reviewerPage.locator(".card")).toContainText("Ella Santos submitted an expense");
+  await expect(reviewerPage.locator(".card").last()).toContainText("Ella Santos submitted an expense");
 
   await reviewerPage.locator(".nav-item", { hasText: "Review & Approval" }).click();
   const queueRow = reviewerPage.locator("tr", { hasText: "E2E weekly groceries" }).first();

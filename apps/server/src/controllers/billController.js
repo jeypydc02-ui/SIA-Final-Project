@@ -53,10 +53,18 @@ async function pay(req, res) {
     return res.status(400).json({ error: "A valid payment amount is required." });
   }
 
-  bill.paid = true;
-  bill.paidOn = todayISO();
-  bill.paidAmount = amount;
-  await bill.save();
+  // Claim the bill atomically. Reading `paid` and then saving leaves a window
+  // in which two clicks — or two tabs — both pass the check and both record a
+  // payment, producing two expense rows for one bill. Matching on paid:false
+  // inside the update means the database picks exactly one winner.
+  const claimed = await Bill.findOneAndUpdate(
+    { _id: bill._id, paid: false },
+    { $set: { paid: true, paidOn: todayISO(), paidAmount: amount } },
+    { new: true }
+  );
+  if (!claimed) {
+    return res.status(400).json({ error: "This bill is already marked as paid." });
+  }
 
   const tx = await Transaction.create({
     type: "Expense",
@@ -71,14 +79,14 @@ async function pay(req, res) {
     reviewComment: "Auto-approved via bill payment workflow.",
   });
 
-  await notify("payment", `Payment recorded for "${bill.name}" — status auto-updated to Paid.`, req.user.id);
+  await notify("payment", `Payment recorded for "${claimed.name}" — status auto-updated to Paid.`, req.user.id);
   await logAction(
     req.user.name,
     "Payment Recorded",
-    `${bill.name} (${bill._id}) marked Paid, amount ${amount}. Triggered: expense log entry + notification.`
+    `${claimed.name} (${claimed._id}) marked Paid, amount ${amount}. Triggered: expense log entry + notification.`
   );
 
-  res.json({ bill, transaction: tx });
+  res.json({ bill: claimed, transaction: tx });
 }
 
 async function update(req, res) {

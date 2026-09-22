@@ -208,10 +208,10 @@ test.describe("Integration", () => {
 
     // And the owner sees it in the interface without doing anything.
     await page.addInitScript((t) => window.sessionStorage.setItem("fts_token", t), owner.token);
-    await page.goto("/");
+    await page.goto("/notifications");
     await page.waitForSelector(".shell");
-    await gotoScreen(page, "Notification Log");
-    await expect(page.locator(".card")).toContainText("Scheduled Sweep Overdue");
-    await expect(page.locator(".card")).toContainText("overdue by 1 day");
+    const log = page.locator(".card").last();
+    await expect(log).toContainText("Scheduled Sweep Overdue");
+    await expect(log).toContainText("overdue by 1 day");
   });
 });

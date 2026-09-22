@@ -59,16 +59,22 @@ async function review(req, res) {
   if (!action || !map[action]) {
     return res.status(400).json({ error: "Action must be one of: approve, reject, revise." });
   }
-  const tx = await Transaction.findById(req.params.id);
-  if (!tx) return res.status(404).json({ error: "Transaction not found." });
-  if (tx.status !== "Pending Review") {
-    return res.status(400).json({ error: `This entry is already "${tx.status}" and cannot be reviewed again.` });
+  // Claim the entry atomically: matching on "Pending Review" inside the update
+  // means that if two reviewers act at the same moment, exactly one decision is
+  // recorded. Reading the status and then saving lets both of them through, and
+  // the slower one silently overwrites the first reviewer's verdict.
+  const tx = await Transaction.findOneAndUpdate(
+    { _id: req.params.id, status: "Pending Review" },
+    { $set: { status: map[action], reviewedBy: req.user.id, reviewComment: comment || "" } },
+    // findOneAndUpdate skips schema validators unless asked, and reviewComment
+    // has a length limit to honour.
+    { new: true, runValidators: true }
+  );
+  if (!tx) {
+    const existing = await Transaction.findById(req.params.id);
+    if (!existing) return res.status(404).json({ error: "Transaction not found." });
+    return res.status(400).json({ error: `This entry is already "${existing.status}" and cannot be reviewed again.` });
   }
-
-  tx.status = map[action];
-  tx.reviewedBy = req.user.id;
-  tx.reviewComment = comment || "";
-  await tx.save();
 
   if (comment) {
     await Comment.create({
@@ -92,13 +98,10 @@ async function review(req, res) {
 
 // A submitter resubmits a "Needs Revision" entry as a new version (FR-004).
 async function resubmit(req, res) {
-  const original = await Transaction.findById(req.params.id);
-  if (!original) return res.status(404).json({ error: "Transaction not found." });
-  if (String(original.submittedBy) !== req.user.id) {
+  const existing = await Transaction.findById(req.params.id);
+  if (!existing) return res.status(404).json({ error: "Transaction not found." });
+  if (String(existing.submittedBy) !== req.user.id) {
     return res.status(403).json({ error: "You can only resubmit your own entries." });
-  }
-  if (original.status !== "Needs Revision") {
-    return res.status(400).json({ error: "Only entries marked \"Needs Revision\" can be resubmitted." });
   }
 
   const { type, category, amount, date, note } = req.body || {};
@@ -106,8 +109,16 @@ async function resubmit(req, res) {
     return res.status(400).json({ error: "Amount must be numeric." });
   }
 
-  original.status = "Superseded";
-  await original.save();
+  // Same reasoning as review(): claim the entry before writing the new version,
+  // so a double submission cannot produce two v2 records off one v1.
+  const original = await Transaction.findOneAndUpdate(
+    { _id: req.params.id, submittedBy: req.user.id, status: "Needs Revision" },
+    { $set: { status: "Superseded" } },
+    { new: false }
+  );
+  if (!original) {
+    return res.status(400).json({ error: "Only entries marked \"Needs Revision\" can be resubmitted." });
+  }
 
   const revised = await Transaction.create({
     type: type || original.type,

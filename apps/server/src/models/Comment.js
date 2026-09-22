@@ -6,7 +6,7 @@ const CommentSchema = new Schema({
   transactionId: { type: Schema.Types.ObjectId, ref: "Transaction", default: null, index: true },
   author: { type: String, required: true },
   authorId: { type: Schema.Types.ObjectId, ref: "User", required: true, index: true },
-  text: { type: String, required: true },
+  text: { type: String, required: true, trim: true, maxlength: [1000, "A note cannot be longer than 1000 characters."] },
   ts: { type: Date, default: Date.now },
 });
 
