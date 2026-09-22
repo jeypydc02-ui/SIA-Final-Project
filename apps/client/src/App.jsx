@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import {
-  BrowserRouter, Routes, Route, Navigate, Outlet, useNavigate, useParams,
+  BrowserRouter, Routes, Route, Navigate, Outlet, useNavigate, useParams, useLocation,
 } from "react-router-dom";
 import { api } from "./lib/api.js";
 import { peso } from "./lib/utils.js";
@@ -38,6 +38,7 @@ function FinTrackStark() {
   const navigate = useNavigate();
   const [session, setSession] = useState(null); // {id,name,email,role,token}
   const [restoring, setRestoring] = useState(true);
+  const [restoreError, setRestoreError] = useState("");
   const [users, setUsers] = useState([]);
   const [bills, setBills] = useState([]);
   const [tx, setTx] = useState([]);
@@ -80,8 +81,17 @@ function FinTrackStark() {
         const sess = { ...data.user, token };
         setSession(sess);
         await refreshAll(sess);
-      } catch {
-        sessionStorage.removeItem("fts_token");
+      } catch (err) {
+        if (cancelled) return;
+        // Only a rejection from the server means the session is over. If the
+        // server simply could not be reached, keep the token and say so —
+        // throwing people back to the landing page over a dropped connection
+        // loses their place and looks like the app logged them out.
+        if (err.offline) {
+          setRestoreError("Could not reach the server. Your session is still saved — reload once it is back.");
+        } else {
+          sessionStorage.removeItem("fts_token");
+        }
       } finally {
         if (!cancelled) setRestoring(false);
       }
@@ -320,6 +330,18 @@ function FinTrackStark() {
     return <div className="boot"><div className="boot-mark">FS</div><div className="boot-text">Restoring your session…</div></div>;
   }
 
+  // The server was unreachable during restore. The token is still held, so a
+  // reload once the API is back picks the session up where it left off.
+  if (restoreError && !session) {
+    return (
+      <div className="boot">
+        <div className="boot-mark">FS</div>
+        <div className="boot-text">{restoreError}</div>
+        <button className="btn" onClick={() => window.location.reload()}>Try again</button>
+      </div>
+    );
+  }
+
   // Signed-out visitors get the public pages; everything else lives behind
   // RequireAuth, which sends them to the landing page and remembers nothing.
   return (
@@ -415,12 +437,24 @@ function FinTrackStark() {
 }
 
 // The signed-in frame: sidebar, top bar, and whichever screen the URL names.
+// On a narrow screen the sidebar becomes a drawer, because a fixed 220px menu
+// swallows more than half a phone's width and squeezes the content off-screen.
 function Shell({ session, logout, theme, setTheme, notifs, loadError }) {
+  const [menuOpen, setMenuOpen] = useState(false);
+  const { pathname } = useLocation();
+
+  // Close the drawer whenever the route changes, including on Back.
+  useEffect(() => { setMenuOpen(false); }, [pathname]);
+
   return (
     <div className="shell">
-      <Sidebar session={session} logout={logout} theme={theme} setTheme={setTheme} notifs={notifs} />
+      <Sidebar
+        session={session} logout={logout} theme={theme} setTheme={setTheme} notifs={notifs}
+        open={menuOpen} onNavigate={() => setMenuOpen(false)}
+      />
+      {menuOpen && <div className="side-backdrop" onClick={() => setMenuOpen(false)} />}
       <div className="main">
-        <Topbar />
+        <Topbar onOpenMenu={() => setMenuOpen(true)} />
         <div className="content">
           {loadError && (
             <div className="card" style={{ marginBottom: 16, borderColor: "var(--danger)" }}>
