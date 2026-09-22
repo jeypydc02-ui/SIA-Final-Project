@@ -1,0 +1,322 @@
+{
+  "meta": {
+    "application": "FinTrack Stark",
+    "database": "fintrack_stark",
+    "takenAt": "2026-09-22T17:40:58.484Z",
+    "counts": {
+      "users": 3,
+      "bills": 6,
+      "transactions": 6,
+      "budgets": 4,
+      "notifications": 4,
+      "comments": 0,
+      "auditLogs": 2
+    },
+    "schemaVersion": 1
+  },
+  "data": {
+    "users": [
+      {
+        "_id": "6ab2bda835409227e4610ad1",
+        "firstName": "John Paul",
+        "lastName": "Dela Cruz",
+        "name": "John Paul Dela Cruz",
+        "email": "jp@fintrackstark.app",
+        "passwordHash": "$2a$10$yIdpUyZm0X5Bhfmp9CyGiucPktXw38Hi5hP3HplQLn1JvMEFddqiO",
+        "role": "User",
+        "__v": 0
+      },
+      {
+        "_id": "6ab2bda835409227e4610ad3",
+        "firstName": "Arvy Karlson",
+        "lastName": "Dabasol",
+        "name": "Arvy Karlson Dabasol",
+        "email": "reviewer@fintrackstark.app",
+        "passwordHash": "$2a$10$OQs8plyhq6Py.94AFeZAR.wlhKZkJ0KJFiCvwrvf7i2mGHvReDOou",
+        "role": "Reviewer",
+        "__v": 0
+      },
+      {
+        "_id": "6ab2bda835409227e4610ad5",
+        "firstName": "System",
+        "lastName": "Admin",
+        "name": "System Admin",
+        "email": "admin@fintrackstark.app",
+        "passwordHash": "$2a$10$xaJapx10bYt7c1SPN.oOfuHwcshQd9ic.LTcYuxU9QG3XCknYRI.K",
+        "role": "Admin",
+        "__v": 0
+      }
+    ],
+    "bills": [
+      {
+        "_id": "6ab2bda835409227e4610adc",
+        "name": "Meralco Electricity",
+        "category": "Utilities",
+        "amount": 2450,
+        "due": "2026-09-24",
+        "paid": false,
+        "paidOn": null,
+        "paidAmount": null,
+        "createdBy": "6ab2bda835409227e4610ad1",
+        "lastRemindedOn": "2026-09-22",
+        "__v": 0
+      },
+      {
+        "_id": "6ab2bda835409227e4610add",
+        "name": "Maynilad Water",
+        "category": "Utilities",
+        "amount": 680,
+        "due": "2026-09-21",
+        "paid": false,
+        "paidOn": null,
+        "paidAmount": null,
+        "createdBy": "6ab2bda835409227e4610ad1",
+        "lastRemindedOn": "2026-09-22",
+        "__v": 0
+      },
+      {
+        "_id": "6ab2bda835409227e4610ade",
+        "name": "PLDT Home Fibr",
+        "category": "Internet",
+        "amount": 1699,
+        "due": "2026-10-01",
+        "paid": false,
+        "paidOn": null,
+        "paidAmount": null,
+        "createdBy": "6ab2bda835409227e4610ad1",
+        "lastRemindedOn": null,
+        "__v": 0
+      },
+      {
+        "_id": "6ab2bda835409227e4610adf",
+        "name": "Condo Rent",
+        "category": "Housing",
+        "amount": 14000,
+        "due": "2026-09-22",
+        "paid": false,
+        "paidOn": null,
+        "paidAmount": null,
+        "createdBy": "6ab2bda835409227e4610ad1",
+        "lastRemindedOn": "2026-09-22",
+        "__v": 0
+      },
+      {
+        "_id": "6ab2bda835409227e4610ae0",
+        "name": "Netflix Subscription",
+        "category": "Subscription",
+        "amount": 549,
+        "due": "2026-09-16",
+        "paid": true,
+        "paidOn": "2026-09-16",
+        "paidAmount": 549,
+        "createdBy": "6ab2bda835409227e4610ad1",
+        "lastRemindedOn": null,
+        "__v": 0
+      },
+      {
+        "_id": "6ab2bda835409227e4610ae1",
+        "name": "BPI Credit Card",
+        "category": "Credit",
+        "amount": 5230,
+        "due": "2026-10-07",
+        "paid": false,
+        "paidOn": null,
+        "paidAmount": null,
+        "createdBy": "6ab2bda835409227e4610ad1",
+        "lastRemindedOn": null,
+        "__v": 0
+      }
+    ],
+    "transactions": [
+      {
+        "_id": "6ab2bda835409227e4610ae3",
+        "type": "Income",
+        "category": "Salary",
+        "amount": 32000,
+        "date": "2026-09-02",
+        "note": "Monthly salary",
+        "status": "Approved",
+        "version": 1,
+        "parentId": null,
+        "autoApproved": false,
+        "submittedBy": "6ab2bda835409227e4610ad1",
+        "reviewedBy": "6ab2bda835409227e4610ad3",
+        "reviewComment": "Seed data.",
+        "createdAt": "2026-09-22T17:40:56.941Z",
+        "__v": 0
+      },
+      {
+        "_id": "6ab2bda835409227e4610ae4",
+        "type": "Expense",
+        "category": "Food",
+        "amount": 2100,
+        "date": "2026-09-04",
+        "note": "Groceries",
+        "status": "Approved",
+        "version": 1,
+        "parentId": null,
+        "autoApproved": false,
+        "submittedBy": "6ab2bda835409227e4610ad1",
+        "reviewedBy": "6ab2bda835409227e4610ad3",
+        "reviewComment": "Seed data.",
+        "createdAt": "2026-09-22T17:40:56.942Z",
+        "__v": 0
+      },
+      {
+        "_id": "6ab2bda835409227e4610ae5",
+        "type": "Expense",
+        "category": "Transport",
+        "amount": 850,
+        "date": "2026-09-07",
+        "note": "Grab + fare",
+        "status": "Approved",
+        "version": 1,
+        "parentId": null,
+        "autoApproved": false,
+        "submittedBy": "6ab2bda835409227e4610ad1",
+        "reviewedBy": "6ab2bda835409227e4610ad3",
+        "reviewComment": "Seed data.",
+        "createdAt": "2026-09-22T17:40:56.942Z",
+        "__v": 0
+      },
+      {
+        "_id": "6ab2bda835409227e4610ae6",
+        "type": "Income",
+        "category": "Freelance",
+        "amount": 6000,
+        "date": "2026-09-12",
+        "note": "Web dev gig",
+        "status": "Approved",
+        "version": 1,
+        "parentId": null,
+        "autoApproved": false,
+        "submittedBy": "6ab2bda835409227e4610ad1",
+        "reviewedBy": "6ab2bda835409227e4610ad3",
+        "reviewComment": "Seed data.",
+        "createdAt": "2026-09-22T17:40:56.942Z",
+        "__v": 0
+      },
+      {
+        "_id": "6ab2bda835409227e4610ae7",
+        "type": "Expense",
+        "category": "Utilities",
+        "amount": 549,
+        "date": "2026-09-16",
+        "note": "Netflix",
+        "status": "Approved",
+        "version": 1,
+        "parentId": null,
+        "autoApproved": true,
+        "submittedBy": "6ab2bda835409227e4610ad1",
+        "reviewedBy": "6ab2bda835409227e4610ad1",
+        "reviewComment": "Auto-approved via bill payment workflow.",
+        "createdAt": "2026-09-22T17:40:56.942Z",
+        "__v": 0
+      },
+      {
+        "_id": "6ab2bda835409227e4610ae8",
+        "type": "Expense",
+        "category": "Food",
+        "amount": 1200,
+        "date": "2026-09-22",
+        "note": "Weekly market run",
+        "status": "Pending Review",
+        "version": 1,
+        "parentId": null,
+        "autoApproved": false,
+        "submittedBy": "6ab2bda835409227e4610ad1",
+        "reviewedBy": null,
+        "reviewComment": "",
+        "createdAt": "2026-09-22T17:40:56.942Z",
+        "__v": 0
+      }
+    ],
+    "budgets": [
+      {
+        "_id": "6ab2bda835409227e4610ad7",
+        "user": "6ab2bda835409227e4610ad1",
+        "category": "Food",
+        "limit": 6000,
+        "__v": 0
+      },
+      {
+        "_id": "6ab2bda835409227e4610ad8",
+        "user": "6ab2bda835409227e4610ad1",
+        "category": "Transport",
+        "limit": 2500,
+        "__v": 0
+      },
+      {
+        "_id": "6ab2bda835409227e4610ad9",
+        "user": "6ab2bda835409227e4610ad1",
+        "category": "Utilities",
+        "limit": 5000,
+        "__v": 0
+      },
+      {
+        "_id": "6ab2bda835409227e4610ada",
+        "user": "6ab2bda835409227e4610ad1",
+        "category": "Subscription",
+        "limit": 1000,
+        "__v": 0
+      }
+    ],
+    "notifications": [
+      {
+        "_id": "6ab2bda835409227e4610aea",
+        "user": "6ab2bda835409227e4610ad3",
+        "type": "submission",
+        "message": "John Paul Dela Cruz submitted an expense of 1200 for review.",
+        "read": false,
+        "ts": "2026-09-22T17:40:56.944Z",
+        "__v": 0
+      },
+      {
+        "_id": "6ab2bda9a60d0cfbe54c306b",
+        "user": "6ab2bda835409227e4610ad1",
+        "type": "reminder",
+        "message": "\"Meralco Electricity\" is due in 2 days — ₱2,450.00.",
+        "read": false,
+        "ts": "2026-09-22T17:40:57.678Z",
+        "__v": 0
+      },
+      {
+        "_id": "6ab2bda9a60d0cfbe54c306c",
+        "user": "6ab2bda835409227e4610ad1",
+        "type": "overdue",
+        "message": "\"Maynilad Water\" is overdue by 1 day — ₱680.00 still unpaid.",
+        "read": false,
+        "ts": "2026-09-22T17:40:57.678Z",
+        "__v": 0
+      },
+      {
+        "_id": "6ab2bda9a60d0cfbe54c306d",
+        "user": "6ab2bda835409227e4610ad1",
+        "type": "reminder",
+        "message": "\"Condo Rent\" is due today — ₱14,000.00.",
+        "read": false,
+        "ts": "2026-09-22T17:40:57.678Z",
+        "__v": 0
+      }
+    ],
+    "comments": [],
+    "auditLogs": [
+      {
+        "_id": "6ab2bda835409227e4610aec",
+        "user": "System",
+        "action": "Seed",
+        "detail": "Sample data initialized for demo.",
+        "ts": "2026-09-22T17:40:56.945Z",
+        "__v": 0
+      },
+      {
+        "_id": "6ab2bda9a60d0cfbe54c3071",
+        "user": "Reminder Service",
+        "action": "Reminder Sweep",
+        "detail": "2026-09-22: scanned 3 unpaid bill(s) within 3 day(s); raised 3 alert(s) (1 overdue).",
+        "ts": "2026-09-22T17:40:57.686Z",
+        "__v": 0
+      }
+    ]
+  }
+}

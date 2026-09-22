@@ -17,7 +17,9 @@
     "test": "playwright test",
     "test:report": "playwright show-report tests/report",
     "reminder": "node services/reminder/index.js",
-    "reminder:once": "node services/reminder/index.js --once"
+    "reminder:once": "node services/reminder/index.js --once",
+    "backup": "node scripts/backup.js",
+    "restore": "node scripts/restore.js"
   },
   "devDependencies": {
     "@playwright/test": "^1.63.0",
