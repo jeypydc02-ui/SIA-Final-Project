@@ -1,10 +1,16 @@
-import { peso } from "../lib/utils.js";
+import { peso, thisMonthISO } from "../lib/utils.js";
 
 export default function ReportsScreen({ tx, bills, budgets }) {
   const approved = tx.filter(t => t.status === "Approved");
   const byCat = {};
   approved.filter(t => t.type === "Expense").forEach(t => { byCat[t.category] = (byCat[t.category] || 0) + t.amount; });
   const max = Math.max(1, ...Object.values(byCat));
+  // Budget vs. Actual compares a monthly limit, so it uses this month only,
+  // the same figure the Budgets screen shows.
+  const month = thisMonthISO();
+  const monthByCat = {};
+  approved.filter(t => t.type === "Expense" && String(t.date).startsWith(month))
+    .forEach(t => { monthByCat[t.category] = (monthByCat[t.category] || 0) + t.amount; });
   // paidAmount defaults to null on the model, so coerce before summing —
   // one legacy row without it would otherwise turn the whole total into NaN.
   const totalPaid = bills.filter(b => b.paid).reduce((s, b) => s + (Number(b.paidAmount) || 0), 0);
@@ -15,7 +21,7 @@ export default function ReportsScreen({ tx, bills, budgets }) {
       <div className="pagehead"><div><h2>Reports</h2><div className="desc">Summarized spending and bill-payment performance (approved entries only).</div></div></div>
       <div className="grid grid-2">
         <div className="card">
-          <h3>Expenses by Category</h3>
+          <h3>Expenses by Category <span style={{ fontWeight: 400, color: "var(--text-dim)" }}>· all time</span></h3>
           {Object.entries(byCat).map(([cat, amt]) => (
             <div key={cat} style={{ marginBottom: 12 }}>
               <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12.5, marginBottom: 5 }}>
@@ -38,12 +44,12 @@ export default function ReportsScreen({ tx, bills, budgets }) {
       </div>
 
       <div className="card" style={{ marginTop: 16 }}>
-        <h3>Budget vs. Actual</h3>
+        <h3>Budget vs. Actual <span style={{ fontWeight: 400, color: "var(--text-dim)" }}>· this month</span></h3>
         <table>
-          <thead><tr><th>Category</th><th>Budget Limit</th><th>Actual Spent</th><th>Variance</th><th>Status</th></tr></thead>
+          <thead><tr><th>Category</th><th>Monthly Limit</th><th>Spent This Month</th><th>Variance</th><th>Status</th></tr></thead>
           <tbody>
             {budgets.map(b => {
-              const spent = byCat[b.category] || 0;
+              const spent = monthByCat[b.category] || 0;
               const variance = b.limit - spent;
               const over = variance < 0;
               return (
@@ -54,6 +60,7 @@ export default function ReportsScreen({ tx, bills, budgets }) {
                 </tr>
               );
             })}
+            {budgets.length === 0 && <tr><td colSpan="5"><div className="empty">No budgets set yet.</div></td></tr>}
           </tbody>
         </table>
       </div>

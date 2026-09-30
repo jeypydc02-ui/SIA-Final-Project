@@ -1,6 +1,7 @@
 const path = require("path");
 const fs = require("fs");
 const express = require("express");
+const compression = require("compression");
 const { connectDB, mongoose } = require("./src/config/db");
 const { securityHeaders } = require("./src/middleware/securityHeaders");
 
@@ -19,12 +20,21 @@ async function main() {
   await connectDB();
 
   const app = express();
-  // Trust the Vite dev proxy / any reverse proxy so req.ip is the real client
-  // address rather than the proxy's — the rate limiter keys on it.
-  app.set("trust proxy", 1);
+  // req.ip is what the rate limiter counts. Trusting X-Forwarded-For when no
+  // proxy sits in front lets any client invent a new address per request and
+  // walk straight past the limit, so it is off unless the deployment says a
+  // reverse proxy is there: TRUST_PROXY=1 for one hop (nginx, Render, Railway,
+  // Heroku and similar), or any value Express accepts for "trust proxy".
+  const trustProxy = process.env.TRUST_PROXY;
+  if (trustProxy) {
+    app.set("trust proxy", /^\d+$/.test(trustProxy) ? Number(trustProxy) : trustProxy);
+  }
   // Do not advertise the framework and version to anyone scanning the host.
   app.disable("x-powered-by");
   app.use(securityHeaders);
+  // List responses are repetitive JSON and shrink roughly tenfold, which is
+  // the difference that matters on a slow mobile connection.
+  app.use(compression());
   // A cap on body size: nothing this API accepts is anywhere near 100kb, and
   // an unbounded parser is a free denial-of-service.
   app.use(express.json({ limit: "100kb" }));
@@ -48,6 +58,12 @@ async function main() {
   app.use("/api/audit-log", auditLogRoutes);
   app.use("/api/users", userRoutes);
   app.use("/api/comments", commentRoutes);
+
+  // An unknown API address answers in JSON like every other API error, rather
+  // than with Express's HTML page or, worse, the SPA's index.html.
+  app.use("/api", (req, res) => {
+    res.status(404).json({ error: "No such API endpoint." });
+  });
 
   // During development the React app runs separately via Vite (npm run dev
   // inside frontend/, http://localhost:5173, proxying /api here). This

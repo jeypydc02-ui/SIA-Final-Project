@@ -1,7 +1,7 @@
 const Notification = require("../models/Notification");
 
 async function list(req, res) {
-  const notifs = await Notification.find({ user: req.user.id }).sort({ ts: -1 }).limit(100);
+  const notifs = await Notification.find({ user: req.user.id }).sort({ ts: -1 }).limit(100).lean();
   res.json(notifs);
 }
 

@@ -1,13 +1,14 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, Component } from "react";
 import {
   BrowserRouter, Routes, Route, Navigate, Outlet, useNavigate, useParams, useLocation,
 } from "react-router-dom";
-import { api } from "./lib/api.js";
+import { api, SESSION_ENDED, PASSWORD_CHANGE_REQUIRED } from "./lib/api.js";
 import { peso } from "./lib/utils.js";
 import { PATH_ROLES } from "./lib/nav.js";
 
 import LandingPage from "./screens/LandingPage.jsx";
 import LoginScreen from "./screens/LoginScreen.jsx";
+import { TermsPage, PrivacyPage } from "./screens/LegalPages.jsx";
 import ConfirmDialog from "./components/ConfirmDialog.jsx";
 import Sidebar from "./components/Sidebar.jsx";
 import Topbar from "./components/Topbar.jsx";
@@ -26,22 +27,31 @@ import BudgetsScreen from "./screens/BudgetsScreen.jsx";
 import UserManagement from "./screens/UserManagement.jsx";
 import SettingsScreen from "./screens/SettingsScreen.jsx";
 
+const isStaff = (s) => !!s && (s.role === "Admin" || s.role === "Reviewer");
+
 export default function App() {
   return (
-    <BrowserRouter>
-      <FinTrackStark />
-    </BrowserRouter>
+    <ErrorBoundary>
+      <BrowserRouter>
+        <FinTrackStark />
+      </BrowserRouter>
+    </ErrorBoundary>
   );
 }
 
 function FinTrackStark() {
   const navigate = useNavigate();
-  const [session, setSession] = useState(null); // {id,name,email,role,token}
+  const [session, setSession] = useState(null); // {id,name,email,role,token,mustChangePassword}
   const [restoring, setRestoring] = useState(true);
   const [restoreError, setRestoreError] = useState("");
+  const [sessionEnded, setSessionEnded] = useState(false);
   const [users, setUsers] = useState([]);
   const [bills, setBills] = useState([]);
+  // `tx` is always the signed-in person's own entries — what the dashboard,
+  // budgets and reports add up. `queue` is the review queue across everyone,
+  // loaded only for Reviewers and Admins.
   const [tx, setTx] = useState([]);
+  const [queue, setQueue] = useState([]);
   const [budgets, setBudgets] = useState([]);
   const [notifs, setNotifs] = useState([]);
   const [auditLog, setAuditLog] = useState([]);
@@ -50,14 +60,14 @@ function FinTrackStark() {
   const [loadError, setLoadError] = useState("");
   const [confirmDialog, setConfirmDialog] = useState(null); // {message, confirmLabel, onConfirm}
   const [theme, setTheme] = useState(() => {
-    const stored = localStorage.getItem("fts_theme");
+    const stored = readStorage("fts_theme");
     if (stored) return stored;
     return window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
   });
 
   useEffect(() => {
     document.documentElement.setAttribute("data-theme", theme);
-    localStorage.setItem("fts_theme", theme);
+    try { localStorage.setItem("fts_theme", theme); } catch (e) { /* private mode */ }
   }, [theme]);
 
   useEffect(() => {
@@ -65,6 +75,21 @@ function FinTrackStark() {
     const t = setTimeout(() => setToast(null), 3200);
     return () => clearTimeout(t);
   }, [toast]);
+
+  // The server says the session is over (8-hour expiry, or the password was
+  // changed on another device). Rather than leave every button failing with
+  // "Not authenticated", ask for the password again over the current screen,
+  // so nothing typed into an open form is lost.
+  useEffect(() => {
+    const onEnded = () => setSessionEnded(true);
+    const onMustChange = () => setSession((s) => (s ? { ...s, mustChangePassword: true } : s));
+    window.addEventListener(SESSION_ENDED, onEnded);
+    window.addEventListener(PASSWORD_CHANGE_REQUIRED, onMustChange);
+    return () => {
+      window.removeEventListener(SESSION_ENDED, onEnded);
+      window.removeEventListener(PASSWORD_CHANGE_REQUIRED, onMustChange);
+    };
+  }, []);
 
   // Restore the session on a page refresh. The token survives in
   // sessionStorage, but only the server can say whether it is still valid,
@@ -76,11 +101,13 @@ function FinTrackStark() {
     let cancelled = false;
     (async () => {
       try {
-        const data = await api("/api/auth/me");
+        // quiet: an expired token found at startup is not a session ending
+        // mid-use; the visitor simply is not signed in.
+        const data = await api("/api/auth/me", { quiet: true });
         if (cancelled) return;
         const sess = { ...data.user, token };
         setSession(sess);
-        await refreshAll(sess);
+        if (!sess.mustChangePassword) await refreshAll(sess);
       } catch (err) {
         if (cancelled) return;
         // Only a rejection from the server means the session is over. If the
@@ -100,7 +127,12 @@ function FinTrackStark() {
   }, []);
 
   function fireToast(msg) { setToast(msg); }
-  function fireError(err) { setToast("⚠ " + (err.message || "Something went wrong.")); }
+  function fireError(err) {
+    // A lapsed session already has its own dialog; a toast on top would only
+    // repeat "Not authenticated" behind it.
+    if (err.status === 401) return;
+    setToast("⚠ " + (err.message || "Something went wrong."));
+  }
   function askConfirm(message, onConfirm, confirmLabel) {
     setConfirmDialog({ message, confirmLabel, onConfirm });
   }
@@ -112,38 +144,64 @@ function FinTrackStark() {
         api("/api/bills"), api("/api/transactions"), api("/api/budgets"), api("/api/notifications"), api("/api/comments"),
       ]);
       setBills(billsData); setTx(txData); setBudgets(budgetsData); setNotifs(notifsData); setComments(commentsData);
-      if (s && (s.role === "Admin" || s.role === "Reviewer")) {
-        setAuditLog(await api("/api/audit-log"));
+      if (isStaff(s)) {
+        const [queueData, auditData] = await Promise.all([
+          api("/api/transactions?scope=review"), api("/api/audit-log"),
+        ]);
+        setQueue(queueData); setAuditLog(auditData);
+      } else {
+        setQueue(txData);
       }
       if (s && s.role === "Admin") {
         setUsers(await api("/api/users"));
       }
       setLoadError("");
     } catch (err) {
-      setLoadError(err.message);
+      if (err.status !== 401) setLoadError(err.message);
     }
   }
 
+  // Every write goes through here. It resolves to true only once the server
+  // has accepted the change, so a form can keep what the person typed — and
+  // stay open — when the request fails, instead of clearing it optimistically.
+  async function perform(request, successMessage) {
+    try {
+      await request();
+      if (successMessage) fireToast(successMessage);
+      await refreshAll();
+      return true;
+    } catch (err) {
+      fireError(err);
+      return false;
+    }
+  }
+
+  function startSession(data) {
+    const sess = { ...data.user, token: data.token };
+    sessionStorage.setItem("fts_token", data.token);
+    setSession(sess);
+    return sess;
+  }
+
+  // Returns null on success, or a message the form shows.
   async function login(email, password) {
     try {
       const data = await api("/api/auth/login", { method: "POST", body: { email, password } });
-      const sess = { ...data.user, token: data.token };
-      sessionStorage.setItem("fts_token", data.token);
-      setSession(sess);
+      const sess = startSession(data);
       navigate("/dashboard", { replace: true });
-      await refreshAll(sess);
-      fireToast(`Welcome back, ${sess.name.split(" ")[0]}!`);
-      return true;
+      if (!sess.mustChangePassword) {
+        await refreshAll(sess);
+        fireToast(`Welcome back, ${sess.name.split(" ")[0]}!`);
+      }
+      return null;
     } catch (err) {
-      return false;
+      return err.message;
     }
   }
   async function register(firstName, lastName, email, password) {
     try {
       const data = await api("/api/auth/register", { method: "POST", body: { firstName, lastName, email, password } });
-      const sess = { ...data.user, token: data.token };
-      sessionStorage.setItem("fts_token", data.token);
-      setSession(sess);
+      const sess = startSession(data);
       navigate("/dashboard", { replace: true });
       await refreshAll(sess);
       fireToast(`Welcome, ${sess.name.split(" ")[0]}! Your account has been created.`);
@@ -152,11 +210,27 @@ function FinTrackStark() {
       return err.message;
     }
   }
-  async function logout() {
-    try { await api("/api/auth/logout", { method: "POST" }); } catch (e) { /* ignore */ }
+  // Signing back in after the session lapsed: same account, same screen.
+  async function reauthenticate(password) {
+    try {
+      const data = await api("/api/auth/login", { method: "POST", body: { email: session.email, password } });
+      const sess = startSession(data);
+      setSessionEnded(false);
+      if (!sess.mustChangePassword) await refreshAll(sess);
+      return null;
+    } catch (err) {
+      return err.message;
+    }
+  }
+  function clearLocalSession() {
     sessionStorage.removeItem("fts_token");
     setSession(null);
-    setBills([]); setTx([]); setBudgets([]); setNotifs([]); setAuditLog([]); setUsers([]); setComments([]);
+    setSessionEnded(false);
+    setBills([]); setTx([]); setQueue([]); setBudgets([]); setNotifs([]); setAuditLog([]); setUsers([]); setComments([]);
+  }
+  async function logout() {
+    try { await api("/api/auth/logout", { method: "POST", quiet: true }); } catch (e) { /* ignore */ }
+    clearLocalSession();
     navigate("/", { replace: true });
     fireToast("You have been logged out.");
   }
@@ -168,123 +242,52 @@ function FinTrackStark() {
   }
 
   // ---- Integration component: workflow automation + webhook simulation, backed by the API ----
-  async function markPaid(billId, amount) {
-    try {
-      await api("/api/bills/" + billId + "/pay", { method: "POST", body: { amount } });
-      fireToast("✓ Bill marked as paid — dashboard & logs updated.");
-      await refreshAll();
-    } catch (err) { fireError(err); }
-  }
-  async function addBill(b) {
-    try {
-      await api("/api/bills", { method: "POST", body: b });
-      fireToast("Bill added — reminder scheduled.");
-      await refreshAll();
-    } catch (err) { fireError(err); }
-  }
-  async function editBill(id, patch) {
-    try {
-      await api("/api/bills/" + id, { method: "PUT", body: patch });
-      fireToast("Bill updated.");
-      await refreshAll();
-    } catch (err) { fireError(err); }
-  }
+  const markPaid = (billId, amount) => perform(
+    () => api("/api/bills/" + billId + "/pay", { method: "POST", body: { amount } }),
+    "✓ Bill marked as paid — dashboard & logs updated."
+  );
+  const addBill = (b) => perform(() => api("/api/bills", { method: "POST", body: b }), "Bill added — reminder scheduled.");
+  const editBill = (id, patch) => perform(() => api("/api/bills/" + id, { method: "PUT", body: patch }), "Bill updated.");
   function deleteBill(bill) {
     askConfirm(`Delete "${bill.name}"? This cannot be undone.`, async () => {
       setConfirmDialog(null);
-      try {
-        await api("/api/bills/" + bill._id, { method: "DELETE" });
-        fireToast("Bill deleted.");
-        await refreshAll();
-      } catch (err) { fireError(err); }
+      await perform(() => api("/api/bills/" + bill._id, { method: "DELETE" }), "Bill deleted.");
     }, "Delete Bill");
   }
-  async function addTx(t) {
-    try {
-      await api("/api/transactions", { method: "POST", body: t });
-      fireToast(`${t.type} of ${peso(t.amount)} submitted for review.`);
-      await refreshAll();
-    } catch (err) { fireError(err); }
-  }
-  async function editTx(id, patch) {
-    try {
-      await api("/api/transactions/" + id, { method: "PUT", body: patch });
-      fireToast("Entry updated.");
-      await refreshAll();
-    } catch (err) { fireError(err); }
-  }
+  const addTx = (t) => perform(
+    () => api("/api/transactions", { method: "POST", body: t }),
+    `${t.type} of ${peso(t.amount)} submitted for review.`
+  );
+  const editTx = (id, patch) => perform(() => api("/api/transactions/" + id, { method: "PUT", body: patch }), "Entry updated.");
   function deleteTx(entry) {
     askConfirm(`Withdraw this ${entry.type.toLowerCase()} of ${peso(entry.amount)}?`, async () => {
       setConfirmDialog(null);
-      try {
-        await api("/api/transactions/" + entry._id, { method: "DELETE" });
-        fireToast("Entry withdrawn.");
-        await refreshAll();
-      } catch (err) { fireError(err); }
+      await perform(() => api("/api/transactions/" + entry._id, { method: "DELETE" }), "Entry withdrawn.");
     }, "Withdraw Entry");
   }
-  async function reviewTx(id, action, comment) {
-    try {
-      await api("/api/transactions/" + id + "/review", { method: "POST", body: { action, comment } });
-      fireToast("Review recorded.");
-      await refreshAll();
-    } catch (err) { fireError(err); }
-  }
-  async function resubmitTx(id, patch) {
-    try {
-      await api("/api/transactions/" + id + "/resubmit", { method: "POST", body: patch });
-      fireToast("Resubmitted for review.");
-      await refreshAll();
-    } catch (err) { fireError(err); }
-  }
-  async function addComment(text) {
-    try {
-      await api("/api/comments", { method: "POST", body: { text } });
-      fireToast("Note posted.");
-      await refreshAll();
-    } catch (err) { fireError(err); }
-  }
+  const reviewTx = (id, action, comment) => perform(
+    () => api("/api/transactions/" + id + "/review", { method: "POST", body: { action, comment } }),
+    "Review recorded."
+  );
+  const resubmitTx = (id, patch) => perform(
+    () => api("/api/transactions/" + id + "/resubmit", { method: "POST", body: patch }),
+    "Resubmitted for review."
+  );
+  const addComment = (text) => perform(() => api("/api/comments", { method: "POST", body: { text } }), "Note posted.");
 
   // ---- Budgets ----
-  async function addBudget(b) {
-    try {
-      await api("/api/budgets", { method: "POST", body: b });
-      fireToast(`Budget for ${b.category} set.`);
-      await refreshAll();
-    } catch (err) { fireError(err); }
-  }
-  async function editBudget(id, patch) {
-    try {
-      await api("/api/budgets/" + id, { method: "PUT", body: patch });
-      fireToast("Budget updated.");
-      await refreshAll();
-    } catch (err) { fireError(err); }
-  }
+  const addBudget = (b) => perform(() => api("/api/budgets", { method: "POST", body: b }), `Budget for ${b.category} set.`);
+  const editBudget = (id, patch) => perform(() => api("/api/budgets/" + id, { method: "PUT", body: patch }), "Budget updated.");
   function deleteBudget(budget) {
     askConfirm(`Remove the ${budget.category} budget?`, async () => {
       setConfirmDialog(null);
-      try {
-        await api("/api/budgets/" + budget._id, { method: "DELETE" });
-        fireToast("Budget removed.");
-        await refreshAll();
-      } catch (err) { fireError(err); }
+      await perform(() => api("/api/budgets/" + budget._id, { method: "DELETE" }), "Budget removed.");
     }, "Remove Budget");
   }
 
   // ---- Notifications ----
-  async function markNotifRead(id) {
-    try {
-      await api("/api/notifications/" + id + "/read", { method: "PUT" });
-      await refreshAll();
-    } catch (err) { fireError(err); }
-  }
-  async function markAllNotifsRead() {
-    try {
-      await api("/api/notifications/read-all", { method: "PUT" });
-      fireToast("All notifications marked as read.");
-      await refreshAll();
-    } catch (err) { fireError(err); }
-  }
+  const markNotifRead = (id) => perform(() => api("/api/notifications/" + id + "/read", { method: "PUT" }));
+  const markAllNotifsRead = () => perform(() => api("/api/notifications/read-all", { method: "PUT" }), "All notifications marked as read.");
 
   // ---- Account settings ----
   async function updateProfile(patch) {
@@ -300,30 +303,34 @@ function FinTrackStark() {
     try {
       const data = await api("/api/auth/me/password", { method: "PUT", body: { currentPassword, newPassword } });
       // The server invalidates every other session and hands back a fresh token.
-      sessionStorage.setItem("fts_token", data.token);
-      setSession((s) => ({ ...s, ...data.user, token: data.token }));
+      const sess = startSession(data);
       fireToast("Password changed — other devices were signed out.");
+      await refreshAll(sess);
       return null;
     } catch (err) { return err.message; }
   }
 
   // ---- Admin ----
-  async function setUserRole(userId, role) {
-    try {
-      await api("/api/users/" + userId + "/role", { method: "PUT", body: { role } });
-      fireToast("Role updated.");
-      await refreshAll();
-    } catch (err) { fireError(err); }
-  }
+  const setUserRole = (userId, role) => perform(
+    () => api("/api/users/" + userId + "/role", { method: "PUT", body: { role } }),
+    "Role updated."
+  );
   function deleteUser(user) {
-    askConfirm(`Delete the account for ${user.name}? This cannot be undone.`, async () => {
+    askConfirm(`Delete the account for ${user.name}? Their bills, budgets, notes and pending entries are removed too. This cannot be undone.`, async () => {
       setConfirmDialog(null);
-      try {
-        await api("/api/users/" + user._id, { method: "DELETE" });
-        fireToast("Account deleted.");
-        await refreshAll();
-      } catch (err) { fireError(err); }
+      await perform(() => api("/api/users/" + user._id, { method: "DELETE" }), "Account deleted.");
     }, "Delete Account");
+  }
+  // Resolves to the temporary password, or null if the reset failed.
+  async function resetUserPassword(user) {
+    try {
+      const data = await api("/api/users/" + user._id + "/reset-password", { method: "POST" });
+      await refreshAll();
+      return data.temporaryPassword;
+    } catch (err) {
+      fireError(err);
+      return null;
+    }
   }
 
   if (restoring) {
@@ -339,6 +346,17 @@ function FinTrackStark() {
         <div className="boot-text">{restoreError}</div>
         <button className="btn" onClick={() => window.location.reload()}>Try again</button>
       </div>
+    );
+  }
+
+  // An Admin reset this account's password. The temporary one must be replaced
+  // before anything else; the server refuses every other request until then.
+  if (session && session.mustChangePassword) {
+    return (
+      <>
+        <ForcePasswordChange session={session} changePassword={changePassword} logout={logout} theme={theme} />
+        {toast && <div className="toast">{toast}</div>}
+      </>
     );
   }
 
@@ -388,6 +406,9 @@ function FinTrackStark() {
             />
           )}
         />
+        {/* Public whether signed in or not: the sign-up form links to them. */}
+        <Route path="/terms" element={<TermsPage />} />
+        <Route path="/privacy" element={<PrivacyPage />} />
 
         <Route
           element={
@@ -402,9 +423,9 @@ function FinTrackStark() {
           <Route path="/submit" element={<SubmissionForm addTx={addTx} />} />
           <Route path="/budgets" element={<BudgetsScreen budgets={budgets} tx={tx} addBudget={addBudget} editBudget={editBudget} deleteBudget={deleteBudget} />} />
           <Route path="/bills" element={<BillsScreen bills={bills} addBill={addBill} markPaid={markPaid} editBill={editBill} deleteBill={deleteBill} />} />
-          <Route path="/revisions" element={<VersionHistory tx={tx} />} />
-          <Route path="/review" element={<ReviewApproval tx={tx} session={session} reviewTx={reviewTx} resubmitTx={resubmitTx} editTx={editTx} deleteTx={deleteTx} />} />
-          <Route path="/notes" element={<CommentsScreen comments={comments} addComment={addComment} tx={tx} />} />
+          <Route path="/revisions" element={<VersionHistory tx={queue} />} />
+          <Route path="/review" element={<ReviewApproval tx={tx} queue={queue} session={session} reviewTx={reviewTx} resubmitTx={resubmitTx} editTx={editTx} deleteTx={deleteTx} />} />
+          <Route path="/notes" element={<CommentsScreen comments={comments} addComment={addComment} tx={queue} />} />
           <Route path="/payments" element={<PaymentHistory bills={bills} />} />
           <Route path="/notifications" element={<NotificationsScreen notifs={notifs} markRead={markNotifRead} markAllRead={markAllNotifsRead} />} />
           <Route path="/reports" element={<ReportsScreen tx={tx} bills={bills} budgets={budgets} />} />
@@ -414,7 +435,7 @@ function FinTrackStark() {
             <Route path="/audit" element={<AuditLogScreen auditLog={auditLog} />} />
           </Route>
           <Route element={<RequireRole session={session} path="/users" />}>
-            <Route path="/users" element={<UserManagement users={users} session={session} setUserRole={setUserRole} deleteUser={deleteUser} />} />
+            <Route path="/users" element={<UserManagement users={users} session={session} setUserRole={setUserRole} deleteUser={deleteUser} resetUserPassword={resetUserPassword} />} />
           </Route>
 
           <Route path="*" element={<NotFound onHome={() => navigate("/dashboard")} />} />
@@ -432,7 +453,97 @@ function FinTrackStark() {
           onCancel={() => setConfirmDialog(null)}
         />
       )}
+      {session && sessionEnded && (
+        <ReauthDialog
+          email={session.email}
+          onSubmit={reauthenticate}
+          onLogout={() => { clearLocalSession(); navigate("/login", { replace: true }); }}
+        />
+      )}
     </>
+  );
+}
+
+function readStorage(key) {
+  try { return localStorage.getItem(key); } catch (e) { return null; }
+}
+
+// Shown over whatever screen was open when the server ended the session.
+function ReauthDialog({ email, onSubmit, onLogout }) {
+  const [password, setPassword] = useState("");
+  const [err, setErr] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  async function submit(e) {
+    e.preventDefault();
+    if (!password) return;
+    setBusy(true);
+    setErr("");
+    const message = await onSubmit(password);
+    setBusy(false);
+    if (message) setErr(message);
+  }
+
+  return (
+    <div className="modal-overlay">
+      <div className="modal" role="dialog" aria-modal="true" aria-labelledby="reauth-title">
+        <h3 id="reauth-title">Your session has ended</h3>
+        <p style={{ fontSize: 12.5, color: "var(--text-dim)" }}>
+          For your security you were signed out. Enter your password to continue where you left off — anything you were typing is kept.
+        </p>
+        <form onSubmit={submit}>
+          <div className="form-row"><label className="field">Email</label><input value={email} disabled /></div>
+          <div className="form-row">
+            <label className="field" htmlFor="reauth-password">Password</label>
+            <input id="reauth-password" type="password" autoFocus autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} />
+          </div>
+          {err && <div className="form-msg error">{err}</div>}
+          <div className="actions">
+            <button type="button" className="btn ghost" onClick={onLogout}>Log out instead</button>
+            <button className="btn" type="submit" disabled={busy || !password}>{busy ? "Signing in…" : "Continue"}</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+function ForcePasswordChange({ session, changePassword, logout }) {
+  const [pw, setPw] = useState({ current: "", next: "", confirm: "" });
+  const [err, setErr] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  async function submit(e) {
+    e.preventDefault();
+    setErr("");
+    if (pw.next.length < 8) return setErr("New password must be at least 8 characters.");
+    if (pw.next !== pw.confirm) return setErr("The new passwords do not match.");
+    if (pw.next === pw.current) return setErr("Choose a password different from the temporary one.");
+    setBusy(true);
+    const message = await changePassword(pw.current, pw.next);
+    setBusy(false);
+    if (message) setErr(message);
+  }
+
+  return (
+    <div className="boot">
+      <div className="card" style={{ maxWidth: 420, width: "100%", textAlign: "left" }}>
+        <h3>Choose a new password</h3>
+        <p style={{ fontSize: 12.5, color: "var(--text-dim)" }}>
+          {session.name}, an administrator reset your password. Replace the temporary password with one only you know to continue.
+        </p>
+        <form onSubmit={submit}>
+          <div className="form-row"><label className="field">Temporary password</label><input type="password" autoComplete="current-password" value={pw.current} onChange={(e) => setPw({ ...pw, current: e.target.value })} required /></div>
+          <div className="form-row"><label className="field">New password</label><input type="password" autoComplete="new-password" value={pw.next} onChange={(e) => setPw({ ...pw, next: e.target.value })} required minLength={8} /><div className="hint">At least 8 characters.</div></div>
+          <div className="form-row"><label className="field">Confirm new password</label><input type="password" autoComplete="new-password" value={pw.confirm} onChange={(e) => setPw({ ...pw, confirm: e.target.value })} required /></div>
+          {err && <div className="form-msg error">{err}</div>}
+          <div className="actions">
+            <button type="button" className="btn ghost" onClick={logout}>Log out</button>
+            <button className="btn" type="submit" disabled={busy}>{busy ? "Saving…" : "Set Password"}</button>
+          </div>
+        </form>
+      </div>
+    </div>
   );
 }
 
@@ -458,14 +569,43 @@ function Shell({ session, logout, theme, setTheme, notifs, loadError }) {
         <div className="content">
           {loadError && (
             <div className="card" style={{ marginBottom: 16, borderColor: "var(--danger)" }}>
-              <div style={{ color: "var(--danger)", fontSize: 13 }}>⚠ Could not reach the server: {loadError}</div>
+              <div style={{ color: "var(--danger)", fontSize: 13 }}>⚠ Could not load your latest data: {loadError}</div>
             </div>
           )}
-          <Outlet />
+          {/* Keyed on the address, so a screen that crashed does not stay
+              broken after navigating somewhere else. */}
+          <ErrorBoundary key={pathname} inline>
+            <Outlet />
+          </ErrorBoundary>
         </div>
       </div>
     </div>
   );
+}
+
+// Without this, any rendering error blanked the whole app to a white page.
+class ErrorBoundary extends Component {
+  constructor(props) {
+    super(props);
+    this.state = { failed: false };
+  }
+  static getDerivedStateFromError() {
+    return { failed: true };
+  }
+  componentDidCatch(error) {
+    console.error("[ui] screen failed to render:", error);
+  }
+  render() {
+    if (!this.state.failed) return this.props.children;
+    const body = (
+      <div className="empty">
+        <div className="big">!</div>
+        Something went wrong showing this page.{" "}
+        <button className="linkbtn" onClick={() => window.location.assign("/dashboard")}>Go to the dashboard</button>
+      </div>
+    );
+    return this.props.inline ? <div className="card">{body}</div> : <div className="boot">{body}</div>;
+  }
 }
 
 function RequireAuth({ session, children }) {
@@ -508,14 +648,15 @@ function NotFound({ onHome }) {
 }
 
 // Reads the category out of the URL, so /categories/Housing is a real address
-// that can be bookmarked and shared.
+// that can be bookmarked and shared. useParams has already decoded it; decoding
+// a second time turned a "%" in the name into a crash.
 function CategoryDetailRoute({ bills }) {
   const { name } = useParams();
   const navigate = useNavigate();
   return (
     <ProjectDetails
       bills={bills}
-      category={decodeURIComponent(name)}
+      category={name}
       onBack={() => navigate("/categories")}
       onPick={(next) => navigate("/categories/" + encodeURIComponent(next))}
     />

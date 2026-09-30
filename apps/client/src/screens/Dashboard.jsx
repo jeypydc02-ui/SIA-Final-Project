@@ -1,4 +1,4 @@
-import { peso, fmtDate, billStatus, statusBadgeClass } from "../lib/utils.js";
+import { peso, fmtDate, billStatus, statusBadgeClass, thisMonthISO } from "../lib/utils.js";
 
 export default function Dashboard({ bills, tx, budgets, notifs, onOpenBudgets }) {
   const approved = tx.filter(t => t.status === "Approved");
@@ -9,6 +9,9 @@ export default function Dashboard({ bills, tx, budgets, notifs, onOpenBudgets })
   const upcoming = bills.filter(b => !b.paid);
   const overdueCount = upcoming.filter(b => billStatus(b.due, b.paid) === "Overdue").length;
   const dueSoonCount = upcoming.filter(b => { const s = billStatus(b.due, b.paid); return s === "Due Today" || s === "Upcoming"; }).length;
+  // Budgets are monthly limits: only this month's approved expenses count.
+  const month = thisMonthISO();
+  const monthExpenses = approved.filter(t => t.type === "Expense" && String(t.date).startsWith(month));
 
   return (
     <div>
@@ -22,12 +25,12 @@ export default function Dashboard({ bills, tx, budgets, notifs, onOpenBudgets })
         <div className="card stat">
           <h3>Total Income</h3>
           <div className="value">{peso(income)}</div>
-          <div className="label">Approved, this period</div>
+          <div className="label">All approved income</div>
         </div>
         <div className="card stat">
           <h3>Total Expenses</h3>
           <div className="value">{peso(expense)}</div>
-          <div className="label">Approved, this period</div>
+          <div className="label">All approved expenses</div>
         </div>
         <div className="card stat">
           <h3>Bills Pending</h3>
@@ -76,14 +79,14 @@ export default function Dashboard({ bills, tx, budgets, notifs, onOpenBudgets })
 
       <div className="grid grid-3" style={{ marginTop: 16 }}>
         {budgets.map(b => {
-          const spent = approved.filter(t => t.type === "Expense" && t.category === b.category).reduce((s, t) => s + t.amount, 0);
+          const spent = monthExpenses.filter(t => t.category === b.category).reduce((s, t) => s + t.amount, 0);
           // Guard against a zero limit so the bar never renders as Infinity.
           const pct = b.limit > 0 ? Math.min(100, Math.round(spent / b.limit * 100)) : 0;
           return (
             <div className="card" key={b.category}>
               <h3>{b.category} Budget</h3>
               <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, marginBottom: 8 }}>
-                <span>{peso(spent)}</span><span style={{ color: "var(--text-dim)" }}>of {peso(b.limit)}</span>
+                <span>{peso(spent)}</span><span style={{ color: "var(--text-dim)" }}>of {peso(b.limit)} this month</span>
               </div>
               <div className="progress-track"><div className="progress-fill" style={{ width: pct + "%", background: pct >= 100 ? "var(--danger)" : pct >= 75 ? "var(--warn)" : "var(--primary)" }}></div></div>
             </div>

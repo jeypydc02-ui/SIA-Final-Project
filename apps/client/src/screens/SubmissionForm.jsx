@@ -1,13 +1,22 @@
 import { useState } from "react";
 import { todayISO } from "../lib/utils.js";
 
+const blank = () => ({ type: "Expense", category: "Food", amount: "", date: todayISO(), note: "" });
+
 export default function SubmissionForm({ addTx }) {
-  const [form, setForm] = useState({ type: "Expense", category: "Food", amount: "", date: todayISO(), note: "" });
-  function submit(e) {
+  const [form, setForm] = useState(blank);
+  const [busy, setBusy] = useState(false);
+
+  async function submit(e) {
     e.preventDefault();
-    if (!form.amount) return;
-    addTx({ ...form, amount: Number(form.amount) });
-    setForm({ type: "Expense", category: "Food", amount: "", date: todayISO(), note: "" });
+    if (busy || !(Number(form.amount) > 0)) return;
+    // The button stays disabled until the server answers, so a slow connection
+    // cannot turn one entry into two, and the form is only cleared once the
+    // entry is actually saved — a failed request keeps what was typed.
+    setBusy(true);
+    const ok = await addTx({ ...form, amount: Number(form.amount) });
+    setBusy(false);
+    if (ok) setForm(blank());
   }
   return (
     <div>
@@ -27,11 +36,11 @@ export default function SubmissionForm({ addTx }) {
             </div>
           </div>
           <div className="form-grid">
-            <div className="form-row"><label className="field">Amount (₱)</label><input type="number" value={form.amount} onChange={e => setForm({ ...form, amount: e.target.value })} required /></div>
-            <div className="form-row"><label className="field">Date</label><input type="date" value={form.date} onChange={e => setForm({ ...form, date: e.target.value })} /></div>
+            <div className="form-row"><label className="field">Amount (₱)</label><input type="number" min="0.01" step="0.01" max="1000000000000" value={form.amount} onChange={e => setForm({ ...form, amount: e.target.value })} required /></div>
+            <div className="form-row"><label className="field">Date</label><input type="date" value={form.date} onChange={e => setForm({ ...form, date: e.target.value })} required /></div>
           </div>
-          <div className="form-row"><label className="field">Note</label><input value={form.note} onChange={e => setForm({ ...form, note: e.target.value })} placeholder="e.g. Groceries at SM" /></div>
-          <button className="btn" type="submit">Submit for Review</button>
+          <div className="form-row"><label className="field">Note</label><input value={form.note} maxLength={300} onChange={e => setForm({ ...form, note: e.target.value })} placeholder="e.g. Groceries at SM" /></div>
+          <button className="btn" type="submit" disabled={busy}>{busy ? "Submitting…" : "Submit for Review"}</button>
         </form>
       </div>
     </div>

@@ -1,57 +1,58 @@
 const crypto = require("crypto");
+const Session = require("../models/Session");
 
-// In-memory session store: token -> { id, name, email, role, expiresAt }
-// A demo-scale prototype does not need a persisted session table; documented as
-// a known simplification (sessions reset on server restart).
-const sessions = new Map();
+// Persisted session store (see models/Session.js for why it is not in memory).
+// The public shape of a session is unchanged: { id, name, email, role }.
 
-// Eight hours is longer than any demo or defense session but short enough that
+// Eight hours is longer than any working day on the app but short enough that
 // a token left behind on a shared lab machine stops working the same day.
 const SESSION_TTL_MS = 8 * 60 * 60 * 1000;
 
-function createSession(user) {
+function hashToken(token) {
+  return crypto.createHash("sha256").update(token).digest("hex");
+}
+
+async function createSession(user) {
   // crypto.randomBytes, not Math.random: session tokens are credentials, and
   // Math.random is a predictable PRNG that must never be used for one.
   const token = crypto.randomBytes(32).toString("hex");
-  sessions.set(token, {
-    id: String(user._id),
+  await Session.create({
+    tokenHash: hashToken(token),
+    user: user._id,
     name: user.name,
     email: user.email,
     role: user.role,
-    expiresAt: Date.now() + SESSION_TTL_MS,
+    mustChangePassword: !!user.mustChangePassword,
+    expiresAt: new Date(Date.now() + SESSION_TTL_MS),
   });
   return token;
 }
 
-function getSession(token) {
-  const session = sessions.get(token);
-  if (!session) return null;
-  if (session.expiresAt <= Date.now()) {
-    sessions.delete(token);
+async function getSession(token) {
+  if (typeof token !== "string" || !token) return null;
+  const s = await Session.findOne({ tokenHash: hashToken(token) }).lean();
+  if (!s) return null;
+  // The TTL monitor only runs about once a minute, so check the clock too.
+  if (s.expiresAt.getTime() <= Date.now()) {
+    await Session.deleteOne({ _id: s._id });
     return null;
   }
-  return session;
+  return { id: String(s.user), name: s.name, email: s.email, role: s.role, mustChangePassword: !!s.mustChangePassword };
 }
 
-function destroySession(token) {
-  sessions.delete(token);
+async function destroySession(token) {
+  await Session.deleteOne({ tokenHash: hashToken(token) });
 }
 
 // When an Admin changes someone's role, that user's live sessions must stop
 // carrying the old role — otherwise the demotion does not take effect until
 // they happen to log out.
-function refreshUserSessions(userId, changes) {
-  for (const [token, session] of sessions) {
-    if (session.id === String(userId)) {
-      sessions.set(token, { ...session, ...changes });
-    }
-  }
+async function refreshUserSessions(userId, changes) {
+  await Session.updateMany({ user: userId }, { $set: changes });
 }
 
-function destroyUserSessions(userId) {
-  for (const [token, session] of sessions) {
-    if (session.id === String(userId)) sessions.delete(token);
-  }
+async function destroyUserSessions(userId) {
+  await Session.deleteMany({ user: userId });
 }
 
 module.exports = {

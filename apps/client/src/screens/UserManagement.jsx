@@ -8,8 +8,11 @@ const RBAC = [
   { role: "User", access: "Submits own bills and transactions for review; views own reports, history, budgets, and notes only." },
 ];
 
-export default function UserManagement({ users, session, setUserRole, deleteUser }) {
+export default function UserManagement({ users, session, setUserRole, deleteUser, resetUserPassword }) {
   const [pending, setPending] = useState(null); // {user, role}
+  const [resetTarget, setResetTarget] = useState(null); // user awaiting confirmation
+  const [issued, setIssued] = useState(null); // {user, password} shown once
+  const [busy, setBusy] = useState(false);
 
   if (session.role !== "Admin") {
     return <div className="card"><div className="empty">Restricted — Admin role required to view this page.</div></div>;
@@ -17,9 +20,23 @@ export default function UserManagement({ users, session, setUserRole, deleteUser
 
   const adminCount = users.filter((u) => u.role === "Admin").length;
 
-  function confirmChange() {
-    setUserRole(pending.user._id, pending.role);
-    setPending(null);
+  async function confirmChange() {
+    if (busy) return;
+    setBusy(true);
+    const ok = await setUserRole(pending.user._id, pending.role);
+    setBusy(false);
+    if (ok) setPending(null);
+  }
+
+  async function confirmReset() {
+    if (busy) return;
+    setBusy(true);
+    const password = await resetUserPassword(resetTarget);
+    setBusy(false);
+    if (password) {
+      setIssued({ user: resetTarget, password });
+      setResetTarget(null);
+    }
   }
 
   return (
@@ -53,7 +70,10 @@ export default function UserManagement({ users, session, setUserRole, deleteUser
                       {ROLES.map((r) => <option key={r} value={r}>{r}</option>)}
                     </select>
                   </td>
-                  <td>
+                  <td style={{ display: "flex", gap: 6 }}>
+                    {!isSelf && (
+                      <button className="btn small ghost" onClick={() => setResetTarget(u)}>Reset Password</button>
+                    )}
                     {!isSelf && !isLastAdmin && (
                       <button className="btn small danger" onClick={() => deleteUser(u)}>Delete</button>
                     )}
@@ -91,8 +111,43 @@ export default function UserManagement({ users, session, setUserRole, deleteUser
               This takes effect immediately, including on any session they currently have open.
             </p>
             <div className="actions">
-              <button className="btn ghost" onClick={() => setPending(null)}>Cancel</button>
-              <button className="btn" onClick={confirmChange}>Confirm Change</button>
+              <button className="btn ghost" onClick={() => setPending(null)} disabled={busy}>Cancel</button>
+              <button className="btn" onClick={confirmChange} disabled={busy}>{busy ? "Saving…" : "Confirm Change"}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {resetTarget && (
+        <div className="modal-overlay" onClick={() => !busy && setResetTarget(null)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <h3>Reset Password</h3>
+            <p style={{ fontSize: 13 }}>
+              Issue a temporary password for <strong>{resetTarget.name}</strong> ({resetTarget.email})?
+            </p>
+            <p style={{ fontSize: 12, color: "var(--text-dim)" }}>
+              Their current password stops working and every device they are signed in on is logged out.
+              They must choose a new password the next time they sign in. Only do this after confirming
+              the request really came from them.
+            </p>
+            <div className="actions">
+              <button className="btn ghost" onClick={() => setResetTarget(null)} disabled={busy}>Cancel</button>
+              <button className="btn danger" onClick={confirmReset} disabled={busy}>{busy ? "Resetting…" : "Reset Password"}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {issued && (
+        <div className="modal-overlay">
+          <div className="modal" role="dialog" aria-modal="true">
+            <h3>Temporary password for {issued.user.name}</h3>
+            <p style={{ fontSize: 12.5, color: "var(--text-dim)" }}>
+              Give this to {issued.user.name} privately. It is shown only once and is not stored anywhere you can view it again.
+            </p>
+            <div className="temp-password">{issued.password}</div>
+            <div className="actions">
+              <button className="btn" onClick={() => setIssued(null)}>Done</button>
             </div>
           </div>
         </div>

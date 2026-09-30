@@ -2,6 +2,7 @@ const { test, expect } = require("@playwright/test");
 const { execFileSync } = require("child_process");
 const path = require("path");
 const { api, accounts, signIn, gotoScreen, registerUser } = require("./helpers");
+const { todayISO, addDaysISO } = require("../apps/server/src/utils/dates");
 
 // Runs the reminder worker exactly as the deployment does, as a separate
 // process against the same database.
@@ -133,10 +134,13 @@ test.describe("Integration", () => {
 
     // Derive the expected figures from the data rather than hardcoding them,
     // so the assertion tests the invariant and not the current seed.
+    // Budgets are monthly, so only this month's (Philippine calendar) approved
+    // expenses count against them.
     const peso = (n) => "₱" + n.toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const month = todayISO().slice(0, 7);
     const allTx = await api("/api/transactions", { token: user.token });
     const expectedSpent = allTx.data
-      .filter((t) => t.status === "Approved" && t.type === "Expense" && t.category === "Transport")
+      .filter((t) => t.status === "Approved" && t.type === "Expense" && t.category === "Transport" && t.date.startsWith(month))
       .reduce((s, t) => s + t.amount, 0);
     const budgets = await api("/api/budgets", { token: user.token });
     const transportBudget = budgets.data.find((b) => b.category === "Transport");
@@ -162,7 +166,8 @@ test.describe("Integration", () => {
     const bystander = await registerUser("bystander");
 
     // Two bills for the owner: one overdue, one comfortably in the future.
-    const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+    // Yesterday on the Philippine calendar the app and worker use, not UTC's.
+    const yesterday = addDaysISO(todayISO(), -1);
     const nextYear = "2027-12-31";
     await api("/api/bills", {
       method: "POST", token: owner.token,

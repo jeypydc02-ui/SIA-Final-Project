@@ -7,34 +7,44 @@ const Budget = require("../apps/server/src/models/Budget");
 const Notification = require("../apps/server/src/models/Notification");
 const AuditLog = require("../apps/server/src/models/AuditLog");
 const Comment = require("../apps/server/src/models/Comment");
+const Session = require("../apps/server/src/models/Session");
+const { todayISO: phToday, addDaysISO } = require("../apps/server/src/utils/dates");
 
 // `npm run seed -- --reset` wipes the collections first. Used when the schema
 // changes and when demonstrating the recovery plan (spec section 10.4).
 const RESET = process.argv.includes("--reset");
 
 function addDays(n) {
-  const d = new Date();
-  d.setDate(d.getDate() + n);
-  return d.toISOString().slice(0, 10);
+  return addDaysISO(phToday(), n);
 }
 function todayISO() {
   return addDays(0);
 }
 
 async function seed() {
+  // The demo accounts have published passwords (admin123 and friends). On a
+  // production database they would be an open door, so the seed refuses to
+  // run there. Create the real first Admin with `npm run create-admin`.
+  if (process.env.NODE_ENV === "production") {
+    console.error("[seed] refusing to run with NODE_ENV=production: the demo accounts have public passwords.");
+    console.error("[seed] use `npm run create-admin` to create the first Admin account instead.");
+    process.exit(1);
+  }
+
   await connectDB();
 
   if (RESET) {
     await Promise.all([
       User.deleteMany({}), Bill.deleteMany({}), Transaction.deleteMany({}),
       Budget.deleteMany({}), Notification.deleteMany({}), AuditLog.deleteMany({}),
-      Comment.deleteMany({}),
+      Comment.deleteMany({}), Session.deleteMany({}),
     ]);
     // Indexes are rebuilt from the current schemas, so a changed unique
     // constraint does not survive from the previous shape of the data.
     await Promise.all([
       User.syncIndexes(), Bill.syncIndexes(), Transaction.syncIndexes(),
       Budget.syncIndexes(), Notification.syncIndexes(), Comment.syncIndexes(),
+      Session.syncIndexes(),
     ]);
     console.log("[seed] --reset: all collections cleared and indexes rebuilt.");
   }

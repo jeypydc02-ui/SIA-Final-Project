@@ -6,8 +6,9 @@ export default function Topbar({ onOpenMenu }) {
   const { name } = useParams();
 
   // Category Detail is the one screen whose title depends on the URL segment.
+  // useParams has already decoded it; decoding again crashed on a "%".
   const title = name
-    ? `Category Detail — ${decodeURIComponent(name)}`
+    ? `Category Detail — ${name}`
     : TITLES[pathname] || "FinTrack Stark";
 
   return (

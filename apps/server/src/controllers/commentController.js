@@ -1,5 +1,6 @@
 const Comment = require("../models/Comment");
 const Transaction = require("../models/Transaction");
+const { isNonEmptyString } = require("../utils/validate");
 
 // Two kinds of comment live in this collection, and they have different
 // audiences (NFR-002):
@@ -18,15 +19,20 @@ async function visibilityFilter(user) {
 async function list(req, res) {
   const filter = await visibilityFilter(req.user);
   if (req.query.transactionId) {
+    // Express parses ?transactionId[$ne]=x into an object; only a plain id is
+    // a filter, anything else is not passed to the database as an operator.
+    if (typeof req.query.transactionId !== "string") {
+      return res.status(400).json({ error: "That record id is not valid." });
+    }
     Object.assign(filter, { transactionId: req.query.transactionId });
   }
-  const comments = await Comment.find(filter).sort({ ts: -1 }).limit(200);
+  const comments = await Comment.find(filter).sort({ ts: -1 }).limit(200).lean();
   res.json(comments);
 }
 
 async function create(req, res) {
   const { text, transactionId } = req.body || {};
-  if (!text || !text.trim()) {
+  if (!isNonEmptyString(text)) {
     return res.status(400).json({ error: "Comment text is required." });
   }
 

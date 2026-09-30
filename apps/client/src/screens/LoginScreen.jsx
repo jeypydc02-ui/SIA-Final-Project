@@ -1,12 +1,14 @@
 import { useState } from "react";
+import { Link } from "react-router-dom";
 import ThemeToggle from "../components/ThemeToggle.jsx";
 
 const FEATURE_PILLS = ["Bill Reminders", "Payment Tracking", "Review Workflow"];
 
 export default function LoginScreen({ onLogin, onRegister, theme, setTheme, initialMode = "login", onBack, onSwitchMode }) {
   const mode = initialMode;
-  const [email, setEmail] = useState("jp@fintrackstark.app");
-  const [password, setPassword] = useState("demo123");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [showForgot, setShowForgot] = useState(false);
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [regEmail, setRegEmail] = useState("");
@@ -25,10 +27,13 @@ export default function LoginScreen({ onLogin, onRegister, theme, setTheme, init
   async function submitLogin(e) {
     e.preventDefault();
     setErr("");
+    if (!email.trim() || !password) { setErr("Enter your email and password."); return; }
     setBusy(true);
-    const ok = await onLogin(email, password);
+    // The server's own message: wrong password, too many attempts, and an
+    // unreachable server each need a different response from the person.
+    const errMsg = await onLogin(email.trim(), password);
     setBusy(false);
-    if (!ok) setErr("Invalid credentials, or the server is unreachable. Try a demo account below.");
+    if (errMsg) setErr(errMsg);
   }
 
   async function submitRegister(e) {
@@ -77,11 +82,19 @@ export default function LoginScreen({ onLogin, onRegister, theme, setTheme, init
             <form onSubmit={submitLogin}>
               <div className="form-row">
                 <label className="field">Email</label>
-                <input value={email} onChange={e => setEmail(e.target.value)} />
+                <input type="email" autoComplete="username" value={email} onChange={e => setEmail(e.target.value)} placeholder="you@example.com" />
               </div>
               <div className="form-row">
                 <label className="field">Password</label>
-                <input type="password" value={password} onChange={e => setPassword(e.target.value)} />
+                <input type="password" autoComplete="current-password" value={password} onChange={e => setPassword(e.target.value)} />
+              </div>
+              <div style={{ margin: "-4px 0 12px", fontSize: 12 }}>
+                <button type="button" className="linkbtn" onClick={() => setShowForgot((v) => !v)}>Forgot your password?</button>
+                {showForgot && (
+                  <div className="hint" style={{ marginTop: 6 }}>
+                    Ask your FinTrack Stark administrator to reset it. They will give you a temporary password, and you will choose a new one the next time you sign in.
+                  </div>
+                )}
               </div>
               {err && <div style={{ color: "var(--danger)", fontSize: 12, marginBottom: 12 }}>{err}</div>}
               <button className="btn" style={{ width: "100%" }} type="submit" disabled={busy}>{busy ? "Signing in…" : "Log In"}</button>
@@ -95,15 +108,15 @@ export default function LoginScreen({ onLogin, onRegister, theme, setTheme, init
               </div>
               <div className="form-row">
                 <label className="field">Email</label>
-                <input value={regEmail} onChange={e => setRegEmail(e.target.value)} placeholder="you@example.com" />
+                <input type="email" autoComplete="email" value={regEmail} onChange={e => setRegEmail(e.target.value)} placeholder="you@example.com" />
               </div>
               <div className="form-grid">
-                <div className="form-row"><label className="field">Password</label><input type="password" value={regPassword} onChange={e => setRegPassword(e.target.value)} /></div>
-                <div className="form-row"><label className="field">Confirm Password</label><input type="password" value={regConfirm} onChange={e => setRegConfirm(e.target.value)} /></div>
+                <div className="form-row"><label className="field">Password</label><input type="password" autoComplete="new-password" value={regPassword} onChange={e => setRegPassword(e.target.value)} /></div>
+                <div className="form-row"><label className="field">Confirm Password</label><input type="password" autoComplete="new-password" value={regConfirm} onChange={e => setRegConfirm(e.target.value)} /></div>
               </div>
               {err && <div style={{ color: "var(--danger)", fontSize: 12, marginBottom: 12 }}>{err}</div>}
               <button className="btn" style={{ width: "100%" }} type="submit" disabled={busy}>{busy ? "Creating account…" : "Create Account"}</button>
-              <div className="auth-legal">By creating an account, you agree to FinTrack Stark's Terms of Service and Privacy Policy.</div>
+              <div className="auth-legal">By creating an account, you agree to FinTrack Stark's <Link to="/terms">Terms of Service</Link> and <Link to="/privacy">Privacy Policy</Link>.</div>
               <div className="auth-switch">Already have an account? <a onClick={() => switchMode("login")}>Sign in</a></div>
             </form>
           )}

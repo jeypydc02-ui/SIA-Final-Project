@@ -1,5 +1,10 @@
 const { defineConfig } = require("@playwright/test");
 
+// The suite wipes and reseeds its database on every run, so it must never be
+// pointed at real data. It always uses its own database, and anything spawned
+// from here (the API, the seed, the reminder worker) inherits that address.
+process.env.MONGO_URI = process.env.TEST_MONGO_URI || "mongodb://127.0.0.1:27017/fintrack_stark_test";
+
 // Drives the Chrome already installed on the machine rather than downloading a
 // bundled browser — the lab network times out on that download, and testing
 // against the browser the demo will actually run in is closer to reality.

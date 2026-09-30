@@ -1,7 +1,7 @@
 const AuditLog = require("../models/AuditLog");
 
 async function list(req, res) {
-  const logs = await AuditLog.find().sort({ ts: -1 }).limit(300);
+  const logs = await AuditLog.find().sort({ ts: -1 }).limit(300).lean();
   res.json(logs);
 }
 

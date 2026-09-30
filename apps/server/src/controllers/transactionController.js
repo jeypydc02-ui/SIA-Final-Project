@@ -1,10 +1,8 @@
 const Transaction = require("../models/Transaction");
 const Comment = require("../models/Comment");
 const { logAction, notify, notifyRoles } = require("../services/audit");
-
-function todayISO() {
-  return new Date().toISOString().slice(0, 10);
-}
+const { todayISO } = require("../utils/dates");
+const { isNonEmptyString, isString } = require("../utils/validate");
 
 const REVIEWER_ROLES = ["Reviewer", "Admin"];
 
@@ -14,11 +12,30 @@ function article(word) {
   return /^[aeiou]/i.test(word) ? "an" : "a";
 }
 
-// Reviewers/Admins see everything (needed to run the approval queue);
-// a regular User only sees their own submissions (NFR-002).
+// How many already-decided entries the review screen shows alongside the
+// queue. Everything still pending is always included.
+const REVIEW_HISTORY_LIMIT = 300;
+
+// Everyone's own entries by default (NFR-002) — this is what the dashboard,
+// budgets and reports add up, so it must be the caller's money only. Returning
+// every user's entries to staff accounts made an Admin with no entries of their
+// own see a balance of over a million pesos.
+//
+// ?scope=review is the approval queue, for Reviewers and Admins: every pending
+// entry plus the most recent decided ones. Bounded, because this list is
+// reloaded after every action and the full history grows without limit.
 async function list(req, res) {
-  const filter = req.user.role === "User" ? { submittedBy: req.user.id } : {};
-  const txs = await Transaction.find(filter).sort({ createdAt: -1 });
+  if (req.query.scope === "review") {
+    if (!REVIEWER_ROLES.includes(req.user.role)) {
+      return res.status(403).json({ error: "You do not have permission to perform this action." });
+    }
+    const [pending, decided] = await Promise.all([
+      Transaction.find({ status: "Pending Review" }).sort({ createdAt: -1 }).lean(),
+      Transaction.find({ status: { $ne: "Pending Review" } }).sort({ createdAt: -1 }).limit(REVIEW_HISTORY_LIMIT).lean(),
+    ]);
+    return res.json([...pending, ...decided].sort((a, b) => b.createdAt - a.createdAt));
+  }
+  const txs = await Transaction.find({ submittedBy: req.user.id }).sort({ createdAt: -1 }).lean();
   res.json(txs);
 }
 
@@ -27,7 +44,7 @@ async function create(req, res) {
   if (!type || !["Income", "Expense"].includes(type)) {
     return res.status(400).json({ error: "Type must be Income or Expense." });
   }
-  if (!category || amount === undefined || amount === null || isNaN(Number(amount))) {
+  if (!isNonEmptyString(category) || amount === undefined || amount === null || isNaN(Number(amount))) {
     return res.status(400).json({ error: "Category and a numeric amount are required." });
   }
   if (Number(amount) <= 0) {
@@ -56,15 +73,22 @@ async function create(req, res) {
 async function review(req, res) {
   const { action, comment } = req.body || {};
   const map = { approve: "Approved", reject: "Rejected", revise: "Needs Revision" };
-  if (!action || !map[action]) {
+  if (!isString(action) || !map[action]) {
     return res.status(400).json({ error: "Action must be one of: approve, reject, revise." });
+  }
+  if (comment !== undefined && comment !== null && !isString(comment)) {
+    return res.status(400).json({ error: "Comment must be text." });
   }
   // Claim the entry atomically: matching on "Pending Review" inside the update
   // means that if two reviewers act at the same moment, exactly one decision is
   // recorded. Reading the status and then saving lets both of them through, and
   // the slower one silently overwrites the first reviewer's verdict.
+  //
+  // submittedBy must not be the reviewer: separation of duties (spec section
+  // 8.2). Without it a Reviewer could log a large income and approve it
+  // themselves, which defeats the point of having a review step.
   const tx = await Transaction.findOneAndUpdate(
-    { _id: req.params.id, status: "Pending Review" },
+    { _id: req.params.id, status: "Pending Review", submittedBy: { $ne: req.user.id } },
     { $set: { status: map[action], reviewedBy: req.user.id, reviewComment: comment || "" } },
     // findOneAndUpdate skips schema validators unless asked, and reviewComment
     // has a length limit to honour.
@@ -73,6 +97,9 @@ async function review(req, res) {
   if (!tx) {
     const existing = await Transaction.findById(req.params.id);
     if (!existing) return res.status(404).json({ error: "Transaction not found." });
+    if (String(existing.submittedBy) === req.user.id) {
+      return res.status(403).json({ error: "You cannot review your own entry — another Reviewer or Admin must decide it." });
+    }
     return res.status(400).json({ error: `This entry is already "${existing.status}" and cannot be reviewed again.` });
   }
 
@@ -104,10 +131,31 @@ async function resubmit(req, res) {
     return res.status(403).json({ error: "You can only resubmit your own entries." });
   }
 
-  const { type, category, amount, date, note } = req.body || {};
-  if (amount !== undefined && isNaN(Number(amount))) {
-    return res.status(400).json({ error: "Amount must be numeric." });
+  if (existing.status !== "Needs Revision") {
+    return res.status(400).json({ error: "Only entries marked \"Needs Revision\" can be resubmitted." });
   }
+
+  const { type, category, amount, date, note } = req.body || {};
+  if (amount !== undefined && (isNaN(Number(amount)) || Number(amount) <= 0)) {
+    return res.status(400).json({ error: "Amount must be a number greater than zero." });
+  }
+
+  // Build and fully validate the new version BEFORE touching the original.
+  // Previously the original was marked Superseded first; if the new version
+  // was then refused (an emptied amount field sends 0), the entry was stranded
+  // as Superseded with no successor and could never be resubmitted.
+  const revised = new Transaction({
+    type: type || existing.type,
+    category: category || existing.category,
+    amount: amount !== undefined ? Number(amount) : existing.amount,
+    date: date || existing.date,
+    note: note !== undefined ? note : existing.note,
+    status: "Pending Review",
+    version: (existing.version || 1) + 1,
+    parentId: existing._id,
+    submittedBy: req.user.id,
+  });
+  await revised.validate();
 
   // Same reasoning as review(): claim the entry before writing the new version,
   // so a double submission cannot produce two v2 records off one v1.
@@ -120,17 +168,14 @@ async function resubmit(req, res) {
     return res.status(400).json({ error: "Only entries marked \"Needs Revision\" can be resubmitted." });
   }
 
-  const revised = await Transaction.create({
-    type: type || original.type,
-    category: category || original.category,
-    amount: amount !== undefined ? Number(amount) : original.amount,
-    date: date || original.date,
-    note: note !== undefined ? note : original.note,
-    status: "Pending Review",
-    version: (original.version || 1) + 1,
-    parentId: original._id,
-    submittedBy: req.user.id,
-  });
+  try {
+    await revised.save();
+  } catch (err) {
+    // Validation already passed, so this is the database itself failing.
+    // Hand the entry back so the submitter can simply try again.
+    await Transaction.updateOne({ _id: original._id }, { $set: { status: "Needs Revision" } });
+    throw err;
+  }
 
   await logAction(req.user.name, "Transaction Resubmitted", `v${revised.version} of ${original._id} submitted for review.`);
   await notifyRoles(
@@ -183,21 +228,35 @@ async function update(req, res) {
   }
 
   const { type, category, amount, date, note } = req.body || {};
+  if (category !== undefined && !isNonEmptyString(category)) {
+    return res.status(400).json({ error: "Category cannot be empty." });
+  }
   if (type !== undefined && !["Income", "Expense"].includes(type)) {
     return res.status(400).json({ error: "Type must be Income or Expense." });
   }
   if (amount !== undefined && (isNaN(Number(amount)) || Number(amount) <= 0)) {
     return res.status(400).json({ error: "Amount must be a number greater than zero." });
   }
-  if (type !== undefined) tx.type = type;
-  if (category !== undefined) tx.category = category;
-  if (amount !== undefined) tx.amount = Number(amount);
-  if (date !== undefined) tx.date = date;
-  if (note !== undefined) tx.note = note;
-  await tx.save();
+  const changes = {};
+  if (type !== undefined) changes.type = type;
+  if (category !== undefined) changes.category = category;
+  if (amount !== undefined) changes.amount = Number(amount);
+  if (date !== undefined) changes.date = date;
+  if (note !== undefined) changes.note = note;
 
-  await logAction(req.user.name, "Transaction Updated", `${tx.category} (${tx.amount}) edited before review.`);
-  res.json(tx);
+  // Written only if the entry is still pending at the moment of writing, so an
+  // edit that races a reviewer's decision cannot change an approved figure.
+  const updated = await Transaction.findOneAndUpdate(
+    { _id: tx._id, status: "Pending Review" },
+    { $set: changes },
+    { new: true, runValidators: true }
+  );
+  if (!updated) {
+    return res.status(400).json({ error: "This entry was reviewed a moment ago and can no longer be edited." });
+  }
+
+  await logAction(req.user.name, "Transaction Updated", `${updated.category} (${updated.amount}) edited before review.`);
+  res.json(updated);
 }
 
 async function remove(req, res) {
@@ -209,7 +268,10 @@ async function remove(req, res) {
   if (tx.status !== "Pending Review") {
     return res.status(400).json({ error: `This entry is "${tx.status}" and is part of the audit record.` });
   }
-  await tx.deleteOne();
+  const removed = await Transaction.deleteOne({ _id: tx._id, status: "Pending Review" });
+  if (!removed.deletedCount) {
+    return res.status(400).json({ error: "This entry was reviewed a moment ago and is now part of the audit record." });
+  }
   await logAction(req.user.name, "Transaction Deleted", `${tx.category} (${tx.amount}) withdrawn before review.`);
   res.json({ ok: true });
 }

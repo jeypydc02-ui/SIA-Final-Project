@@ -1,10 +1,10 @@
 const Bill = require("../../../apps/server/src/models/Bill");
 const Notification = require("../../../apps/server/src/models/Notification");
 const AuditLog = require("../../../apps/server/src/models/AuditLog");
-
-function todayISO() {
-  return new Date().toISOString().slice(0, 10);
-}
+// Philippine calendar dates, shared with the API. The old UTC-based "today"
+// was a day behind until 8 AM Manila time, and the old horizon arithmetic
+// mixed local and UTC time, so the lead window came out a day short in UTC+8.
+const { todayISO, addDaysISO, daysBetweenISO } = require("../../../apps/server/src/utils/dates");
 
 // Matches the peso() formatting the interface uses, so a reminder reads the
 // same way as the amount shown on the bill.
@@ -12,15 +12,9 @@ function peso(n) {
   return "₱" + Number(n).toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
-function daysBetween(fromISO, toISO) {
-  const a = new Date(fromISO + "T00:00:00");
-  const b = new Date(toISO + "T00:00:00");
-  return Math.round((a - b) / 86400000);
-}
-
 // How the reminder reads depends on how close the due date is.
 function describe(bill, today) {
-  const delta = daysBetween(bill.due, today);
+  const delta = daysBetweenISO(bill.due, today);
   if (delta < 0) {
     const n = Math.abs(delta);
     return { type: "overdue", message: `"${bill.name}" is overdue by ${n} day${n === 1 ? "" : "s"} — ${peso(bill.amount)} still unpaid.` };
@@ -45,9 +39,7 @@ function describe(bill, today) {
  * `lastRemindedOn` field and the API owning everything else on a bill.
  */
 async function runReminderSweep({ leadDays = 3, today = todayISO(), log = console.log } = {}) {
-  const horizon = new Date(today + "T00:00:00");
-  horizon.setDate(horizon.getDate() + leadDays);
-  const horizonISO = horizon.toISOString().slice(0, 10);
+  const horizonISO = addDaysISO(today, leadDays);
 
   const due = await Bill.find({
     paid: false,

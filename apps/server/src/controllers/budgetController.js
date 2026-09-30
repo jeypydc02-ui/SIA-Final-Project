@@ -4,7 +4,7 @@ const { logAction } = require("../services/audit");
 // Budgets are personal for every role, including Admin: an administrator's
 // budgets are their own money, not something they oversee for others.
 async function list(req, res) {
-  const budgets = await Budget.find({ user: req.user.id }).sort({ category: 1 });
+  const budgets = await Budget.find({ user: req.user.id }).sort({ category: 1 }).lean();
   res.json(budgets);
 }
 

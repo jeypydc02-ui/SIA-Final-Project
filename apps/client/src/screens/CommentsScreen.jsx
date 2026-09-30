@@ -4,16 +4,20 @@ import { fmtDate, peso } from "../lib/utils.js";
 export default function CommentsScreen({ comments, addComment, tx = [] }) {
   const [text, setText] = useState("");
   const [filter, setFilter] = useState("all"); // all | notes | feedback
+  const [busy, setBusy] = useState(false);
 
   // Lets a review comment name the entry it was left on, instead of floating
   // in the list with no context (spec section 5, Comment / Feedback Module).
   const txById = new Map(tx.map((t) => [String(t._id), t]));
 
-  function add(e) {
+  async function add(e) {
     e.preventDefault();
-    if (!text.trim()) return;
-    addComment(text.trim());
-    setText("");
+    if (busy || !text.trim()) return;
+    setBusy(true);
+    const ok = await addComment(text.trim());
+    setBusy(false);
+    // Kept on failure, so a note is never lost to a dropped connection.
+    if (ok) setText("");
   }
 
   const shown = comments.filter((c) => {
@@ -33,8 +37,8 @@ export default function CommentsScreen({ comments, addComment, tx = [] }) {
 
       <div className="card" style={{ marginBottom: 16 }}>
         <form onSubmit={add} style={{ display: "flex", gap: 10 }}>
-          <input value={text} onChange={e => setText(e.target.value)} placeholder="Add a personal note..." />
-          <button className="btn" type="submit">Post</button>
+          <input value={text} maxLength={1000} onChange={e => setText(e.target.value)} placeholder="Add a personal note..." />
+          <button className="btn" type="submit" disabled={busy}>{busy ? "Posting…" : "Post"}</button>
         </form>
       </div>
 

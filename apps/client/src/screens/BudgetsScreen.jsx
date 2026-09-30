@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { peso } from "../lib/utils.js";
+import { peso, thisMonthISO } from "../lib/utils.js";
 
 const SUGGESTED = ["Food", "Transport", "Utilities", "Subscription", "Housing", "Credit", "Other"];
 
@@ -7,26 +7,37 @@ export default function BudgetsScreen({ budgets, tx, addBudget, editBudget, dele
   const [showAdd, setShowAdd] = useState(false);
   const [form, setForm] = useState({ category: "Food", limit: "" });
   const [editing, setEditing] = useState(null); // {_id, category, limit}
+  const [busy, setBusy] = useState(false);
 
-  const approved = tx.filter((t) => t.status === "Approved" && t.type === "Expense");
+  // A budget is a monthly limit, so only this month's approved expenses count
+  // against it. Summing every expense ever recorded filled each bar up for
+  // good after the first month.
+  const month = thisMonthISO();
+  const approved = tx.filter((t) => t.status === "Approved" && t.type === "Expense" && String(t.date).startsWith(month));
   const spentBy = {};
   approved.forEach((t) => { spentBy[t.category] = (spentBy[t.category] || 0) + t.amount; });
 
   const used = new Set(budgets.map((b) => b.category));
   const available = SUGGESTED.filter((c) => !used.has(c));
 
-  function submitAdd(e) {
+  // Dialogs close only after the server accepts the change, so a failure
+  // keeps what was typed.
+  async function submitAdd(e) {
     e.preventDefault();
-    if (!form.category || !form.limit) return;
-    addBudget({ category: form.category, limit: Number(form.limit) });
-    setShowAdd(false);
-    setForm({ category: available[0] || "Other", limit: "" });
+    if (busy || !form.category || !(Number(form.limit) > 0)) return;
+    setBusy(true);
+    const ok = await addBudget({ category: form.category, limit: Number(form.limit) });
+    setBusy(false);
+    if (ok) setShowAdd(false);
   }
 
-  function submitEdit(e) {
+  async function submitEdit(e) {
     e.preventDefault();
-    editBudget(editing._id, { limit: Number(editing.limit) });
-    setEditing(null);
+    if (busy) return;
+    setBusy(true);
+    const ok = await editBudget(editing._id, { limit: Number(editing.limit) });
+    setBusy(false);
+    if (ok) setEditing(null);
   }
 
   const totalLimit = budgets.reduce((s, b) => s + b.limit, 0);
@@ -37,7 +48,7 @@ export default function BudgetsScreen({ budgets, tx, addBudget, editBudget, dele
       <div className="pagehead">
         <div>
           <h2>Budgets</h2>
-          <div className="desc">Set a monthly limit per category. Approved expenses are counted against it.</div>
+          <div className="desc">Set a monthly limit per category. This month's approved expenses are counted against it.</div>
         </div>
         <button className="btn" onClick={() => { setForm({ category: available[0] || "Other", limit: "" }); setShowAdd(true); }}>
           + Add Budget
@@ -51,7 +62,7 @@ export default function BudgetsScreen({ budgets, tx, addBudget, editBudget, dele
           <div className="card stat">
             <h3>Total Spent</h3>
             <div className="value" style={{ color: totalSpent > totalLimit ? "var(--danger)" : "var(--text)" }}>{peso(totalSpent)}</div>
-            <div className="label">{totalLimit > 0 ? Math.round((totalSpent / totalLimit) * 100) : 0}% of budget used</div>
+            <div className="label">{totalLimit > 0 ? Math.round((totalSpent / totalLimit) * 100) : 0}% of budget used this month</div>
           </div>
         </div>
       )}
@@ -118,8 +129,8 @@ export default function BudgetsScreen({ budgets, tx, addBudget, editBudget, dele
                 <input type="number" min="1" value={form.limit} onChange={(e) => setForm({ ...form, limit: e.target.value })} required />
               </div>
               <div className="actions">
-                <button type="button" className="btn ghost" onClick={() => setShowAdd(false)}>Cancel</button>
-                <button className="btn" type="submit">Save Budget</button>
+                <button type="button" className="btn ghost" onClick={() => setShowAdd(false)} disabled={busy}>Cancel</button>
+                <button className="btn" type="submit" disabled={busy}>{busy ? "Saving…" : "Save Budget"}</button>
               </div>
             </form>
           </div>
@@ -136,8 +147,8 @@ export default function BudgetsScreen({ budgets, tx, addBudget, editBudget, dele
                 <input type="number" min="1" value={editing.limit} onChange={(e) => setEditing({ ...editing, limit: e.target.value })} required />
               </div>
               <div className="actions">
-                <button type="button" className="btn ghost" onClick={() => setEditing(null)}>Cancel</button>
-                <button className="btn" type="submit">Save</button>
+                <button type="button" className="btn ghost" onClick={() => setEditing(null)} disabled={busy}>Cancel</button>
+                <button className="btn" type="submit" disabled={busy}>{busy ? "Saving…" : "Save"}</button>
               </div>
             </form>
           </div>

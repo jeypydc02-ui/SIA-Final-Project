@@ -12,6 +12,13 @@ const BASE = "http://localhost:4000";
 //      themselves never have to log in through the form except where signing
 //      in is the thing under test.
 module.exports = async () => {
+  // Last line of defence against wiping real data: the reset below only ever
+  // runs against a database whose name says it is for testing.
+  const dbName = new URL(process.env.MONGO_URI).pathname.slice(1);
+  if (!/_test$/.test(dbName)) {
+    throw new Error(`global-setup: refusing to reset "${dbName}" — the test database name must end in _test`);
+  }
+
   execFileSync("node", [path.join(__dirname, "..", "scripts", "seed.js"), "--reset"], {
     stdio: "inherit",
     cwd: path.join(__dirname, ".."),

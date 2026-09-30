@@ -1,26 +1,22 @@
 const Bill = require("../models/Bill");
 const Transaction = require("../models/Transaction");
 const { logAction, notify } = require("../services/audit");
+const { todayISO } = require("../utils/dates");
+const { isNonEmptyString, parseAmount } = require("../utils/validate");
 
-function todayISO() {
-  return new Date().toISOString().slice(0, 10);
-}
-
-// NFR-002 ("users can only access projects assigned to them"): a regular User
-// only ever sees the bills they created. Reviewers and Admins see everything,
-// which they need to run the approval queue and to answer support questions.
-function visibilityFilter(user) {
-  return user.role === "User" ? { createdBy: user.id } : {};
-}
-
+// NFR-002: a bill is personal money, so everyone — Admin and Reviewer
+// included — sees only the bills they created. Returning every user's bills to
+// staff accounts put other people's figures into their dashboard, reports and
+// bill list as though they were their own, with Mark Paid buttons that could
+// only ever fail. Nothing in the review workflow needs anyone else's bills.
 async function list(req, res) {
-  const bills = await Bill.find(visibilityFilter(req.user)).sort({ due: 1 });
+  const bills = await Bill.find({ createdBy: req.user.id }).sort({ due: 1 }).lean();
   res.json(bills);
 }
 
 async function create(req, res) {
   const { name, category, amount, due } = req.body || {};
-  if (!name || !category || !due || amount === undefined || amount === null || isNaN(Number(amount))) {
+  if (!isNonEmptyString(name) || !isNonEmptyString(category) || !due || amount === undefined || amount === null || isNaN(Number(amount))) {
     return res.status(400).json({ error: "Bill name, category, due date, and a numeric amount are required." });
   }
   if (Number(amount) <= 0) {
@@ -48,10 +44,14 @@ async function pay(req, res) {
   }
   if (bill.paid) return res.status(400).json({ error: "This bill is already marked as paid." });
 
-  const amount = Number(req.body?.amount ?? bill.amount);
-  if (isNaN(amount) || amount <= 0) {
-    return res.status(400).json({ error: "A valid payment amount is required." });
+  // Validated in full before anything is written. Previously an amount the
+  // expense record would refuse (such as 1e13) got as far as marking the bill
+  // Paid, then failed — leaving a paid bill with no payment behind it.
+  const amount = parseAmount(req.body?.amount ?? bill.amount);
+  if (amount === null) {
+    return res.status(400).json({ error: "Enter a payment amount between 0.01 and 1,000,000,000,000." });
   }
+  const paidOn = todayISO();
 
   // Claim the bill atomically. Reading `paid` and then saving leaves a window
   // in which two clicks — or two tabs — both pass the check and both record a
@@ -59,25 +59,37 @@ async function pay(req, res) {
   // inside the update means the database picks exactly one winner.
   const claimed = await Bill.findOneAndUpdate(
     { _id: bill._id, paid: false },
-    { $set: { paid: true, paidOn: todayISO(), paidAmount: amount } },
+    { $set: { paid: true, paidOn, paidAmount: amount } },
     { new: true }
   );
   if (!claimed) {
     return res.status(400).json({ error: "This bill is already marked as paid." });
   }
 
-  const tx = await Transaction.create({
-    type: "Expense",
-    category: bill.category,
-    amount,
-    date: todayISO(),
-    note: `Bill payment: ${bill.name}`,
-    status: "Approved",
-    autoApproved: true,
-    submittedBy: req.user.id,
-    reviewedBy: req.user.id,
-    reviewComment: "Auto-approved via bill payment workflow.",
-  });
+  // If the expense record cannot be written, put the bill back the way it
+  // was: a bill must never read Paid without the payment that paid it.
+  let tx;
+  try {
+    tx = await Transaction.create({
+      type: "Expense",
+      category: bill.category,
+      amount,
+      date: paidOn,
+      // Bill names can be 120 characters and a note only 300, so this fits.
+      note: `Bill payment: ${bill.name}`,
+      status: "Approved",
+      autoApproved: true,
+      submittedBy: req.user.id,
+      reviewedBy: req.user.id,
+      reviewComment: "Auto-approved via bill payment workflow.",
+    });
+  } catch (err) {
+    await Bill.updateOne(
+      { _id: bill._id },
+      { $set: { paid: false, paidOn: null, paidAmount: null } }
+    );
+    throw err;
+  }
 
   await notify("payment", `Payment recorded for "${claimed.name}" — status auto-updated to Paid.`, req.user.id);
   await logAction(
@@ -103,14 +115,31 @@ async function update(req, res) {
   if (amount !== undefined && (isNaN(Number(amount)) || Number(amount) <= 0)) {
     return res.status(400).json({ error: "Amount must be a number greater than zero." });
   }
-  if (name !== undefined) bill.name = name;
-  if (category !== undefined) bill.category = category;
-  if (amount !== undefined) bill.amount = Number(amount);
-  if (due !== undefined) bill.due = due;
-  await bill.save();
+  if (name !== undefined && !isNonEmptyString(name)) {
+    return res.status(400).json({ error: "Bill name cannot be empty." });
+  }
+  if (category !== undefined && !isNonEmptyString(category)) {
+    return res.status(400).json({ error: "Category cannot be empty." });
+  }
+  const changes = {};
+  if (name !== undefined) changes.name = name;
+  if (category !== undefined) changes.category = category;
+  if (amount !== undefined) changes.amount = Number(amount);
+  if (due !== undefined) changes.due = due;
 
-  await logAction(req.user.name, "Bill Updated", `${bill.name} (${bill._id}) edited.`);
-  res.json(bill);
+  // Written only while the bill is still unpaid. Checking `paid` and then
+  // saving let an edit that raced a payment rewrite a bill already paid.
+  const updated = await Bill.findOneAndUpdate(
+    { _id: bill._id, paid: false },
+    { $set: changes },
+    { new: true, runValidators: true }
+  );
+  if (!updated) {
+    return res.status(400).json({ error: "A paid bill can no longer be edited." });
+  }
+
+  await logAction(req.user.name, "Bill Updated", `${updated.name} (${updated._id}) edited.`);
+  res.json(updated);
 }
 
 async function remove(req, res) {
@@ -122,7 +151,11 @@ async function remove(req, res) {
   if (bill.paid) {
     return res.status(400).json({ error: "A paid bill is part of the payment record and cannot be deleted." });
   }
-  await bill.deleteOne();
+  // Same race as update(): only an unpaid bill may go.
+  const removed = await Bill.deleteOne({ _id: bill._id, paid: false });
+  if (!removed.deletedCount) {
+    return res.status(400).json({ error: "A paid bill is part of the payment record and cannot be deleted." });
+  }
   await logAction(req.user.name, "Bill Deleted", `${bill.name} (${bill._id}) removed.`);
   res.json({ ok: true });
 }

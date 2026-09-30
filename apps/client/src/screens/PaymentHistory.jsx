@@ -1,7 +1,9 @@
 import { peso, fmtDate } from "../lib/utils.js";
 
 export default function PaymentHistory({ bills }) {
-  const paid = bills.filter(b => b.paid);
+  // Most recent first, as the description says; the bill list itself comes
+  // sorted by due date.
+  const paid = bills.filter(b => b.paid).sort((a, b) => String(b.paidOn).localeCompare(String(a.paidOn)));
   return (
     <div>
       <div className="pagehead"><div><h2>Payment History</h2><div className="desc">All completed bill payments, most recent first.</div></div></div>

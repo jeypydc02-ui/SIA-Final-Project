@@ -9,6 +9,7 @@ const Budget = require("../apps/server/src/models/Budget");
 const Notification = require("../apps/server/src/models/Notification");
 const Comment = require("../apps/server/src/models/Comment");
 const AuditLog = require("../apps/server/src/models/AuditLog");
+const Session = require("../apps/server/src/models/Session");
 
 // Database recovery (spec section 10.4).
 //
@@ -72,6 +73,9 @@ async function restore() {
   for (const Model of Object.values(COLLECTIONS)) {
     await Model.deleteMany({});
   }
+  // Sessions are not part of a backup. Any still open belong to the state
+  // being discarded, so everyone signs in again against the restored data.
+  await Session.deleteMany({});
 
   for (const [name, Model] of Object.entries(COLLECTIONS)) {
     const rows = payload.data[name] || [];
