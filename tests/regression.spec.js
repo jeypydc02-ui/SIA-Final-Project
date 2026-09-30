@@ -1,5 +1,6 @@
 const { test, expect } = require("@playwright/test");
 const { api, accounts, signIn, gotoScreen, registerUser } = require("./helpers");
+const { todayISO, addDaysISO } = require("../apps/server/src/utils/dates");
 
 // Regression cases for the defects found in the pre-launch audit. Each one
 // reproduced a real failure before its fix; they stay so it cannot return.
@@ -248,6 +249,92 @@ test.describe("Pre-launch audit regressions", () => {
     // No sideways scrolling with the bar in place.
     expect(await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)).toBeLessThanOrEqual(0);
     await context.close();
+  });
+
+  test("RT-15 categories match the entry type everywhere", async () => {
+    const { user } = accounts();
+    const post = (p, body) => api(p, { method: "POST", token: user.token, body });
+    expect((await post("/api/transactions", { type: "Income", category: "Food", amount: 5 })).status).toBe(400);
+    expect((await post("/api/transactions", { type: "Expense", category: "Salary", amount: 5 })).status).toBe(400);
+    expect((await post("/api/transactions", { type: "Income", category: "Allowance", amount: 5 })).status).toBe(201);
+    expect((await post("/api/budgets", { category: "Salary", limit: 100 })).status).toBe(400);
+    expect((await post("/api/bills", { name: "x", category: "Groceries", amount: 1, due: "2026-12-01" })).status).toBe(400);
+    // A bill filed under Internet can now have a budget to count against.
+    const person = await registerUser("internet");
+    expect((await api("/api/budgets", { method: "POST", token: person.token, body: { category: "Internet", limit: 2000 } })).status).toBe(201);
+  });
+
+  test("RT-16 income and expenses cannot be dated in the future", async () => {
+    const { user } = accounts();
+    const tomorrow = addDaysISO(todayISO(), 1);
+    const res = await api("/api/transactions", { method: "POST", token: user.token, body: { type: "Expense", category: "Food", amount: 5, date: tomorrow } });
+    expect(res.status).toBe(400);
+    expect(res.data.error).toContain("future");
+    const ok = await api("/api/transactions", { method: "POST", token: user.token, body: { type: "Expense", category: "Food", amount: 5, date: todayISO() } });
+    expect(ok.status).toBe(201);
+  });
+
+  test("RT-17 paying a monthly bill schedules next month's", async () => {
+    const person = await registerUser("monthly");
+    const bill = await api("/api/bills", {
+      method: "POST", token: person.token,
+      body: { name: "Rent on the 31st", category: "Housing", amount: 9000, due: "2027-01-31", repeat: "monthly" },
+    });
+    const paid = await api(`/api/bills/${bill.data._id}/pay`, { method: "POST", token: person.token, body: {} });
+    expect(paid.status).toBe(200);
+    expect(paid.data.nextBill.due).toBe("2027-02-28");
+    const again = await api(`/api/bills/${paid.data.nextBill._id}/pay`, { method: "POST", token: person.token, body: {} });
+    // Back to the 31st after the short month, not stuck on the 28th.
+    expect(again.data.nextBill.due).toBe("2027-03-31");
+
+    const once = await api("/api/bills", { method: "POST", token: person.token, body: { name: "One-off", category: "Other", amount: 50, due: "2027-01-10" } });
+    const paidOnce = await api(`/api/bills/${once.data._id}/pay`, { method: "POST", token: person.token, body: {} });
+    expect(paidOnce.data.nextBill).toBe(null);
+
+    const bills = await api("/api/bills", { token: person.token });
+    expect(bills.data.filter((b) => b.name === "Rent on the 31st")).toHaveLength(3);
+  });
+
+  test("RT-18 crossing 80% and 100% of a budget sends a warning", async () => {
+    const person = await registerUser("budgeter");
+    const { admin } = accounts();
+    await api("/api/budgets", { method: "POST", token: person.token, body: { category: "Food", limit: 1000 } });
+    const submitAndApprove = async (amount) => {
+      const t = await api("/api/transactions", { method: "POST", token: person.token, body: { type: "Expense", category: "Food", amount } });
+      await api(`/api/transactions/${t.data._id}/review`, { method: "POST", token: admin.token, body: { action: "approve" } });
+    };
+    const budgetNotes = async () => (await api("/api/notifications", { token: person.token })).data.filter((n) => n.type === "budget");
+
+    await submitAndApprove(500);
+    expect(await budgetNotes()).toHaveLength(0);
+    await submitAndApprove(350); // 85%
+    let notes = await budgetNotes();
+    expect(notes).toHaveLength(1);
+    expect(notes[0].message).toContain("85%");
+    await submitAndApprove(50); // 90%: no repeat warning
+    expect(await budgetNotes()).toHaveLength(1);
+    await submitAndApprove(200); // 110%
+    notes = await budgetNotes();
+    expect(notes).toHaveLength(2);
+    expect(notes[0].message).toContain("over your Food budget");
+  });
+
+  test("RT-19 reviewers see who submitted each entry, and a resubmission can fix its category and date", async () => {
+    const { user, reviewer } = accounts();
+    const created = await api("/api/transactions", {
+      method: "POST", token: user.token, body: { type: "Expense", category: "Food", amount: 300, note: "wrong category probe" },
+    });
+    const queue = await api("/api/transactions?scope=review", { token: reviewer.token });
+    expect(queue.data.find((t) => t._id === created.data._id).submitterName).toBe(user.user.name);
+
+    await api(`/api/transactions/${created.data._id}/review`, { method: "POST", token: reviewer.token, body: { action: "revise", comment: "This was transport." } });
+    const yesterday = addDaysISO(todayISO(), -1);
+    const v2 = await api(`/api/transactions/${created.data._id}/resubmit`, {
+      method: "POST", token: user.token, body: { category: "Transport", date: yesterday, amount: 300 },
+    });
+    expect(v2.status).toBe(201);
+    expect(v2.data.category).toBe("Transport");
+    expect(v2.data.date).toBe(yesterday);
   });
 
   test("RT-12 a reviewer's own pending entry has no approve buttons", async ({ page }) => {

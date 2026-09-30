@@ -133,8 +133,8 @@ test.describe("Functional", () => {
 
     const stats = page.locator(".card.stat");
     await expect(stats.filter({ hasText: "Balance" })).toBeVisible();
-    await expect(stats.filter({ hasText: "Total Income" })).toContainText("₱");
-    await expect(stats.filter({ hasText: "Total Expenses" })).toContainText("₱");
+    await expect(stats.filter({ hasText: "Income This Month" })).toContainText("₱");
+    await expect(stats.filter({ hasText: "Expenses This Month" })).toContainText("₱");
     await expect(stats.filter({ hasText: "Bills Pending" })).toBeVisible();
 
     await expect(page.locator(".card", { hasText: "Upcoming & Overdue Bills" })).toContainText("Condo Rent");

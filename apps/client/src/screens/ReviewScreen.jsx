@@ -1,5 +1,7 @@
 import { useState } from "react";
 import { peso, fmtDate, txStatusBadge } from "../lib/utils.js";
+import { fitCategory } from "../lib/categories.js";
+import EntryFields, { entryProblem } from "../components/EntryFields.jsx";
 
 const ACTION_LABEL = { approve: "Approve", reject: "Reject", revise: "Request Revision on" };
 
@@ -9,10 +11,10 @@ export default function ReviewScreen({ tx, queue, session, reviewTx, resubmitTx,
   const isReviewer = session.role === "Reviewer" || session.role === "Admin";
   const [target, setTarget] = useState(null); // {t, action}
   const [comment, setComment] = useState("");
-  const [resubmitTarget, setResubmitTarget] = useState(null);
-  const [form, setForm] = useState({ amount: "", note: "" });
+  // Editing a pending entry and resubmitting one sent back for revision use
+  // the same form: {mode: "edit" | "resubmit", entry, value}.
+  const [draft, setDraft] = useState(null);
   const [formErr, setFormErr] = useState("");
-  const [editTarget, setEditTarget] = useState(null);
   const [busy, setBusy] = useState(false);
 
   const rows = isReviewer ? queue : tx;
@@ -27,28 +29,25 @@ export default function ReviewScreen({ tx, queue, session, reviewTx, resubmitTx,
     setBusy(false);
     if (ok) setTarget(null);
   }
-  function openResubmit(t) { setResubmitTarget(t); setForm({ amount: String(t.amount), note: t.note || "" }); setFormErr(""); }
-  async function confirmResubmit() {
-    if (busy) return;
-    // An emptied amount field used to be sent as 0.
-    const amount = Number(form.amount);
-    if (!(amount > 0)) { setFormErr("Enter an amount greater than zero."); return; }
-    setBusy(true);
-    const ok = await resubmitTx(resubmitTarget._id, { amount, note: form.note });
-    setBusy(false);
-    if (ok) setResubmitTarget(null);
+
+  function openDraft(mode, t) {
+    setFormErr("");
+    setDraft({
+      mode,
+      entry: t,
+      value: { type: t.type, category: fitCategory(t.type, t.category), amount: String(t.amount), date: t.date, note: t.note || "" },
+    });
   }
-  async function confirmEdit(e) {
+  async function confirmDraft(e) {
     e.preventDefault();
     if (busy) return;
+    const problem = entryProblem(draft.value);
+    if (problem) { setFormErr(problem); return; }
+    const body = { ...draft.value, amount: Number(draft.value.amount) };
     setBusy(true);
-    const ok = await editTx(editTarget._id, {
-      category: editTarget.category,
-      amount: Number(editTarget.amount),
-      note: editTarget.note,
-    });
+    const ok = draft.mode === "edit" ? await editTx(draft.entry._id, body) : await resubmitTx(draft.entry._id, body);
     setBusy(false);
-    if (ok) setEditTarget(null);
+    if (ok) setDraft(null);
   }
 
   return (
@@ -65,10 +64,11 @@ export default function ReviewScreen({ tx, queue, session, reviewTx, resubmitTx,
           <h3>Pending Review ({pending.length})</h3>
           {pending.length === 0 ? <div className="empty">Nothing waiting for review.</div> : (
             <table>
-              <thead><tr><th>Type</th><th>Category</th><th>Amount</th><th>Date</th><th>Note</th><th></th></tr></thead>
+              <thead><tr><th>Submitted by</th><th>Type</th><th>Category</th><th>Amount</th><th>Date</th><th>Note</th><th></th></tr></thead>
               <tbody>
                 {pending.map(t => (
                   <tr key={t._id}>
+                    <td>{isOwn(t) ? "You" : t.submitterName}</td>
                     <td>{t.type}</td><td>{t.category}</td><td>{peso(t.amount)}</td><td>{fmtDate(t.date)}</td>
                     <td style={{ color: "var(--text-dim)" }}>{t.note || "—"}</td>
                     <td style={{ display: "flex", gap: 6 }}>
@@ -92,27 +92,28 @@ export default function ReviewScreen({ tx, queue, session, reviewTx, resubmitTx,
       <div className="card">
         <h3>{isReviewer ? "All Submissions" : "My Submissions"}</h3>
         <table>
-          <thead><tr><th>Type</th><th>Category</th><th>Amount</th><th>Note</th><th>Status</th><th>Reviewer Note</th><th></th></tr></thead>
+          <thead><tr>{isReviewer && <th>Submitted by</th>}<th>Type</th><th>Category</th><th>Amount</th><th>Note</th><th>Status</th><th>Reviewer Note</th><th></th></tr></thead>
           <tbody>
             {rows.map(t => (
               <tr key={t._id}>
+                {isReviewer && <td>{isOwn(t) ? "You" : t.submitterName}</td>}
                 <td>{t.type}</td><td>{t.category}</td><td>{peso(t.amount)}</td>
                 <td style={{ color: "var(--text-dim)" }}>{t.note || "—"}</td>
                 <td><span className={"badge " + txStatusBadge(t.status)}>{t.status}{t.version > 1 ? " · v" + t.version : ""}</span></td>
                 <td style={{ color: "var(--text-dim)" }}>{t.reviewComment || "—"}</td>
                 <td style={{ display: "flex", gap: 6 }}>
                   {/* Whoever submitted the entry resubmits it, whatever their role. */}
-                  {isOwn(t) && t.status === "Needs Revision" && <button className="btn small ghost" onClick={() => openResubmit(t)}>Resubmit</button>}
+                  {isOwn(t) && t.status === "Needs Revision" && <button className="btn small ghost" onClick={() => openDraft("resubmit", t)}>Resubmit</button>}
                   {isOwn(t) && t.status === "Pending Review" && (
                     <>
-                      <button className="btn small ghost" onClick={() => setEditTarget({ ...t, amount: String(t.amount) })}>Edit</button>
+                      <button className="btn small ghost" onClick={() => openDraft("edit", t)}>Edit</button>
                       <button className="btn small danger" onClick={() => deleteTx(t)}>Withdraw</button>
                     </>
                   )}
                 </td>
               </tr>
             ))}
-            {rows.length === 0 && <tr><td colSpan="7"><div className="empty">No submissions yet.</div></td></tr>}
+            {rows.length === 0 && <tr><td colSpan={isReviewer ? 8 : 7}><div className="empty">No submissions yet.</div></td></tr>}
           </tbody>
         </table>
       </div>
@@ -121,7 +122,9 @@ export default function ReviewScreen({ tx, queue, session, reviewTx, resubmitTx,
         <div className="modal-overlay" onClick={() => !busy && setTarget(null)}>
           <div className="modal" onClick={e => e.stopPropagation()}>
             <h3>{ACTION_LABEL[target.action]} Entry</h3>
-            <p style={{ fontSize: 12.5, color: "var(--text-dim)" }}>{target.t.category} — {peso(target.t.amount)}</p>
+            <p style={{ fontSize: 12.5, color: "var(--text-dim)" }}>
+              {target.t.submitterName ? `${target.t.submitterName} · ` : ""}{target.t.type} · {target.t.category} — {peso(target.t.amount)}
+            </p>
             <div className="form-row"><label className="field">Comment (optional)</label><input value={comment} maxLength={300} onChange={e => setComment(e.target.value)} placeholder="Reason or note for the submitter" /></div>
             <div className="actions">
               <button className="btn ghost" onClick={() => setTarget(null)} disabled={busy}>Cancel</button>
@@ -131,42 +134,23 @@ export default function ReviewScreen({ tx, queue, session, reviewTx, resubmitTx,
         </div>
       )}
 
-      {editTarget && (
-        <div className="modal-overlay" onClick={() => !busy && setEditTarget(null)}>
+      {draft && (
+        <div className="modal-overlay" onClick={() => !busy && setDraft(null)}>
           <div className="modal" onClick={e => e.stopPropagation()}>
-            <h3>Edit Entry</h3>
+            <h3>{draft.mode === "edit" ? "Edit Entry" : "Resubmit Entry"}</h3>
             <p style={{ fontSize: 12.5, color: "var(--text-dim)" }}>
-              Only entries still waiting for review can be edited.
+              {draft.mode === "edit"
+                ? "Only entries still waiting for review can be edited."
+                : <>Reviewer note: {draft.entry.reviewComment || "—"}</>}
             </p>
-            <form onSubmit={confirmEdit}>
-              <div className="form-row"><label className="field">Category</label>
-                <select value={editTarget.category} onChange={e => setEditTarget({ ...editTarget, category: e.target.value })}>
-                  <option>Food</option><option>Transport</option><option>Utilities</option><option>Subscription</option><option>Salary</option><option>Freelance</option><option>Other</option>
-                </select>
-              </div>
-              <div className="form-row"><label className="field">Amount (₱)</label><input type="number" min="0.01" step="0.01" max="1000000000000" value={editTarget.amount} onChange={e => setEditTarget({ ...editTarget, amount: e.target.value })} required /></div>
-              <div className="form-row"><label className="field">Note</label><input value={editTarget.note || ""} maxLength={300} onChange={e => setEditTarget({ ...editTarget, note: e.target.value })} /></div>
+            <form onSubmit={confirmDraft}>
+              <EntryFields value={draft.value} onChange={(value) => { setDraft({ ...draft, value }); setFormErr(""); }} />
+              {formErr && <div className="form-msg error">{formErr}</div>}
               <div className="actions">
-                <button type="button" className="btn ghost" onClick={() => setEditTarget(null)} disabled={busy}>Cancel</button>
-                <button className="btn" type="submit" disabled={busy}>{busy ? "Saving…" : "Save Changes"}</button>
+                <button type="button" className="btn ghost" onClick={() => setDraft(null)} disabled={busy}>Cancel</button>
+                <button className="btn" type="submit" disabled={busy}>{busy ? "Saving…" : draft.mode === "edit" ? "Save Changes" : "Resubmit"}</button>
               </div>
             </form>
-          </div>
-        </div>
-      )}
-
-      {resubmitTarget && (
-        <div className="modal-overlay" onClick={() => !busy && setResubmitTarget(null)}>
-          <div className="modal" onClick={e => e.stopPropagation()}>
-            <h3>Resubmit Entry</h3>
-            <p style={{ fontSize: 12.5, color: "var(--text-dim)" }}>Reviewer note: {resubmitTarget.reviewComment || "—"}</p>
-            <div className="form-row"><label className="field">Amount (₱)</label><input type="number" min="0.01" step="0.01" value={form.amount} onChange={e => { setForm({ ...form, amount: e.target.value }); setFormErr(""); }} /></div>
-            <div className="form-row"><label className="field">Note</label><input value={form.note} maxLength={300} onChange={e => setForm({ ...form, note: e.target.value })} /></div>
-            {formErr && <div className="form-msg error">{formErr}</div>}
-            <div className="actions">
-              <button className="btn ghost" onClick={() => setResubmitTarget(null)} disabled={busy}>Cancel</button>
-              <button className="btn" onClick={confirmResubmit} disabled={busy}>{busy ? "Saving…" : "Resubmit"}</button>
-            </div>
           </div>
         </div>
       )}

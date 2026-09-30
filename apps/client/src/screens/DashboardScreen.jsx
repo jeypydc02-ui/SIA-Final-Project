@@ -160,15 +160,19 @@ function PendingList({ pending, onNavigate }) {
 function PersonalFinances({ bills, tx, budgets, notifs, onNavigate }) {
   const approved = tx.filter(t => t.status === "Approved");
   const pendingCount = tx.filter(t => t.status === "Pending Review").length;
-  const income = approved.filter(t => t.type === "Income").reduce((s, t) => s + t.amount, 0);
-  const expense = approved.filter(t => t.type === "Expense").reduce((s, t) => s + t.amount, 0);
-  const balance = income - expense;
+  const sum = (list, type) => list.filter(t => t.type === type).reduce((s, t) => s + t.amount, 0);
+  // The balance is everything ever approved; income and expenses are for the
+  // month in progress, the same period the budgets below measure.
+  const balance = sum(approved, "Income") - sum(approved, "Expense");
   const upcoming = bills.filter(b => !b.paid);
   const overdueCount = upcoming.filter(b => billStatus(b.due, b.paid) === "Overdue").length;
   const dueSoonCount = upcoming.filter(b => { const s = billStatus(b.due, b.paid); return s === "Due Today" || s === "Upcoming"; }).length;
   // Budgets are monthly limits: only this month's approved expenses count.
   const month = thisMonthISO();
-  const monthExpenses = approved.filter(t => t.type === "Expense" && String(t.date).startsWith(month));
+  const monthApproved = approved.filter(t => String(t.date).startsWith(month));
+  const monthExpenses = monthApproved.filter(t => t.type === "Expense");
+  const income = sum(monthApproved, "Income");
+  const expense = sum(monthApproved, "Expense");
 
   return (
     <>
@@ -180,14 +184,14 @@ function PersonalFinances({ bills, tx, budgets, notifs, onNavigate }) {
           <div className="delta up">{approved.length} approved · {pendingCount} pending review</div>
         </div>
         <div className="card stat">
-          <h3>Total Income</h3>
+          <h3>Income This Month</h3>
           <div className="value">{peso(income)}</div>
-          <div className="label">All approved income</div>
+          <div className="label">Approved income since the 1st</div>
         </div>
         <div className="card stat">
-          <h3>Total Expenses</h3>
+          <h3>Expenses This Month</h3>
           <div className="value">{peso(expense)}</div>
-          <div className="label">All approved expenses</div>
+          <div className="label">Approved spending since the 1st</div>
         </div>
         <div className="card stat">
           <h3>Bills Pending</h3>

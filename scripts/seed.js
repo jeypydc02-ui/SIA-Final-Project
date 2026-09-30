@@ -96,10 +96,10 @@ async function seed() {
   ]);
 
   await Bill.insertMany([
-    { name: "Meralco Electricity", category: "Utilities", amount: 2450, due: addDays(2), paid: false, createdBy: jp._id },
+    { name: "Meralco Electricity", category: "Utilities", amount: 2450, due: addDays(2), paid: false, createdBy: jp._id, repeat: "monthly", repeatDay: Number(addDays(2).slice(8, 10)) },
     { name: "Maynilad Water", category: "Utilities", amount: 680, due: addDays(-1), paid: false, createdBy: jp._id },
-    { name: "PLDT Home Fibr", category: "Internet", amount: 1699, due: addDays(9), paid: false, createdBy: jp._id },
-    { name: "Condo Rent", category: "Housing", amount: 14000, due: addDays(0), paid: false, createdBy: jp._id },
+    { name: "PLDT Home Fibr", category: "Internet", amount: 1699, due: addDays(9), paid: false, createdBy: jp._id, repeat: "monthly", repeatDay: Number(addDays(9).slice(8, 10)) },
+    { name: "Condo Rent", category: "Housing", amount: 14000, due: addDays(0), paid: false, createdBy: jp._id, repeat: "monthly", repeatDay: Number(addDays(0).slice(8, 10)) },
     { name: "Netflix Subscription", category: "Subscription", amount: 549, due: addDays(-6), paid: true, paidOn: addDays(-6), paidAmount: 549, createdBy: jp._id },
     { name: "BPI Credit Card", category: "Credit", amount: 5230, due: addDays(15), paid: false, createdBy: jp._id },
   ]);

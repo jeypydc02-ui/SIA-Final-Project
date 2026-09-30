@@ -1,7 +1,10 @@
 import { useState } from "react";
 import { peso, thisMonthISO } from "../lib/utils.js";
+import { EXPENSE_CATEGORIES } from "../lib/categories.js";
 
-const SUGGESTED = ["Food", "Transport", "Utilities", "Subscription", "Housing", "Credit", "Other"];
+// Every expense category can have a budget, including the ones bills are
+// filed under, so paying the internet bill counts against an Internet budget.
+const SUGGESTED = EXPENSE_CATEGORIES;
 
 export default function BudgetsScreen({ budgets, tx, addBudget, editBudget, deleteBudget }) {
   const [showAdd, setShowAdd] = useState(false);

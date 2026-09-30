@@ -2,8 +2,12 @@ const Bill = require("../models/Bill");
 const Transaction = require("../models/Transaction");
 const { logAction } = require("../services/audit");
 const { notify } = require("../services/notifications");
-const { todayISO } = require("../utils/dates");
+const { checkBudget } = require("../services/budgetAlerts");
+const { todayISO, nextMonthlyDueISO, isRealDate } = require("../utils/dates");
 const { isNonEmptyString, parseAmount } = require("../utils/validate");
+
+const REPEATS = ["none", "monthly"];
+const dayOf = (iso) => Number(String(iso).slice(8, 10));
 
 // NFR-002: a bill is personal money, so everyone — Admin and Reviewer
 // included — sees only the bills they created. Returning every user's bills to
@@ -16,15 +20,19 @@ async function list(req, res) {
 }
 
 async function create(req, res) {
-  const { name, category, amount, due } = req.body || {};
+  const { name, category, amount, due, repeat = "none" } = req.body || {};
   if (!isNonEmptyString(name) || !isNonEmptyString(category) || !due || amount === undefined || amount === null || isNaN(Number(amount))) {
     return res.status(400).json({ error: "Bill name, category, due date, and a numeric amount are required." });
   }
   if (Number(amount) <= 0) {
     return res.status(400).json({ error: "Amount must be greater than zero." });
   }
+  if (!REPEATS.includes(repeat)) {
+    return res.status(400).json({ error: "Repeat must be none or monthly." });
+  }
   const bill = await Bill.create({
     name, category, amount: Number(amount), due, paid: false, createdBy: req.user.id,
+    repeat, repeatDay: repeat === "monthly" && isRealDate(due) ? dayOf(due) : null,
   });
   await logAction(req.user.name, "Bill Created", `${bill.name} added, due ${bill.due}, amount ${bill.amount}.`);
   await notify("bill", `Bill "${bill.name}" added — due ${bill.due}. The reminder service will alert you as the date approaches.`, req.user.id);
@@ -92,14 +100,43 @@ async function pay(req, res) {
     throw err;
   }
 
-  await notify("payment", `Payment recorded for "${claimed.name}" — status auto-updated to Paid.`, req.user.id);
+  // A monthly bill comes back: paying this month's creates next month's, due
+  // on the same day. The payment itself is already safely recorded, so if
+  // this step fails the payment stands and the user can add the bill again.
+  let nextBill = null;
+  if (claimed.repeat === "monthly") {
+    try {
+      nextBill = await Bill.create({
+        name: claimed.name,
+        category: claimed.category,
+        amount: claimed.amount,
+        due: nextMonthlyDueISO(claimed.due, claimed.repeatDay || dayOf(claimed.due)),
+        createdBy: claimed.createdBy,
+        repeat: "monthly",
+        repeatDay: claimed.repeatDay || dayOf(claimed.due),
+        previousBill: claimed._id,
+      });
+    } catch (err) {
+      console.error("[bills] could not schedule the next monthly bill:", err.message);
+    }
+  }
+
+  await notify(
+    "payment",
+    `Payment recorded for "${claimed.name}" — status auto-updated to Paid.` +
+      (nextBill ? ` Next bill scheduled for ${nextBill.due}.` : ""),
+    req.user.id
+  );
   await logAction(
     req.user.name,
     "Payment Recorded",
-    `${claimed.name} (${claimed._id}) marked Paid, amount ${amount}. Triggered: expense log entry + notification.`
+    `${claimed.name} (${claimed._id}) marked Paid, amount ${amount}. Triggered: expense log entry + notification` +
+      (nextBill ? ` + next monthly bill due ${nextBill.due}.` : ".")
   );
+  // The payment is an approved expense, so it may have pushed a budget over.
+  await checkBudget(tx);
 
-  res.json({ bill: claimed, transaction: tx });
+  res.json({ bill: claimed, transaction: tx, nextBill });
 }
 
 async function update(req, res) {
@@ -112,7 +149,10 @@ async function update(req, res) {
     return res.status(400).json({ error: "A paid bill can no longer be edited." });
   }
 
-  const { name, category, amount, due } = req.body || {};
+  const { name, category, amount, due, repeat } = req.body || {};
+  if (repeat !== undefined && !REPEATS.includes(repeat)) {
+    return res.status(400).json({ error: "Repeat must be none or monthly." });
+  }
   if (amount !== undefined && (isNaN(Number(amount)) || Number(amount) <= 0)) {
     return res.status(400).json({ error: "Amount must be a number greater than zero." });
   }
@@ -127,6 +167,11 @@ async function update(req, res) {
   if (category !== undefined) changes.category = category;
   if (amount !== undefined) changes.amount = Number(amount);
   if (due !== undefined) changes.due = due;
+  if (repeat !== undefined) changes.repeat = repeat;
+  // The monthly schedule follows the (possibly new) due date's day.
+  const finalRepeat = repeat !== undefined ? repeat : bill.repeat;
+  const finalDue = due !== undefined ? due : bill.due;
+  changes.repeatDay = finalRepeat === "monthly" && isRealDate(finalDue) ? dayOf(finalDue) : null;
 
   // Written only while the bill is still unpaid. Checking `paid` and then
   // saving let an edit that raced a payment rewrite a bill already paid.

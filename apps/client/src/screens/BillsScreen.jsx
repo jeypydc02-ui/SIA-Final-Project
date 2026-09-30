@@ -1,8 +1,20 @@
 import { useState, useEffect } from "react";
 import { useSearchParams } from "react-router-dom";
 import { peso, fmtDate, addDays, billStatus, statusBadgeClass } from "../lib/utils.js";
+import { BILL_CATEGORIES } from "../lib/categories.js";
 
-const blankBill = () => ({ name: "", category: "Utilities", amount: "", due: addDays(7) });
+const blankBill = () => ({ name: "", category: "Utilities", amount: "", due: addDays(7), repeat: "none" });
+
+// Rent, electricity and internet come back every month. A monthly bill
+// schedules its next occurrence when it is paid.
+function RepeatField({ value, onChange }) {
+  return (
+    <label className="check-row">
+      <input type="checkbox" checked={value === "monthly"} onChange={(e) => onChange(e.target.checked ? "monthly" : "none")} />
+      <span>Repeats every month<span className="hint" style={{ display: "block", margin: 0 }}>Paying it adds next month's bill automatically.</span></span>
+    </label>
+  );
+}
 
 export default function BillsScreen({ bills, addBill, markPaid, editBill, deleteBill }) {
   const [showAdd, setShowAdd] = useState(false);
@@ -30,7 +42,7 @@ export default function BillsScreen({ bills, addBill, markPaid, editBill, delete
     e.preventDefault();
     if (busy || !form.name.trim() || !(Number(form.amount) > 0)) return;
     setBusy(true);
-    const ok = await addBill({ name: form.name.trim(), category: form.category, amount: Number(form.amount), due: form.due });
+    const ok = await addBill({ name: form.name.trim(), category: form.category, amount: Number(form.amount), due: form.due, repeat: form.repeat });
     setBusy(false);
     if (ok) {
       setShowAdd(false);
@@ -46,6 +58,7 @@ export default function BillsScreen({ bills, addBill, markPaid, editBill, delete
       category: editing.category,
       amount: Number(editing.amount),
       due: editing.due,
+      repeat: editing.repeat || "none",
     });
     setBusy(false);
     if (ok) setEditing(null);
@@ -80,7 +93,7 @@ export default function BillsScreen({ bills, addBill, markPaid, editBill, delete
               const s = billStatus(b.due, b.paid);
               return (
                 <tr key={b._id}>
-                  <td>{b.name}</td><td>{b.category}</td><td>{fmtDate(b.due)}</td><td>{peso(b.amount)}</td>
+                  <td>{b.name}{b.repeat === "monthly" && <span className="badge neutral" style={{ marginLeft: 6 }}>Monthly</span>}</td><td>{b.category}</td><td>{fmtDate(b.due)}</td><td>{peso(b.amount)}</td>
                   <td><span className={"badge " + statusBadgeClass(s)}>{s}</span></td>
                   <td style={{ display: "flex", gap: 6 }}>
                     {!b.paid && <button className="btn small ghost" onClick={() => openPay(b)}>Mark Paid</button>}
@@ -104,12 +117,13 @@ export default function BillsScreen({ bills, addBill, markPaid, editBill, delete
               <div className="form-grid">
                 <div className="form-row"><label className="field">Category</label>
                   <select value={form.category} onChange={e => setForm({ ...form, category: e.target.value })}>
-                    <option>Utilities</option><option>Housing</option><option>Internet</option><option>Credit</option><option>Subscription</option><option>Other</option>
+                    {BILL_CATEGORIES.map((c) => <option key={c}>{c}</option>)}
                   </select>
                 </div>
                 <div className="form-row"><label className="field">Amount (₱)</label><input type="number" min="0.01" step="0.01" max="1000000000000" value={form.amount} onChange={e => setForm({ ...form, amount: e.target.value })} required /></div>
               </div>
               <div className="form-row"><label className="field">Due date</label><input type="date" value={form.due} onChange={e => setForm({ ...form, due: e.target.value })} required /></div>
+              <RepeatField value={form.repeat} onChange={(repeat) => setForm({ ...form, repeat })} />
               <div className="actions">
                 <button type="button" className="btn ghost" onClick={() => setShowAdd(false)} disabled={busy}>Cancel</button>
                 <button className="btn" type="submit" disabled={busy}>{busy ? "Saving…" : "Save Bill"}</button>
@@ -128,12 +142,13 @@ export default function BillsScreen({ bills, addBill, markPaid, editBill, delete
               <div className="form-grid">
                 <div className="form-row"><label className="field">Category</label>
                   <select value={editing.category} onChange={e => setEditing({ ...editing, category: e.target.value })}>
-                    <option>Utilities</option><option>Housing</option><option>Internet</option><option>Credit</option><option>Subscription</option><option>Other</option>
+                    {BILL_CATEGORIES.map((c) => <option key={c}>{c}</option>)}
                   </select>
                 </div>
                 <div className="form-row"><label className="field">Amount (₱)</label><input type="number" min="0.01" step="0.01" max="1000000000000" value={editing.amount} onChange={e => setEditing({ ...editing, amount: e.target.value })} required /></div>
               </div>
               <div className="form-row"><label className="field">Due date</label><input type="date" value={editing.due} onChange={e => setEditing({ ...editing, due: e.target.value })} required /></div>
+              <RepeatField value={editing.repeat} onChange={(repeat) => setEditing({ ...editing, repeat })} />
               <div className="actions">
                 <button type="button" className="btn ghost" onClick={() => setEditing(null)} disabled={busy}>Cancel</button>
                 <button className="btn" type="submit" disabled={busy}>{busy ? "Saving…" : "Save Changes"}</button>
@@ -149,6 +164,7 @@ export default function BillsScreen({ bills, addBill, markPaid, editBill, delete
             <h3>Mark "{payTarget.name}" as Paid</h3>
             <p style={{ fontSize: 12.5, color: "var(--text-dim)" }}>
               <span className="flow-badge">integration</span> &nbsp;This will log an approved expense entry, generate a notification, and write an audit log entry automatically.
+              {payTarget.repeat === "monthly" && " Next month's bill will be added for you."}
             </p>
             <div className="form-row">
               <label className="field">Amount paid (₱)</label>

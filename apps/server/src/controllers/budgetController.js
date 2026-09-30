@@ -1,5 +1,10 @@
 const Budget = require("../models/Budget");
 const { logAction } = require("../services/audit");
+const { EXPENSE_CATEGORIES } = require("../utils/categories");
+
+// Budgets limit spending, so only expense categories can have one.
+const notBudgetable = (name) => !EXPENSE_CATEGORIES.includes(name);
+const BUDGET_CATEGORY_ERROR = "Budget category must be one of: " + EXPENSE_CATEGORIES.join(", ") + ".";
 
 // Budgets are personal for every role, including Admin: an administrator's
 // budgets are their own money, not something they oversee for others.
@@ -17,6 +22,7 @@ async function create(req, res) {
     return res.status(400).json({ error: "Limit must be a number greater than zero." });
   }
   const name = String(category).trim();
+  if (notBudgetable(name)) return res.status(400).json({ error: BUDGET_CATEGORY_ERROR });
   const existing = await Budget.findOne({ user: req.user.id, category: name });
   if (existing) {
     return res.status(409).json({ error: `You already have a budget for "${name}".` });
@@ -40,6 +46,7 @@ async function update(req, res) {
   if (category !== undefined) {
     const name = String(category).trim();
     if (!name) return res.status(400).json({ error: "Category cannot be empty." });
+    if (notBudgetable(name)) return res.status(400).json({ error: BUDGET_CATEGORY_ERROR });
     const clash = await Budget.findOne({ user: req.user.id, category: name, _id: { $ne: budget._id } });
     if (clash) return res.status(409).json({ error: `You already have a budget for "${name}".` });
     budget.category = name;

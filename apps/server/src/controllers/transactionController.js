@@ -1,9 +1,21 @@
 const Transaction = require("../models/Transaction");
 const Comment = require("../models/Comment");
+const User = require("../models/User");
 const { logAction } = require("../services/audit");
 const { notify, notifyRoles } = require("../services/notifications");
+const { checkBudget } = require("../services/budgetAlerts");
 const { todayISO } = require("../utils/dates");
 const { isNonEmptyString, isString } = require("../utils/validate");
+const { categoriesFor } = require("../utils/categories");
+
+// An income category on an expense (or the reverse) is refused, so every
+// expense can be counted against a budget and no income is.
+function categoryProblem(type, category) {
+  const allowed = categoriesFor(type);
+  return allowed.includes(category)
+    ? null
+    : `${type} category must be one of: ${allowed.join(", ")}.`;
+}
 
 const REVIEWER_ROLES = ["Reviewer", "Admin"];
 
@@ -34,7 +46,12 @@ async function list(req, res) {
       Transaction.find({ status: "Pending Review" }).sort({ createdAt: -1 }).lean(),
       Transaction.find({ status: { $ne: "Pending Review" } }).sort({ createdAt: -1 }).limit(REVIEW_HISTORY_LIMIT).lean(),
     ]);
-    return res.json([...pending, ...decided].sort((a, b) => b.createdAt - a.createdAt));
+    const rows = [...pending, ...decided].sort((a, b) => b.createdAt - a.createdAt);
+    // A reviewer needs to know whose entry they are deciding.
+    const ids = [...new Set(rows.map((t) => String(t.submittedBy)))];
+    const people = await User.find({ _id: { $in: ids } }).select("name").lean();
+    const names = new Map(people.map((p) => [String(p._id), p.name]));
+    return res.json(rows.map((t) => ({ ...t, submitterName: names.get(String(t.submittedBy)) || "Deleted account" })));
   }
   const txs = await Transaction.find({ submittedBy: req.user.id }).sort({ createdAt: -1 }).lean();
   res.json(txs);
@@ -51,6 +68,8 @@ async function create(req, res) {
   if (Number(amount) <= 0) {
     return res.status(400).json({ error: "Amount must be greater than zero." });
   }
+  const catProblem = categoryProblem(type, category);
+  if (catProblem) return res.status(400).json({ error: catProblem });
   const tx = await Transaction.create({
     type,
     category,
@@ -120,6 +139,8 @@ async function review(req, res) {
     `Your ${tx.type.toLowerCase()} of ${tx.amount} was ${map[action].toLowerCase()}${comment ? `: "${comment}"` : "."}`,
     tx.submittedBy
   );
+  // An approved expense now counts against the submitter's budget.
+  if (tx.status === "Approved") await checkBudget(tx);
 
   res.json(tx);
 }
@@ -156,6 +177,8 @@ async function resubmit(req, res) {
     parentId: existing._id,
     submittedBy: req.user.id,
   });
+  const revisedProblem = categoryProblem(revised.type, revised.category);
+  if (revisedProblem) return res.status(400).json({ error: revisedProblem });
   await revised.validate();
 
   // Same reasoning as review(): claim the entry before writing the new version,
@@ -237,6 +260,10 @@ async function update(req, res) {
   }
   if (amount !== undefined && (isNaN(Number(amount)) || Number(amount) <= 0)) {
     return res.status(400).json({ error: "Amount must be a number greater than zero." });
+  }
+  if (type !== undefined || category !== undefined) {
+    const problem = categoryProblem(type !== undefined ? type : tx.type, category !== undefined ? category : tx.category);
+    if (problem) return res.status(400).json({ error: problem });
   }
   const changes = {};
   if (type !== undefined) changes.type = type;
