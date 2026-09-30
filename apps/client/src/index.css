@@ -408,14 +408,31 @@ button.card-link h3{color:var(--text); font-size:14px;}
    spacing is relaxed.
    ===================================================================== */
 
-.menu-btn{
-  display:none; /* shown only in the drawer breakpoint below */
-  background:transparent; border:1px solid var(--line); border-radius:6px;
-  color:var(--text-dim); cursor:pointer;
-  width:34px; height:34px; align-items:center; justify-content:center;
-  margin-right:12px; flex:none;
+/* ---- Bottom tab bar (phones) ----
+   Hidden on wide screens, where the sidebar is always visible. */
+.bottom-nav{display:none;}
+.bn-tab{
+  flex:1; min-width:0; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:3px;
+  padding:6px 2px; background:none; border:none; font:inherit; cursor:pointer;
+  color:var(--text-dim); text-decoration:none;
 }
-.menu-btn:hover{color:var(--text); border-color:var(--primary);}
+.bn-tab.active{color:var(--primary);}
+.bn-icon{position:relative; display:flex;}
+.bn-label{font-size:10.5px; font-weight:500;}
+.bn-badge{
+  position:absolute; top:-5px; right:-9px;
+  min-width:16px; height:16px; padding:0 4px; border-radius:8px;
+  background:var(--danger); color:#fff; font-size:9.5px; font-weight:700;
+  display:flex; align-items:center; justify-content:center;
+}
+.bn-add{
+  flex:none; width:48px; height:48px; margin:0 6px; border-radius:50%;
+  border:none; cursor:pointer; background:var(--primary); color:#fff;
+  display:flex; align-items:center; justify-content:center;
+  box-shadow:0 2px 8px rgba(47,111,237,0.35);
+  transform:translateY(-10px);
+}
+.bn-add:active{transform:translateY(-10px) scale(0.95);}
 
 .side-backdrop{
   position:fixed; inset:0; z-index:40;
@@ -423,7 +440,16 @@ button.card-link h3{color:var(--text); font-size:14px;}
 }
 
 @media(max-width:860px){
-  .menu-btn{display:inline-flex;}
+  .bottom-nav{
+    display:flex; align-items:center;
+    position:fixed; left:0; right:0; bottom:0; z-index:45;
+    background:var(--panel); border-top:1px solid var(--line);
+    padding:0 6px env(safe-area-inset-bottom, 0);
+    height:calc(60px + env(safe-area-inset-bottom, 0px));
+  }
+  /* Leave room so the last row of a screen is never hidden under the bar. */
+  .content{padding-bottom:calc(88px + env(safe-area-inset-bottom, 0px)) !important;}
+  .toast{left:16px; right:16px; bottom:calc(72px + env(safe-area-inset-bottom, 0px)); max-width:none;}
 
   /* The sidebar slides over the content instead of reserving a column. */
   .side{
@@ -438,8 +464,8 @@ button.card-link h3{color:var(--text); font-size:14px;}
 
   .topbar{padding:12px 16px; gap:4px;}
   .topbar h1{font-size:17px;}
-  /* The date is the first thing worth dropping when space is short. */
-  .topbar > div:last-child{display:none;}
+  /* The date and Add button move out of the way: the bottom bar has "+". */
+  .topbar-right{display:none !important;}
   .content{padding:16px 16px 48px;}
 
   /* One column everywhere: two 50% cards on a phone are unreadable. */
@@ -489,4 +515,53 @@ button.card-link h3{color:var(--text); font-size:14px;}
   font-family:ui-monospace, "Cascadia Mono", Consolas, monospace; font-size:18px; letter-spacing:1px;
   padding:10px 12px; border:1px dashed var(--line); border-radius:8px; background:var(--surface-hover);
   user-select:all; word-break:break-all;
+}
+
+/* ---- Top bar right-hand side (wide screens) ---- */
+.topbar-right{display:flex; align-items:center; gap:14px;}
+.topbar-date{font-size:11.5px; color:var(--text-dim);}
+
+/* ---- Dashboard sections ---- */
+.section-title{
+  font-size:13px; font-weight:600; color:var(--text);
+  margin:22px 0 10px; padding-top:16px; border-top:1px solid var(--line);
+}
+.card-head{display:flex; align-items:baseline; justify-content:space-between; gap:10px; margin-bottom:12px;}
+.card-head h3{margin:0;}
+.activity-row{
+  display:flex; justify-content:space-between; gap:12px;
+  font-size:12.5px; color:var(--text); padding:7px 0; border-bottom:1px solid var(--line);
+}
+.activity-row:last-of-type{border-bottom:none;}
+.activity-time{color:var(--text-dim); white-space:nowrap; font-size:11.5px;}
+
+/* ---- Quick add ---- */
+.quick-add-grid{display:grid; gap:8px;}
+.quick-add-option{
+  display:flex; align-items:center; gap:12px; width:100%; text-align:left;
+  padding:12px; border:1px solid var(--line); border-radius:8px;
+  background:var(--panel); color:var(--text); font:inherit; cursor:pointer;
+}
+.quick-add-option:hover{border-color:var(--primary); background:var(--surface-hover);}
+.quick-add-mark{
+  width:34px; height:34px; flex:none; border-radius:8px;
+  display:flex; align-items:center; justify-content:center;
+  font-size:20px; font-weight:600; line-height:1;
+}
+.quick-add-mark.danger{background:var(--tint-danger); color:var(--danger);}
+.quick-add-mark.ok{background:var(--tint-ok); color:var(--ok);}
+.quick-add-mark.neutral{background:var(--accent-tint); color:var(--primary);}
+.quick-add-text{display:flex; flex-direction:column; gap:2px;}
+.quick-add-label{font-size:14px; font-weight:600;}
+.quick-add-hint{font-size:12px; color:var(--text-dim);}
+.sheet-grip{display:none;}
+
+/* On a phone the add dialog rises from the bottom, like the apps it mirrors. */
+@media(max-width:860px){
+  .sheet-overlay{align-items:flex-end;}
+  .modal.sheet{
+    width:100%; margin:0; border-radius:14px 14px 0 0; border-bottom:none;
+    padding:12px 18px calc(18px + env(safe-area-inset-bottom, 0px));
+  }
+  .sheet-grip{display:block; width:36px; height:4px; border-radius:2px; background:var(--line); margin:0 auto 14px;}
 }

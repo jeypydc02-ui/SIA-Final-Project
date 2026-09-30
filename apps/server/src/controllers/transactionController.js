@@ -1,6 +1,7 @@
 const Transaction = require("../models/Transaction");
 const Comment = require("../models/Comment");
-const { logAction, notify, notifyRoles } = require("../services/audit");
+const { logAction } = require("../services/audit");
+const { notify, notifyRoles } = require("../services/notifications");
 const { todayISO } = require("../utils/dates");
 const { isNonEmptyString, isString } = require("../utils/validate");
 

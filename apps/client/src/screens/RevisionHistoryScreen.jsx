@@ -33,7 +33,7 @@ function diff(prev, next) {
   return parts.length ? parts.join(", ") : "resubmitted without changes";
 }
 
-export default function VersionHistory({ tx }) {
+export default function RevisionHistoryScreen({ tx }) {
   const chains = buildChains(tx);
   const revised = chains.filter((c) => c.length > 1);
   const [open, setOpen] = useState(() => new Set());

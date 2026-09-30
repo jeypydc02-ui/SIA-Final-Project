@@ -7,7 +7,8 @@ const Comment = require("../models/Comment");
 const Transaction = require("../models/Transaction");
 const { refreshUserSessions, destroyUserSessions } = require("../services/sessions");
 const { hashPassword } = require("../services/passwords");
-const { logAction, notify } = require("../services/audit");
+const { logAction } = require("../services/audit");
+const { notify } = require("../services/notifications");
 
 const ROLES = ["Admin", "Reviewer", "User"];
 

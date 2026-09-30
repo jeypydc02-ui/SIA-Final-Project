@@ -8,7 +8,7 @@ const RBAC = [
   { role: "User", access: "Submits own bills and transactions for review; views own reports, history, budgets, and notes only." },
 ];
 
-export default function UserManagement({ users, session, setUserRole, deleteUser, resetUserPassword }) {
+export default function UsersScreen({ users, session, setUserRole, deleteUser, resetUserPassword }) {
   const [pending, setPending] = useState(null); // {user, role}
   const [resetTarget, setResetTarget] = useState(null); // user awaiting confirmation
   const [issued, setIssued] = useState(null); // {user, password} shown once

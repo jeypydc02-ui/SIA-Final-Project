@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useSearchParams } from "react-router-dom";
 import { peso, fmtDate, addDays, billStatus, statusBadgeClass } from "../lib/utils.js";
 
 const blankBill = () => ({ name: "", category: "Utilities", amount: "", due: addDays(7) });
@@ -11,6 +12,16 @@ export default function BillsScreen({ bills, addBill, markPaid, editBill, delete
   const [form, setForm] = useState(blankBill);
   const [editing, setEditing] = useState(null);
   const [busy, setBusy] = useState(false);
+  const [params, setParams] = useSearchParams();
+
+  // ?add=1 comes from the quick-add sheet: open the Add Bill dialog, then drop
+  // the flag so Back or a reload does not keep reopening it.
+  useEffect(() => {
+    if (params.get("add") === "1") {
+      setShowAdd(true);
+      setParams({}, { replace: true });
+    }
+  }, [params, setParams]);
 
   // Each dialog closes only once the server has accepted the change. If the
   // request fails (offline, a validation error), it stays open with what was

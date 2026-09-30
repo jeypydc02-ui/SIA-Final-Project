@@ -1,3 +1,4 @@
+import { useParams, useNavigate } from "react-router-dom";
 import { peso, fmtDate, billStatus, statusBadgeClass } from "../lib/utils.js";
 
 const CATEGORY_DESC = {
@@ -21,7 +22,7 @@ function categoriesFrom(bills) {
   }));
 }
 
-export function ProjectList({ bills, onOpen }) {
+export function CategoryList({ bills, onOpen }) {
   const cats = categoriesFrom(bills);
   return (
     <div>
@@ -49,7 +50,7 @@ export function ProjectList({ bills, onOpen }) {
   );
 }
 
-export function ProjectDetails({ bills, category, onBack, onPick }) {
+export function CategoryDetail({ bills, category, onBack, onPick }) {
   const cats = categoriesFrom(bills);
   // Falls back to the first category so the screen is never blank if it is
   // reached without a selection.
@@ -100,5 +101,21 @@ export function ProjectDetails({ bills, category, onBack, onPick }) {
         </table>
       </div>
     </div>
+  );
+}
+
+// Reads the category out of the URL, so /categories/Housing is a real address
+// that can be bookmarked and shared. useParams has already decoded it; decoding
+// a second time turned a "%" in the name into a crash.
+export function CategoryDetailRoute({ bills }) {
+  const { name } = useParams();
+  const navigate = useNavigate();
+  return (
+    <CategoryDetail
+      bills={bills}
+      category={name}
+      onBack={() => navigate("/categories")}
+      onPick={(next) => navigate("/categories/" + encodeURIComponent(next))}
+    />
   );
 }

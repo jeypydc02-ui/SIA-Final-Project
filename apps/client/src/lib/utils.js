@@ -7,6 +7,8 @@ export const APP_TIMEZONE = "Asia/Manila";
 const dayFormatter = new Intl.DateTimeFormat("en-CA", { timeZone: APP_TIMEZONE, year: "numeric", month: "2-digit", day: "2-digit" });
 
 export const todayISO = () => dayFormatter.format(new Date());
+// The Philippine calendar date a timestamp fell on.
+export const phDateOf = (value) => dayFormatter.format(new Date(value));
 export const thisMonthISO = () => todayISO().slice(0, 7);
 
 function isoToUTC(iso) {

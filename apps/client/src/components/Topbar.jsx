@@ -1,7 +1,9 @@
 import { useLocation, useParams } from "react-router-dom";
 import { TITLES } from "../lib/nav.js";
 
-export default function Topbar({ onOpenMenu }) {
+// On a phone the menu and the add button live in the bottom bar instead
+// (BottomNav), and CSS hides this bar's right-hand side.
+export default function Topbar({ onAdd }) {
   const { pathname } = useLocation();
   const { name } = useParams();
 
@@ -13,20 +15,16 @@ export default function Topbar({ onOpenMenu }) {
 
   return (
     <div className="topbar">
-      {/* Only rendered as a control on narrow screens, where the sidebar is a
-          drawer; CSS hides it once the sidebar is permanently visible. */}
-      <button className="menu-btn" onClick={onOpenMenu} aria-label="Open menu">
-        <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true">
-          <path d="M2 4.5h14M2 9h14M2 13.5h14" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-        </svg>
-      </button>
       <div>
         <h1>{title}</h1>
         {/* Mirrors the address bar, so the breadcrumb and the URL always agree. */}
         <div className="path">fintrackstark{pathname}</div>
       </div>
-      <div style={{ fontSize: 11.5, color: "var(--text-dim)" }}>
-        {new Date().toLocaleDateString("en-PH", { weekday: "long", month: "long", day: "numeric", year: "numeric" })}
+      <div className="topbar-right">
+        <span className="topbar-date">
+          {new Date().toLocaleDateString("en-PH", { weekday: "long", month: "long", day: "numeric", year: "numeric" })}
+        </span>
+        <button type="button" className="btn small" onClick={onAdd}>+ Add</button>
       </div>
     </div>
   );

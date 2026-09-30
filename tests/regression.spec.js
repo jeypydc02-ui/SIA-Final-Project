@@ -195,6 +195,61 @@ test.describe("Pre-launch audit regressions", () => {
     await expect(page.locator("table")).toContainText("Typed while offline");
   });
 
+  test("RT-13 each role's dashboard leads with its own work", async ({ page }) => {
+    await signIn(page, "admin");
+    await expect(page.locator(".card.stat", { hasText: "Accounts" })).toBeVisible();
+    await expect(page.locator(".card", { hasText: "Recent Activity" })).toBeVisible();
+    await expect(page.locator(".section-title")).toHaveText("My Finances");
+
+    const reviewerPage = await page.context().newPage();
+    const { reviewer } = accounts();
+    await reviewerPage.addInitScript((t) => window.sessionStorage.setItem("fts_token", t), reviewer.token);
+    await reviewerPage.goto("/dashboard");
+    await reviewerPage.waitForSelector(".shell");
+    await expect(reviewerPage.locator(".card.stat", { hasText: "Awaiting Your Review" })).toBeVisible();
+    await expect(reviewerPage.locator(".card.stat", { hasText: "Accounts" })).toHaveCount(0);
+    await reviewerPage.close();
+
+    const userPage = await page.context().newPage();
+    const { user } = accounts();
+    await userPage.addInitScript((t) => window.sessionStorage.setItem("fts_token", t), user.token);
+    await userPage.goto("/dashboard");
+    await userPage.waitForSelector(".shell");
+    await expect(userPage.locator(".card.stat", { hasText: "Balance" })).toBeVisible();
+    await expect(userPage.locator(".card", { hasText: "Waiting for Review" })).toHaveCount(0);
+    await expect(userPage.locator(".section-title")).toHaveCount(0);
+    await userPage.close();
+  });
+
+  test("RT-14 phones get a bottom tab bar with quick add", async ({ browser }) => {
+    const context = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+    const page = await context.newPage();
+    await signIn(page, "user");
+
+    const nav = page.locator(".bottom-nav");
+    await expect(nav).toBeVisible();
+    await nav.getByRole("link", { name: "Bills" }).click();
+    await expect(page).toHaveURL(/\/bills$/);
+
+    await nav.getByRole("button", { name: "Add an entry" }).click();
+    await page.locator(".quick-add-option", { hasText: "Income" }).click();
+    await expect(page).toHaveURL(/\/submit\?type=Income$/);
+    await expect(page.locator("select").first()).toHaveValue("Income");
+
+    await nav.getByRole("button", { name: "Add an entry" }).click();
+    await page.locator(".quick-add-option", { hasText: "Bill" }).click();
+    await expect(page.locator(".modal h3", { hasText: "Add Bill" })).toBeVisible();
+
+    // Close the Add Bill dialog by tapping outside it.
+    await page.locator(".modal-overlay").click({ position: { x: 5, y: 5 } });
+    await nav.getByRole("button", { name: "Open the full menu" }).click();
+    await expect(page.locator(".side.open")).toBeVisible();
+
+    // No sideways scrolling with the bar in place.
+    expect(await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)).toBeLessThanOrEqual(0);
+    await context.close();
+  });
+
   test("RT-12 a reviewer's own pending entry has no approve buttons", async ({ page }) => {
     const { reviewer } = accounts();
     await api("/api/transactions", {

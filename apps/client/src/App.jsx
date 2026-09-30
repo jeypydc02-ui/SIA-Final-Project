@@ -1,31 +1,37 @@
-import { useState, useEffect, Component } from "react";
-import {
-  BrowserRouter, Routes, Route, Navigate, Outlet, useNavigate, useParams, useLocation,
-} from "react-router-dom";
+import { useState, useEffect } from "react";
+import { BrowserRouter, Routes, Route, Navigate, useNavigate } from "react-router-dom";
 import { api, SESSION_ENDED, PASSWORD_CHANGE_REQUIRED } from "./lib/api.js";
 import { peso } from "./lib/utils.js";
-import { PATH_ROLES } from "./lib/nav.js";
 
+// Frame and shared pieces
+import Shell from "./components/Shell.jsx";
+import ErrorBoundary from "./components/ErrorBoundary.jsx";
+import ConfirmDialog from "./components/ConfirmDialog.jsx";
+import ReauthDialog from "./components/ReauthDialog.jsx";
+import { RequireAuth, RequireRole } from "./components/RouteGuards.jsx";
+
+// Public pages
 import LandingPage from "./screens/LandingPage.jsx";
 import LoginScreen from "./screens/LoginScreen.jsx";
 import { TermsPage, PrivacyPage } from "./screens/LegalPages.jsx";
-import ConfirmDialog from "./components/ConfirmDialog.jsx";
-import Sidebar from "./components/Sidebar.jsx";
-import Topbar from "./components/Topbar.jsx";
-import Dashboard from "./screens/Dashboard.jsx";
-import { ProjectList, ProjectDetails } from "./screens/BillCategories.jsx";
+import ForcePasswordChangeScreen from "./screens/ForcePasswordChangeScreen.jsx";
+
+// Signed-in screens, in sidebar order
+import DashboardScreen from "./screens/DashboardScreen.jsx";
+import { CategoryList, CategoryDetailRoute } from "./screens/CategoriesScreen.jsx";
+import LogEntryScreen from "./screens/LogEntryScreen.jsx";
+import BudgetsScreen from "./screens/BudgetsScreen.jsx";
 import BillsScreen from "./screens/BillsScreen.jsx";
-import PaymentHistory from "./screens/PaymentHistory.jsx";
-import SubmissionForm from "./screens/SubmissionForm.jsx";
-import VersionHistory from "./screens/VersionHistory.jsx";
-import ReviewApproval from "./screens/ReviewApproval.jsx";
-import CommentsScreen from "./screens/CommentsScreen.jsx";
+import RevisionHistoryScreen from "./screens/RevisionHistoryScreen.jsx";
+import ReviewScreen from "./screens/ReviewScreen.jsx";
+import NotesScreen from "./screens/NotesScreen.jsx";
+import PaymentHistoryScreen from "./screens/PaymentHistoryScreen.jsx";
 import NotificationsScreen from "./screens/NotificationsScreen.jsx";
 import AuditLogScreen from "./screens/AuditLogScreen.jsx";
 import ReportsScreen from "./screens/ReportsScreen.jsx";
-import BudgetsScreen from "./screens/BudgetsScreen.jsx";
-import UserManagement from "./screens/UserManagement.jsx";
+import UsersScreen from "./screens/UsersScreen.jsx";
 import SettingsScreen from "./screens/SettingsScreen.jsx";
+import NotFoundScreen from "./screens/NotFoundScreen.jsx";
 
 const isStaff = (s) => !!s && (s.role === "Admin" || s.role === "Reviewer");
 
@@ -354,7 +360,7 @@ function FinTrackStark() {
   if (session && session.mustChangePassword) {
     return (
       <>
-        <ForcePasswordChange session={session} changePassword={changePassword} logout={logout} theme={theme} />
+        <ForcePasswordChangeScreen session={session} changePassword={changePassword} logout={logout} theme={theme} />
         {toast && <div className="toast">{toast}</div>}
       </>
     );
@@ -413,20 +419,20 @@ function FinTrackStark() {
         <Route
           element={
             <RequireAuth session={session}>
-              <Shell session={session} logout={requestLogout} theme={theme} setTheme={setTheme} notifs={notifs} loadError={loadError} />
+              <Shell session={session} logout={requestLogout} theme={theme} setTheme={setTheme} notifs={notifs} queue={queue} loadError={loadError} />
             </RequireAuth>
           }
         >
-          <Route path="/dashboard" element={<Dashboard bills={bills} tx={tx} budgets={budgets} notifs={notifs} onOpenBudgets={() => navigate("/budgets")} />} />
-          <Route path="/categories" element={<ProjectList bills={bills} onOpen={(name) => navigate("/categories/" + encodeURIComponent(name))} />} />
+          <Route path="/dashboard" element={<DashboardScreen session={session} bills={bills} tx={tx} budgets={budgets} notifs={notifs} queue={queue} users={users} auditLog={auditLog} onNavigate={navigate} />} />
+          <Route path="/categories" element={<CategoryList bills={bills} onOpen={(name) => navigate("/categories/" + encodeURIComponent(name))} />} />
           <Route path="/categories/:name" element={<CategoryDetailRoute bills={bills} />} />
-          <Route path="/submit" element={<SubmissionForm addTx={addTx} />} />
+          <Route path="/submit" element={<LogEntryScreen addTx={addTx} />} />
           <Route path="/budgets" element={<BudgetsScreen budgets={budgets} tx={tx} addBudget={addBudget} editBudget={editBudget} deleteBudget={deleteBudget} />} />
           <Route path="/bills" element={<BillsScreen bills={bills} addBill={addBill} markPaid={markPaid} editBill={editBill} deleteBill={deleteBill} />} />
-          <Route path="/revisions" element={<VersionHistory tx={queue} />} />
-          <Route path="/review" element={<ReviewApproval tx={tx} queue={queue} session={session} reviewTx={reviewTx} resubmitTx={resubmitTx} editTx={editTx} deleteTx={deleteTx} />} />
-          <Route path="/notes" element={<CommentsScreen comments={comments} addComment={addComment} tx={queue} />} />
-          <Route path="/payments" element={<PaymentHistory bills={bills} />} />
+          <Route path="/revisions" element={<RevisionHistoryScreen tx={queue} />} />
+          <Route path="/review" element={<ReviewScreen tx={tx} queue={queue} session={session} reviewTx={reviewTx} resubmitTx={resubmitTx} editTx={editTx} deleteTx={deleteTx} />} />
+          <Route path="/notes" element={<NotesScreen comments={comments} addComment={addComment} tx={queue} />} />
+          <Route path="/payments" element={<PaymentHistoryScreen bills={bills} />} />
           <Route path="/notifications" element={<NotificationsScreen notifs={notifs} markRead={markNotifRead} markAllRead={markAllNotifsRead} />} />
           <Route path="/reports" element={<ReportsScreen tx={tx} bills={bills} budgets={budgets} />} />
           <Route path="/settings" element={<SettingsScreen session={session} updateProfile={updateProfile} changePassword={changePassword} theme={theme} setTheme={setTheme} />} />
@@ -435,10 +441,10 @@ function FinTrackStark() {
             <Route path="/audit" element={<AuditLogScreen auditLog={auditLog} />} />
           </Route>
           <Route element={<RequireRole session={session} path="/users" />}>
-            <Route path="/users" element={<UserManagement users={users} session={session} setUserRole={setUserRole} deleteUser={deleteUser} resetUserPassword={resetUserPassword} />} />
+            <Route path="/users" element={<UsersScreen users={users} session={session} setUserRole={setUserRole} deleteUser={deleteUser} resetUserPassword={resetUserPassword} />} />
           </Route>
 
-          <Route path="*" element={<NotFound onHome={() => navigate("/dashboard")} />} />
+          <Route path="*" element={<NotFoundScreen onHome={() => navigate("/dashboard")} />} />
         </Route>
 
         <Route path="*" element={<Navigate to="/" replace />} />
@@ -466,199 +472,4 @@ function FinTrackStark() {
 
 function readStorage(key) {
   try { return localStorage.getItem(key); } catch (e) { return null; }
-}
-
-// Shown over whatever screen was open when the server ended the session.
-function ReauthDialog({ email, onSubmit, onLogout }) {
-  const [password, setPassword] = useState("");
-  const [err, setErr] = useState("");
-  const [busy, setBusy] = useState(false);
-
-  async function submit(e) {
-    e.preventDefault();
-    if (!password) return;
-    setBusy(true);
-    setErr("");
-    const message = await onSubmit(password);
-    setBusy(false);
-    if (message) setErr(message);
-  }
-
-  return (
-    <div className="modal-overlay">
-      <div className="modal" role="dialog" aria-modal="true" aria-labelledby="reauth-title">
-        <h3 id="reauth-title">Your session has ended</h3>
-        <p style={{ fontSize: 12.5, color: "var(--text-dim)" }}>
-          For your security you were signed out. Enter your password to continue where you left off — anything you were typing is kept.
-        </p>
-        <form onSubmit={submit}>
-          <div className="form-row"><label className="field">Email</label><input value={email} disabled /></div>
-          <div className="form-row">
-            <label className="field" htmlFor="reauth-password">Password</label>
-            <input id="reauth-password" type="password" autoFocus autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} />
-          </div>
-          {err && <div className="form-msg error">{err}</div>}
-          <div className="actions">
-            <button type="button" className="btn ghost" onClick={onLogout}>Log out instead</button>
-            <button className="btn" type="submit" disabled={busy || !password}>{busy ? "Signing in…" : "Continue"}</button>
-          </div>
-        </form>
-      </div>
-    </div>
-  );
-}
-
-function ForcePasswordChange({ session, changePassword, logout }) {
-  const [pw, setPw] = useState({ current: "", next: "", confirm: "" });
-  const [err, setErr] = useState("");
-  const [busy, setBusy] = useState(false);
-
-  async function submit(e) {
-    e.preventDefault();
-    setErr("");
-    if (pw.next.length < 8) return setErr("New password must be at least 8 characters.");
-    if (pw.next !== pw.confirm) return setErr("The new passwords do not match.");
-    if (pw.next === pw.current) return setErr("Choose a password different from the temporary one.");
-    setBusy(true);
-    const message = await changePassword(pw.current, pw.next);
-    setBusy(false);
-    if (message) setErr(message);
-  }
-
-  return (
-    <div className="boot">
-      <div className="card" style={{ maxWidth: 420, width: "100%", textAlign: "left" }}>
-        <h3>Choose a new password</h3>
-        <p style={{ fontSize: 12.5, color: "var(--text-dim)" }}>
-          {session.name}, an administrator reset your password. Replace the temporary password with one only you know to continue.
-        </p>
-        <form onSubmit={submit}>
-          <div className="form-row"><label className="field">Temporary password</label><input type="password" autoComplete="current-password" value={pw.current} onChange={(e) => setPw({ ...pw, current: e.target.value })} required /></div>
-          <div className="form-row"><label className="field">New password</label><input type="password" autoComplete="new-password" value={pw.next} onChange={(e) => setPw({ ...pw, next: e.target.value })} required minLength={8} /><div className="hint">At least 8 characters.</div></div>
-          <div className="form-row"><label className="field">Confirm new password</label><input type="password" autoComplete="new-password" value={pw.confirm} onChange={(e) => setPw({ ...pw, confirm: e.target.value })} required /></div>
-          {err && <div className="form-msg error">{err}</div>}
-          <div className="actions">
-            <button type="button" className="btn ghost" onClick={logout}>Log out</button>
-            <button className="btn" type="submit" disabled={busy}>{busy ? "Saving…" : "Set Password"}</button>
-          </div>
-        </form>
-      </div>
-    </div>
-  );
-}
-
-// The signed-in frame: sidebar, top bar, and whichever screen the URL names.
-// On a narrow screen the sidebar becomes a drawer, because a fixed 220px menu
-// swallows more than half a phone's width and squeezes the content off-screen.
-function Shell({ session, logout, theme, setTheme, notifs, loadError }) {
-  const [menuOpen, setMenuOpen] = useState(false);
-  const { pathname } = useLocation();
-
-  // Close the drawer whenever the route changes, including on Back.
-  useEffect(() => { setMenuOpen(false); }, [pathname]);
-
-  return (
-    <div className="shell">
-      <Sidebar
-        session={session} logout={logout} theme={theme} setTheme={setTheme} notifs={notifs}
-        open={menuOpen} onNavigate={() => setMenuOpen(false)}
-      />
-      {menuOpen && <div className="side-backdrop" onClick={() => setMenuOpen(false)} />}
-      <div className="main">
-        <Topbar onOpenMenu={() => setMenuOpen(true)} />
-        <div className="content">
-          {loadError && (
-            <div className="card" style={{ marginBottom: 16, borderColor: "var(--danger)" }}>
-              <div style={{ color: "var(--danger)", fontSize: 13 }}>⚠ Could not load your latest data: {loadError}</div>
-            </div>
-          )}
-          {/* Keyed on the address, so a screen that crashed does not stay
-              broken after navigating somewhere else. */}
-          <ErrorBoundary key={pathname} inline>
-            <Outlet />
-          </ErrorBoundary>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// Without this, any rendering error blanked the whole app to a white page.
-class ErrorBoundary extends Component {
-  constructor(props) {
-    super(props);
-    this.state = { failed: false };
-  }
-  static getDerivedStateFromError() {
-    return { failed: true };
-  }
-  componentDidCatch(error) {
-    console.error("[ui] screen failed to render:", error);
-  }
-  render() {
-    if (!this.state.failed) return this.props.children;
-    const body = (
-      <div className="empty">
-        <div className="big">!</div>
-        Something went wrong showing this page.{" "}
-        <button className="linkbtn" onClick={() => window.location.assign("/dashboard")}>Go to the dashboard</button>
-      </div>
-    );
-    return this.props.inline ? <div className="card">{body}</div> : <div className="boot">{body}</div>;
-  }
-}
-
-function RequireAuth({ session, children }) {
-  if (!session) return <Navigate to="/" replace />;
-  return children;
-}
-
-// Server-side RBAC is the real control (every route checks the token's role);
-// this stops a restricted URL from rendering an empty screen if it is typed in
-// or arrives as a stale bookmark.
-function RequireRole({ session, path }) {
-  const allowed = PATH_ROLES[path];
-  if (allowed && !allowed.includes(session.role)) {
-    return <Restricted allowed={allowed} role={session.role} />;
-  }
-  return <Outlet />;
-}
-
-function Restricted({ allowed, role }) {
-  return (
-    <div className="card">
-      <div className="empty">
-        <div className="big">—</div>
-        Restricted — this page is for {allowed.join(" and ")} accounts. You are signed in as {role}.
-      </div>
-    </div>
-  );
-}
-
-function NotFound({ onHome }) {
-  return (
-    <div className="card">
-      <div className="empty">
-        <div className="big">404</div>
-        That page does not exist.{" "}
-        <button className="linkbtn" onClick={onHome}>Go to the dashboard</button>
-      </div>
-    </div>
-  );
-}
-
-// Reads the category out of the URL, so /categories/Housing is a real address
-// that can be bookmarked and shared. useParams has already decoded it; decoding
-// a second time turned a "%" in the name into a crash.
-function CategoryDetailRoute({ bills }) {
-  const { name } = useParams();
-  const navigate = useNavigate();
-  return (
-    <ProjectDetails
-      bills={bills}
-      category={name}
-      onBack={() => navigate("/categories")}
-      onPick={(next) => navigate("/categories/" + encodeURIComponent(next))}
-    />
-  );
 }

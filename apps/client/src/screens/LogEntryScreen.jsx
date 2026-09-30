@@ -1,10 +1,20 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useSearchParams } from "react-router-dom";
 import { todayISO } from "../lib/utils.js";
 
-const blank = () => ({ type: "Expense", category: "Food", amount: "", date: todayISO(), note: "" });
+const blank = (type = "Expense") => ({ type, category: type === "Income" ? "Salary" : "Food", amount: "", date: todayISO(), note: "" });
 
-export default function SubmissionForm({ addTx }) {
-  const [form, setForm] = useState(blank);
+// ?type=Income or ?type=Expense, as sent by the quick-add sheet.
+const typeFrom = (params) => (params.get("type") === "Income" ? "Income" : "Expense");
+
+export default function LogEntryScreen({ addTx }) {
+  const [params] = useSearchParams();
+  const [form, setForm] = useState(() => blank(typeFrom(params)));
+  // Picking the other type from quick add while already on this screen.
+  useEffect(() => {
+    const type = typeFrom(params);
+    setForm((f) => (f.type === type ? f : { ...f, type, category: blank(type).category }));
+  }, [params]);
   const [busy, setBusy] = useState(false);
 
   async function submit(e) {
@@ -16,7 +26,7 @@ export default function SubmissionForm({ addTx }) {
     setBusy(true);
     const ok = await addTx({ ...form, amount: Number(form.amount) });
     setBusy(false);
-    if (ok) setForm(blank());
+    if (ok) setForm(blank(form.type));
   }
   return (
     <div>

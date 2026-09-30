@@ -5,7 +5,7 @@ const ACTION_LABEL = { approve: "Approve", reject: "Reject", revise: "Request Re
 
 // `tx` is the signed-in person's own entries; `queue` is every submission a
 // Reviewer or Admin can act on (for a User it is the same as `tx`).
-export default function ReviewApproval({ tx, queue, session, reviewTx, resubmitTx, editTx, deleteTx }) {
+export default function ReviewScreen({ tx, queue, session, reviewTx, resubmitTx, editTx, deleteTx }) {
   const isReviewer = session.role === "Reviewer" || session.role === "Admin";
   const [target, setTarget] = useState(null); // {t, action}
   const [comment, setComment] = useState("");

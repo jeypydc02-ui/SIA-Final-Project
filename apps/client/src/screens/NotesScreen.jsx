@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { fmtDate, peso } from "../lib/utils.js";
 
-export default function CommentsScreen({ comments, addComment, tx = [] }) {
+export default function NotesScreen({ comments, addComment, tx = [] }) {
   const [text, setText] = useState("");
   const [filter, setFilter] = useState("all"); // all | notes | feedback
   const [busy, setBusy] = useState(false);
