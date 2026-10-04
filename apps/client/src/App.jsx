@@ -8,6 +8,7 @@ import Shell from "./components/Shell.jsx";
 import ErrorBoundary from "./components/ErrorBoundary.jsx";
 import ConfirmDialog from "./components/ConfirmDialog.jsx";
 import ReauthDialog from "./components/ReauthDialog.jsx";
+import InstallPrompt from "./components/InstallPrompt.jsx";
 import { RequireAuth, RequireRole } from "./components/RouteGuards.jsx";
 
 // Public pages
@@ -450,6 +451,7 @@ function FinTrackStark() {
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
 
+      <InstallPrompt />
       {toast && <div className="toast">{toast}</div>}
       {confirmDialog && (
         <ConfirmDialog

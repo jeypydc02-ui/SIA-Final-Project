@@ -1011,11 +1011,26 @@ input, select{border-radius:10px !important;}
   .desk-hero{padding:20px;}
 }
 
-/* Install suggestion inside the app */
-.install-banner{
-  display:flex; align-items:center; gap:12px; flex-wrap:wrap;
-  background:var(--accent-tint); border-radius:18px; padding:12px 16px; margin-bottom:16px;
+/* Install pop-up */
+.install-pop{
+  position:fixed; right:20px; bottom:20px; z-index:60; width:340px; max-width:calc(100vw - 32px);
+  background:var(--panel); border:1px solid var(--line); border-radius:22px; padding:18px 18px 16px;
+  box-shadow:0 18px 50px rgba(15,30,70,.22); animation:popIn .28s cubic-bezier(.2,.9,.3,1.1) both;
 }
-.install-text{flex:1; min-width:200px; display:flex; flex-direction:column; font-size:13px; color:var(--text-dim);}
-.install-text strong{color:var(--text); font-size:14px;}
-.install-banner .btn{display:inline-flex; align-items:center; gap:6px;}
+@keyframes popIn{from{opacity:0; transform:translateY(16px);} to{opacity:1; transform:none;}}
+.install-pop-x{position:absolute; top:10px; right:12px; background:none; border:none; font-size:22px; line-height:1; color:var(--text-dim); cursor:pointer;}
+.install-pop-head{display:flex; align-items:center; gap:12px;}
+.install-pop-head img{border-radius:12px;}
+.install-pop-title{font-size:16px; font-weight:800; color:var(--text);}
+.install-pop-sub{font-size:13px; color:var(--text-dim);}
+.install-pop-list{list-style:none; margin:14px 0; padding:0; display:grid; gap:6px; font-size:13.5px; color:var(--text);}
+.install-pop-list li{display:flex; align-items:center; gap:8px;}
+.install-pop-list svg{color:var(--ok);}
+.install-pop-actions{display:flex; gap:10px;}
+.install-pop-actions .pill{flex:1;}
+.install-pop-ios{font-size:13.5px; color:var(--text); line-height:1.6; display:flex; flex-direction:column; gap:10px;}
+@media(max-width:860px){
+  /* A sheet from the bottom on phones, above the tab bar when signed in. */
+  .install-pop{left:0; right:0; bottom:0; width:auto; max-width:none; border-radius:22px 22px 0 0; padding-bottom:calc(18px + env(safe-area-inset-bottom, 0px));}
+  .shell ~ .install-pop, body:has(.bottom-nav) .install-pop{bottom:calc(60px + env(safe-area-inset-bottom, 0px)); border-radius:22px;  left:8px; right:8px;}
+}
