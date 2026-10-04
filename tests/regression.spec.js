@@ -201,11 +201,11 @@ test.describe("Pre-launch audit regressions", () => {
     await expect(page.locator(".console-status")).toContainText("Admin Console");
     await expect(page.locator(".kpi", { hasText: "Accounts" })).toBeVisible();
     await expect(page.locator(".panel", { hasText: "Activity feed" })).toBeVisible();
-    await expect(page.locator(".hero")).toHaveCount(0);
+    await expect(page.locator(".wallet")).toHaveCount(0);
     // Their own money is one tab away, not mixed into the console.
     await page.locator(".segmented button", { hasText: "My Wallet" }).click();
     await expect(page).toHaveURL(/view=wallet/);
-    await expect(page.locator(".hero")).toContainText("Available Balance");
+    await expect(page.locator(".wallet")).toContainText("Balance");
 
     const reviewerPage = await page.context().newPage();
     const { reviewer } = accounts();
@@ -222,7 +222,7 @@ test.describe("Pre-launch audit regressions", () => {
     await userPage.addInitScript((t) => window.sessionStorage.setItem("fts_token", t), user.token);
     await userPage.goto("/dashboard");
     await userPage.waitForSelector(".shell");
-    await expect(userPage.locator(".hero")).toContainText("Available Balance");
+    await expect(userPage.locator(".wallet")).toContainText("Balance");
     await expect(userPage.locator(".desk-hero")).toHaveCount(0);
     await expect(userPage.locator(".segmented")).toHaveCount(0);
     await userPage.close();
@@ -412,5 +412,22 @@ test.describe("Pre-launch audit regressions", () => {
     });
     expect(cached.some((u) => u.startsWith("/api/"))).toBe(false);
     await context.close();
+  });
+
+  test("RT-22 the landing page explains the system and its links work", async ({ page }) => {
+    await page.goto("/");
+    const nav = page.locator(".lp-nav");
+    for (const [label, id] of [["Features", "features"], ["How it works", "how"], ["Roles", "roles"], ["Security", "security"], ["FAQ", "faq"]]) {
+      await expect(nav.getByRole("link", { name: label })).toHaveAttribute("href", "#" + id);
+      await expect(page.locator("section#" + id)).toBeVisible();
+    }
+    await nav.getByRole("link", { name: "FAQ" }).click();
+    await expect(page).toHaveURL(/#faq$/);
+    // Accordion: a closed answer opens on click.
+    await page.getByRole("button", { name: "Does it move real money?" }).click();
+    await expect(page.locator(".lp-faq-item.open")).toContainText("never connects to a bank");
+    // The calls to action lead into the app.
+    await page.locator(".lp-hero").getByRole("button", { name: "Create free account" }).click();
+    await expect(page).toHaveURL(/\/register$/);
   });
 });

@@ -1,13 +1,14 @@
 import { useState } from "react";
 import { peso, fmtDate, billStatus, thisMonthISO, todayISO } from "../../lib/utils.js";
 import Icon from "../../components/Icon.jsx";
-import CategoryIcon from "../../components/CategoryIcon.jsx";
+import CategoryIcon, { categoryTone } from "../../components/CategoryIcon.jsx";
 import DonutChart from "../../components/DonutChart.jsx";
 
 // The personal wallet: what a User sees first, and what staff open under
-// "My Wallet". Laid out like the finance apps people already know — balance
-// card and quick actions (GCash), spending ring (Monefy), money left per budget
-// (YNAB) — with lists instead of tables so it reads well on a phone.
+// "My Wallet". The summary card follows the familiar budgeting-app pattern —
+// month tabs, a spending ring with income and spending in the middle, the
+// balance, and big minus/plus buttons to log money out or in — followed by the
+// month's categories, bills, budgets and recent entries as lists.
 
 function readHidden() {
   try { return localStorage.getItem("fts_hide_balance") === "1"; } catch (e) { return false; }
@@ -27,71 +28,135 @@ function dueText(bill) {
   return `Due in ${n} days · ${fmtDate(bill.due)}`;
 }
 
+// "2026-10" shifted by n months.
+function shiftMonth(ym, n) {
+  const [y, m] = ym.split("-").map(Number);
+  return new Date(Date.UTC(y, m - 1 + n, 1)).toISOString().slice(0, 7);
+}
+const monthLabel = (ym) => new Date(ym + "-01T00:00:00Z").toLocaleDateString("en-PH", { month: "long", timeZone: "UTC" });
+
 export default function UserHome({ bills, tx, budgets, onNavigate }) {
   const [hidden, setHidden] = useState(readHidden);
+  const current = thisMonthISO();
+  const [month, setMonth] = useState(current);
+
   const toggleHidden = () => {
     setHidden((h) => {
       try { localStorage.setItem("fts_hide_balance", h ? "0" : "1"); } catch (e) { /* private mode */ }
       return !h;
     });
   };
-  const money = (n) => (hidden ? "₱ ••••••" : peso(n));
+  const money = (n) => (hidden ? "₱ ••••" : peso(n));
 
   const approved = tx.filter((t) => t.status === "Approved");
   const sum = (list, type) => list.filter((t) => t.type === type).reduce((s, t) => s + t.amount, 0);
   const balance = sum(approved, "Income") - sum(approved, "Expense");
-  const month = thisMonthISO();
   const monthApproved = approved.filter((t) => String(t.date).startsWith(month));
   const monthIncome = sum(monthApproved, "Income");
   const monthExpense = sum(monthApproved, "Expense");
   const pendingCount = tx.filter((t) => t.status === "Pending Review").length;
 
+  // Category totals for the chosen month: income first, then spending, largest first.
+  const totals = {};
+  monthApproved.forEach((t) => {
+    const key = t.type + "|" + t.category;
+    totals[key] = (totals[key] || 0) + t.amount;
+  });
+  const rows = Object.entries(totals)
+    .map(([key, value]) => { const [type, category] = key.split("|"); return { type, category, value }; })
+    .sort((a, b) => (a.type === b.type ? b.value - a.value : a.type === "Income" ? -1 : 1));
+  const slices = rows.filter((r) => r.type === "Expense").map((r) => ({ label: r.category, value: r.value }));
+
+  // Budgets are always about the month in progress, whatever month is shown above.
+  const thisMonthSpent = {};
+  approved.filter((t) => t.type === "Expense" && String(t.date).startsWith(current))
+    .forEach((t) => { thisMonthSpent[t.category] = (thisMonthSpent[t.category] || 0) + t.amount; });
+
   const unpaid = bills.filter((b) => !b.paid).sort((a, b) => a.due.localeCompare(b.due));
   const overdue = unpaid.filter((b) => billStatus(b.due, false) === "Overdue").length;
-
-  const byCategory = {};
-  monthApproved.filter((t) => t.type === "Expense").forEach((t) => { byCategory[t.category] = (byCategory[t.category] || 0) + t.amount; });
-  const slices = Object.entries(byCategory).map(([label, value]) => ({ label, value })).sort((a, b) => b.value - a.value);
-
   const recent = tx.slice(0, 6);
-  const monthName = new Date().toLocaleDateString("en-PH", { month: "long", timeZone: "Asia/Manila" });
 
   const QUICK = [
-    { label: "Expense", icon: "minus", to: "/submit?type=Expense" },
-    { label: "Income", icon: "plus", to: "/submit?type=Income" },
-    { label: "Pay Bills", icon: "receipt", to: "/bills" },
+    { label: "Pay bills", icon: "receipt", to: "/bills" },
     { label: "Budgets", icon: "pie", to: "/budgets" },
+    { label: "Reports", icon: "chart", to: "/reports" },
+    { label: "Payments", icon: "card", to: "/payments" },
   ];
 
   return (
     <div className="home">
       <div className="home-top">
-        <section className="hero">
-          <div className="hero-head">
-            <span>Available Balance</span>
-            <button type="button" className="hero-eye" onClick={toggleHidden} aria-label={hidden ? "Show balance" : "Hide balance"}>
+        <section className="wallet">
+          <div className="wallet-bar">
+            <span className="wallet-title"><Icon name="wallet" size={18} /> My Wallet</span>
+            <button type="button" className="wallet-eye" onClick={toggleHidden} aria-label={hidden ? "Show amounts" : "Hide amounts"}>
               <Icon name={hidden ? "eyeOff" : "eye"} size={18} />
             </button>
           </div>
-          <div className="hero-amount">{money(balance)}</div>
-          <div className="hero-sub">{pendingCount ? `${pendingCount} entr${pendingCount === 1 ? "y" : "ies"} waiting for review` : "All entries reviewed"}</div>
-          <div className="hero-month">
-            <div className="hero-month-income"><span>Income · {monthName}</span><strong className="amt">{money(monthIncome)}</strong></div>
-            <div className="hero-month-expense"><span>Spent · {monthName}</span><strong className="amt">{money(monthExpense)}</strong></div>
+
+          <div className="wallet-months" aria-label="Month">
+            <button type="button" onClick={() => setMonth(shiftMonth(month, -1))}>{monthLabel(shiftMonth(month, -1))}</button>
+            <button type="button" className="on" aria-current="true">{monthLabel(month)}</button>
+            <button type="button" disabled={month >= current} onClick={() => setMonth(shiftMonth(month, 1))}>
+              {monthLabel(shiftMonth(month, 1))}
+            </button>
+          </div>
+
+          <div className="wallet-ring">
+            <DonutChart
+              slices={slices} size={200} thickness={26}
+              centerTop={hidden ? "••••" : peso(monthIncome)}
+              centerBottom={hidden ? "••••" : `(${peso(monthExpense)})`}
+            />
+          </div>
+          <div className="wallet-legend-line">
+            <span className="wallet-income">Income <strong className="amt">{money(monthIncome)}</strong></span>
+            <span className="wallet-expense">Spent <strong className="amt">{money(monthExpense)}</strong></span>
+          </div>
+
+          <div className="wallet-balance-pill">Balance <strong className="wallet-balance">{money(balance)}</strong></div>
+          {pendingCount > 0 && <div className="wallet-pending">{pendingCount} entr{pendingCount === 1 ? "y" : "ies"} waiting for review — not counted yet</div>}
+
+          <div className="wallet-buttons">
+            <button type="button" className="round-btn minus" onClick={() => onNavigate("/submit?type=Expense")} aria-label="Log an expense">
+              <Icon name="minus" size={30} strokeWidth={2.4} />
+            </button>
+            <button type="button" className="round-btn plus" onClick={() => onNavigate("/submit?type=Income")} aria-label="Log income">
+              <Icon name="plus" size={30} strokeWidth={2.4} />
+            </button>
           </div>
         </section>
 
-        <section className="panel quick">
-          {QUICK.map((q) => (
-            <button key={q.label} type="button" className="quick-btn" onClick={() => onNavigate(q.to)}>
-              <span className="quick-circle"><Icon name={q.icon} size={22} /></span>
-              <span className="quick-label">{q.label}</span>
-            </button>
+        <section className="panel">
+          <div className="panel-head">
+            <h3>{monthLabel(month)} by category</h3>
+          </div>
+          {rows.map((r) => (
+            <div key={r.type + r.category} className="row static">
+              <CategoryIcon category={r.category} />
+              <span className="row-main">
+                <span className="row-title">{r.category}</span>
+                {r.type === "Expense" && monthExpense > 0 && (
+                  <span className="cat-bar"><span className={"cat-bar-fill fill-" + categoryTone(r.category)} style={{ width: Math.round((r.value / monthExpense) * 100) + "%" }} /></span>
+                )}
+                {r.type === "Income" && <span className="row-sub">Income</span>}
+              </span>
+              <span className={"row-amount " + (r.type === "Income" ? "pos" : "spent")}>{money(r.value)}</span>
+            </div>
           ))}
+          {rows.length === 0 && <div className="empty small">No approved income or spending in {monthLabel(month)}.</div>}
+          <div className="quick-strip">
+            {QUICK.map((q) => (
+              <button key={q.label} type="button" className="quick-btn" onClick={() => onNavigate(q.to)}>
+                <span className="quick-circle"><Icon name={q.icon} size={20} /></span>
+                <span className="quick-label">{q.label}</span>
+              </button>
+            ))}
+          </div>
         </section>
       </div>
 
-      <div className="home-grid">
+      <div className="home-grid three">
         <section className="panel">
           <div className="panel-head">
             <h3>Upcoming bills {overdue > 0 && <span className="chip danger">{overdue} overdue</span>}</h3>
@@ -115,31 +180,11 @@ export default function UserHome({ bills, tx, budgets, onNavigate }) {
 
         <section className="panel">
           <div className="panel-head">
-            <h3>Spending in {monthName}</h3>
-            <button className="linkbtn" onClick={() => onNavigate("/reports")}>Reports</button>
-          </div>
-          <div className="spend">
-            <DonutChart slices={slices} centerTop={hidden ? "••••" : peso(monthExpense)} centerBottom="spent" />
-            <div className="spend-legend">
-              {slices.slice(0, 6).map((s) => (
-                <div key={s.label} className="legend-row">
-                  <CategoryIcon category={s.label} size={26} />
-                  <span className="legend-name">{s.label}</span>
-                  <span className="legend-pct">{Math.round((s.value / monthExpense) * 100)}%</span>
-                </div>
-              ))}
-              {slices.length === 0 && <div className="empty small">No approved spending yet this month.</div>}
-            </div>
-          </div>
-        </section>
-
-        <section className="panel">
-          <div className="panel-head">
-            <h3>Budgets</h3>
+            <h3>Budgets · {monthLabel(current)}</h3>
             <button className="linkbtn" onClick={() => onNavigate("/budgets")}>Manage</button>
           </div>
           {budgets.map((b) => {
-            const spent = byCategory[b.category] || 0;
+            const spent = thisMonthSpent[b.category] || 0;
             const left = b.limit - spent;
             const pct = b.limit > 0 ? Math.min(100, Math.round((spent / b.limit) * 100)) : 0;
             return (
@@ -153,7 +198,7 @@ export default function UserHome({ bills, tx, budgets, onNavigate }) {
                     </span>
                   </div>
                   <div className="progress-track">
-                    <div className="progress-fill" style={{ width: pct + "%", background: pct >= 100 ? "var(--danger)" : pct >= 80 ? "var(--warn)" : "var(--ok)" }} />
+                    <div className="progress-fill" style={{ width: pct + "%", background: pct >= 100 ? "var(--danger)" : pct >= 80 ? "var(--warn)" : "var(--primary)" }} />
                   </div>
                   <div className="row-sub">{money(spent)} of {money(b.limit)}</div>
                 </div>
@@ -169,7 +214,7 @@ export default function UserHome({ bills, tx, budgets, onNavigate }) {
 
         <section className="panel">
           <div className="panel-head">
-            <h3>Recent activity</h3>
+            <h3>Recent entries</h3>
             <button className="linkbtn" onClick={() => onNavigate("/review")}>All entries</button>
           </div>
           {recent.map((t) => (
@@ -179,12 +224,12 @@ export default function UserHome({ bills, tx, budgets, onNavigate }) {
                 <span className="row-title">{t.note || t.category}</span>
                 <span className="row-sub">{fmtDate(t.date)} · <span className={"status-" + t.status.replace(/\s/g, "-").toLowerCase()}>{t.status}</span></span>
               </span>
-              <span className={"row-amount " + (t.status !== "Approved" ? "muted" : t.type === "Income" ? "pos" : "neg")} title={t.status !== "Approved" ? "Not counted in your balance" : undefined}>
+              <span className={"row-amount " + (t.status !== "Approved" ? "muted" : t.type === "Income" ? "pos" : "spent")} title={t.status !== "Approved" ? "Not counted in your balance" : undefined}>
                 {hidden ? "••••" : (t.type === "Income" ? "+" : "−") + peso(t.amount)}
               </span>
             </div>
           ))}
-          {recent.length === 0 && <div className="empty small">Nothing logged yet. Tap + to add your first entry.</div>}
+          {recent.length === 0 && <div className="empty small">Nothing logged yet. Tap − or + to add your first entry.</div>}
         </section>
       </div>
     </div>

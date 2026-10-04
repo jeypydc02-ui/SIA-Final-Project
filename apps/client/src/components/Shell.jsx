@@ -5,6 +5,7 @@ import Topbar from "./Topbar.jsx";
 import BottomNav from "./BottomNav.jsx";
 import QuickAdd from "./QuickAdd.jsx";
 import ErrorBoundary from "./ErrorBoundary.jsx";
+import InstallBanner from "./InstallBanner.jsx";
 
 // The signed-in frame: sidebar, top bar, and whichever screen the URL names.
 // On a narrow screen the sidebar becomes a drawer, because a fixed 220px menu
@@ -40,6 +41,7 @@ export default function Shell({ session, logout, theme, setTheme, notifs, queue,
       <div className="main">
         <Topbar onAdd={() => setAdding(true)} />
         <div className="content">
+          <InstallBanner />
           {loadError && (
             <div className="card" style={{ marginBottom: 16, borderColor: "var(--danger)" }}>
               <div style={{ color: "var(--danger)", fontSize: 13 }}>⚠ Could not load your latest data: {loadError}</div>
