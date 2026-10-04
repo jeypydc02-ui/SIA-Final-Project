@@ -198,17 +198,23 @@ test.describe("Pre-launch audit regressions", () => {
 
   test("RT-13 each role's dashboard leads with its own work", async ({ page }) => {
     await signIn(page, "admin");
-    await expect(page.locator(".card.stat", { hasText: "Accounts" })).toBeVisible();
-    await expect(page.locator(".card", { hasText: "Recent Activity" })).toBeVisible();
-    await expect(page.locator(".section-title")).toHaveText("My Finances");
+    await expect(page.locator(".console-status")).toContainText("Admin Console");
+    await expect(page.locator(".kpi", { hasText: "Accounts" })).toBeVisible();
+    await expect(page.locator(".panel", { hasText: "Activity feed" })).toBeVisible();
+    await expect(page.locator(".hero")).toHaveCount(0);
+    // Their own money is one tab away, not mixed into the console.
+    await page.locator(".segmented button", { hasText: "My Wallet" }).click();
+    await expect(page).toHaveURL(/view=wallet/);
+    await expect(page.locator(".hero")).toContainText("Available Balance");
 
     const reviewerPage = await page.context().newPage();
     const { reviewer } = accounts();
     await reviewerPage.addInitScript((t) => window.sessionStorage.setItem("fts_token", t), reviewer.token);
     await reviewerPage.goto("/dashboard");
     await reviewerPage.waitForSelector(".shell");
-    await expect(reviewerPage.locator(".card.stat", { hasText: "Awaiting Your Review" })).toBeVisible();
-    await expect(reviewerPage.locator(".card.stat", { hasText: "Accounts" })).toHaveCount(0);
+    await expect(reviewerPage.locator(".desk-hero")).toContainText("Review Desk");
+    await expect(reviewerPage.locator(".console-status")).toHaveCount(0);
+    await expect(reviewerPage.locator(".segmented button", { hasText: "My Wallet" })).toBeVisible();
     await reviewerPage.close();
 
     const userPage = await page.context().newPage();
@@ -216,9 +222,9 @@ test.describe("Pre-launch audit regressions", () => {
     await userPage.addInitScript((t) => window.sessionStorage.setItem("fts_token", t), user.token);
     await userPage.goto("/dashboard");
     await userPage.waitForSelector(".shell");
-    await expect(userPage.locator(".card.stat", { hasText: "Balance" })).toBeVisible();
-    await expect(userPage.locator(".card", { hasText: "Waiting for Review" })).toHaveCount(0);
-    await expect(userPage.locator(".section-title")).toHaveCount(0);
+    await expect(userPage.locator(".hero")).toContainText("Available Balance");
+    await expect(userPage.locator(".desk-hero")).toHaveCount(0);
+    await expect(userPage.locator(".segmented")).toHaveCount(0);
     await userPage.close();
   });
 
@@ -347,5 +353,64 @@ test.describe("Pre-launch audit regressions", () => {
     const row = page.locator(".card", { hasText: "Pending Review (" }).locator("tr", { hasText: "reviewer own entry ui" });
     await expect(row).toContainText("awaiting another reviewer");
     await expect(row.getByRole("button", { name: "Approve" })).toHaveCount(0);
+  });
+
+  test("RT-20 a reviewer can decide entries straight from the Review Desk", async ({ page }) => {
+    // The desk shows the six oldest entries first, so clear what earlier tests
+    // left waiting; this entry is then the next one up.
+    const { admin } = accounts();
+    const queue = await api("/api/transactions?scope=review", { token: admin.token });
+    for (const t of queue.data.filter((x) => x.status === "Pending Review" && x.submittedBy !== admin.user.id)) {
+      await api(`/api/transactions/${t._id}/review`, { method: "POST", token: admin.token, body: { action: "approve" } });
+    }
+    const person = await registerUser("deskflow");
+    const created = await api("/api/transactions", {
+      method: "POST", token: person.token, body: { type: "Expense", category: "Transport", amount: 4321.5, note: "desk inline approve" },
+    });
+    await signIn(page, "reviewer");
+    const card = page.locator(".review-card", { hasText: "desk inline approve" });
+    await expect(card).toContainText("Test Account");
+    await card.getByRole("button", { name: "Approve" }).click();
+    await expect(page.locator(".toast")).toContainText("Review recorded");
+    await expect(page.locator(".review-card", { hasText: "desk inline approve" })).toHaveCount(0);
+    const mine = await api("/api/transactions", { token: person.token });
+    expect(mine.data.find((t) => t._id === created.data._id).status).toBe("Approved");
+  });
+
+  test("RT-21 the app is installable and opens offline", async ({ browser, request }) => {
+    const manifest = await (await request.get("/manifest.webmanifest")).json();
+    expect(manifest.display).toBe("standalone");
+    expect(manifest.start_url).toBe("/dashboard");
+    expect(manifest.icons.some((i) => i.sizes === "512x512" && i.purpose === "maskable")).toBe(true);
+    for (const icon of manifest.icons) {
+      expect((await request.get(icon.src)).status(), icon.src).toBe(200);
+    }
+    const sw = await request.get("/sw.js");
+    expect(sw.status()).toBe(200);
+    expect(sw.headers()["cache-control"]).toBe("no-cache");
+
+    // Allow the worker for this test only (the suite blocks it by default).
+    const context = await browser.newContext({ serviceWorkers: "allow" });
+    const page = await context.newPage();
+    await page.goto("/");
+    await page.evaluate(() => navigator.serviceWorker.ready);
+    await page.reload(); // now controlled by the worker
+    expect(await page.evaluate(() => !!navigator.serviceWorker.controller)).toBe(true);
+
+    // With no connection the app shell still loads instead of the browser's error page.
+    await context.setOffline(true);
+    await page.reload();
+    await expect(page.locator("#root")).toContainText("FinTrack Stark");
+    await context.setOffline(false);
+
+    // Personal data is never cached by the worker.
+    const cached = await page.evaluate(async () => {
+      const keys = await caches.keys();
+      const urls = [];
+      for (const k of keys) for (const r of await (await caches.open(k)).keys()) urls.push(new URL(r.url).pathname);
+      return urls;
+    });
+    expect(cached.some((u) => u.startsWith("/api/"))).toBe(false);
+    await context.close();
   });
 });

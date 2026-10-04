@@ -3,26 +3,26 @@
 // address you can bookmark, share, or reload.
 export const NAV = [
   { group: "Overview", items: [
-    { path: "/dashboard", label: "Dashboard" },
+    { path: "/dashboard", label: "Dashboard", icon: "home" },
   ]},
   { group: "Finance Records", items: [
-    { path: "/categories", label: "Bill Categories" },
-    { path: "/submit", label: "Log Income/Expense" },
-    { path: "/budgets", label: "Budgets" },
+    { path: "/categories", label: "Bill Categories", icon: "grid" },
+    { path: "/submit", label: "Log Income/Expense", icon: "edit" },
+    { path: "/budgets", label: "Budgets", icon: "pie" },
   ]},
   { group: "Bills & Payments", items: [
-    { path: "/bills", label: "Bill Reminders" },
-    { path: "/revisions", label: "Revision History" },
-    { path: "/review", label: "Review & Approval" },
-    { path: "/notes", label: "Notes / Feedback" },
-    { path: "/payments", label: "Payment History" },
+    { path: "/bills", label: "Bill Reminders", icon: "receipt" },
+    { path: "/revisions", label: "Revision History", icon: "history" },
+    { path: "/review", label: "Review & Approval", icon: "check" },
+    { path: "/notes", label: "Notes / Feedback", icon: "message" },
+    { path: "/payments", label: "Payment History", icon: "card" },
   ]},
   { group: "System", items: [
-    { path: "/notifications", label: "Notification Log" },
-    { path: "/audit", label: "Audit Log", roles: ["Admin", "Reviewer"] },
-    { path: "/reports", label: "Reports" },
-    { path: "/users", label: "User & Role Mgmt", roles: ["Admin"] },
-    { path: "/settings", label: "Settings" },
+    { path: "/notifications", label: "Notification Log", icon: "bell" },
+    { path: "/audit", label: "Audit Log", icon: "shield", roles: ["Admin", "Reviewer"] },
+    { path: "/reports", label: "Reports", icon: "chart" },
+    { path: "/users", label: "User & Role Mgmt", icon: "users", roles: ["Admin"] },
+    { path: "/settings", label: "Settings", icon: "gear" },
   ]},
 ];
 

@@ -131,14 +131,15 @@ test.describe("Functional", () => {
   test("FT-07 (FR-009) the dashboard summarises balance, bills and budgets", async ({ page }) => {
     await signIn(page, "user");
 
-    const stats = page.locator(".card.stat");
-    await expect(stats.filter({ hasText: "Balance" })).toBeVisible();
-    await expect(stats.filter({ hasText: "Income This Month" })).toContainText("₱");
-    await expect(stats.filter({ hasText: "Expenses This Month" })).toContainText("₱");
-    await expect(stats.filter({ hasText: "Bills Pending" })).toBeVisible();
+    const hero = page.locator(".hero");
+    await expect(hero).toContainText("Available Balance");
+    await expect(hero.locator(".hero-amount")).toContainText("₱");
+    await expect(hero.locator(".hero-month-income")).toContainText("₱");
+    await expect(hero.locator(".hero-month-expense")).toContainText("₱");
 
-    await expect(page.locator(".card", { hasText: "Upcoming & Overdue Bills" })).toContainText("Condo Rent");
-    await expect(page.locator(".card", { hasText: "Food Budget" })).toBeVisible();
+    await expect(page.locator(".panel", { hasText: "Upcoming bills" })).toContainText("Condo Rent");
+    await expect(page.locator(".panel", { hasText: "Budgets" }).locator(".budget-row", { hasText: "Food" })).toBeVisible();
+    await expect(page.locator(".panel", { hasText: "Spending in" }).locator("svg.donut")).toBeVisible();
   });
 
   test("FT-09 every screen has its own address", async ({ page }) => {

@@ -23,6 +23,9 @@ module.exports = defineConfig({
     screenshot: "only-on-failure",
     video: "retain-on-failure",
     trace: "retain-on-failure",
+    // The app's service worker would cache pages between tests; each test
+    // must see the server's real responses. The PWA test opts back in.
+    serviceWorkers: "block",
   },
   projects: [
     { name: "chrome", use: { channel: "chrome", viewport: { width: 1440, height: 900 } } },

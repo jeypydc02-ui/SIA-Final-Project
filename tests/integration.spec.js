@@ -98,7 +98,7 @@ test.describe("Integration", () => {
     const { user, reviewer } = accounts();
 
     await signIn(page, "user");
-    const balanceBefore = await page.locator(".card.stat", { hasText: "Balance" }).locator(".value").innerText();
+    const balanceBefore = await page.locator(".hero-amount").innerText();
 
     const created = await api("/api/transactions", {
       method: "POST", token: user.token,
@@ -108,7 +108,7 @@ test.describe("Integration", () => {
     // Still pending: it must not count yet.
     await page.reload();
     await page.waitForSelector(".shell");
-    const balancePending = await page.locator(".card.stat", { hasText: "Balance" }).locator(".value").innerText();
+    const balancePending = await page.locator(".hero-amount").innerText();
     expect(balancePending).toBe(balanceBefore);
 
     await api(`/api/transactions/${created.data._id}/review`, {
@@ -117,7 +117,7 @@ test.describe("Integration", () => {
 
     await page.reload();
     await page.waitForSelector(".shell");
-    const balanceAfter = await page.locator(".card.stat", { hasText: "Balance" }).locator(".value").innerText();
+    const balanceAfter = await page.locator(".hero-amount").innerText();
     expect(balanceAfter).not.toBe(balanceBefore);
   });
 

@@ -10,13 +10,16 @@ Live: https://sia-final-project.onrender.com
 ```
 SIA/
 ├── apps/
-│   ├── client/                 React web app (Vite)
+│   ├── client/                 React web app (Vite), installable as a PWA
+│   │   ├── public/             manifest, service worker (sw.js), app icons
 │   │   └── src/
 │   │       ├── App.jsx         routes and app-wide state (session, data, actions)
 │   │       ├── components/     shared UI: Shell, Sidebar, Topbar, BottomNav,
 │   │       │                   QuickAdd, dialogs, route guards, error boundary
 │   │       ├── screens/        one file per page, named <Page>Screen.jsx
-│   │       └── lib/            api.js (fetch wrapper), nav.js (menu), utils.js (dates, money)
+│   │       │   └── dashboard/  UserHome, ReviewerDesk, AdminConsole
+│   │       └── lib/            api.js, nav.js (menu), utils.js (dates, money),
+│   │                           categories.js, pwa.js (install + service worker)
 │   │
 │   └── server/                 Express REST API
 │       ├── server.js           app setup, middleware, error handler
@@ -43,11 +46,15 @@ The reminder worker never calls the API; it reads and writes the same database.
 
 ## Roles
 
-| Role | Can do |
-|---|---|
-| User | own bills, budgets, income/expense entries, notes |
-| Reviewer | approve, reject or request revision on other people's entries; read the audit log |
-| Admin | everything a Reviewer can, plus manage accounts, roles and password resets |
+| Role | Dashboard | Can do |
+|---|---|---|
+| User | Home: balance, quick actions, bills, spending, budgets | own bills, budgets, income/expense entries, notes |
+| Reviewer | Review Desk: queue with approve / revise / reject (+ My Wallet tab) | review other people's entries; read the audit log |
+| Admin | Admin Console: system status, users, review pipeline, security (+ My Wallet tab) | everything a Reviewer can, plus manage accounts, roles and password resets |
+
+## Installing it as an app
+
+FinTrack Stark is a progressive web app. On Android or desktop Chrome/Edge, open the site and choose **Install app** (or **Settings → Install the App**). On iPhone, open it in Safari, tap **Share → Add to Home Screen**. The installed app opens in its own window and still opens without a connection; financial data is never cached on the device.
 
 ## Running it locally
 

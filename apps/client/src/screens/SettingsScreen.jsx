@@ -1,5 +1,6 @@
 import { useState } from "react";
 import ThemeToggle from "../components/ThemeToggle.jsx";
+import InstallCard from "../components/InstallCard.jsx";
 
 const ROLE_ACCESS = {
   Admin: "Manage users and roles, view all audit logs and reports, and administer system settings.",
@@ -129,6 +130,10 @@ export default function SettingsScreen({ session, updateProfile, changePassword,
             Roles are assigned by an administrator and cannot be changed here.
           </p>
         </div>
+      </div>
+
+      <div className="grid grid-2" style={{ marginTop: 16 }}>
+        <InstallCard />
       </div>
     </div>
   );

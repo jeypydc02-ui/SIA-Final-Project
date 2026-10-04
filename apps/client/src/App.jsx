@@ -423,7 +423,7 @@ function FinTrackStark() {
             </RequireAuth>
           }
         >
-          <Route path="/dashboard" element={<DashboardScreen session={session} bills={bills} tx={tx} budgets={budgets} notifs={notifs} queue={queue} users={users} auditLog={auditLog} onNavigate={navigate} />} />
+          <Route path="/dashboard" element={<DashboardScreen session={session} bills={bills} tx={tx} budgets={budgets} notifs={notifs} queue={queue} users={users} auditLog={auditLog} reviewTx={reviewTx} onNavigate={navigate} />} />
           <Route path="/categories" element={<CategoryList bills={bills} onOpen={(name) => navigate("/categories/" + encodeURIComponent(name))} />} />
           <Route path="/categories/:name" element={<CategoryDetailRoute bills={bills} />} />
           <Route path="/submit" element={<LogEntryScreen addTx={addTx} />} />

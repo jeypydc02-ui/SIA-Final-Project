@@ -71,8 +71,19 @@ async function main() {
   // so `npm start` alone still gives a single-URL demo after `npm run build`.
   const distDir = path.join(__dirname, "..", "client", "dist");
   if (fs.existsSync(distDir)) {
-    app.use(express.static(distDir));
+    // Built JS/CSS carry a content hash in their names, so browsers may keep
+    // them for a year. Everything else (the page, sw.js, the manifest) must
+    // be checked on every load, or an installed app would keep running an
+    // old version after a deploy.
+    app.use(express.static(distDir, {
+      setHeaders(res, filePath) {
+        res.setHeader("Cache-Control", /[\\/]assets[\\/]/.test(filePath)
+          ? "public, max-age=31536000, immutable"
+          : "no-cache");
+      },
+    }));
     app.get(/^(?!\/api).*/, (req, res) => {
+      res.setHeader("Cache-Control", "no-cache");
       res.sendFile(path.join(distDir, "index.html"));
     });
   } else {

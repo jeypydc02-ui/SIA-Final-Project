@@ -30,7 +30,7 @@ test("E2E-01 a new account's entry travels from submission to approval", async (
   await expect(member.locator(".shell")).toBeVisible();
   await expect(member.locator(".side-foot")).toContainText("Ella Santos");
   // A brand-new account is a plain User.
-  await expect(member.locator(".role-pill")).toContainText("User");
+  await expect(member.locator(".side-user-role")).toHaveText("User");
 
   // --- 2. A new account starts empty, and can set its own budget ---
   await member.locator(".nav-item", { hasText: "Budgets" }).click();
@@ -53,7 +53,7 @@ test("E2E-01 a new account's entry travels from submission to approval", async (
 
   // Nothing counts yet: the entry is pending.
   await member.locator(".nav-item", { hasText: "Dashboard" }).click();
-  await expect(member.locator(".card.stat", { hasText: "Expenses This Month" }).locator(".value")).toHaveText("₱0.00");
+  await expect(member.locator(".hero-month-expense .amt")).toHaveText("₱0.00");
 
   // --- 4. The reviewer sees it and asks for a revision ---
   const reviewerContext = await browser.newContext();
@@ -109,7 +109,7 @@ test("E2E-01 a new account's entry travels from submission to approval", async (
   await member.locator(".nav-item", { hasText: "Dashboard" }).click();
   await member.reload();
   await member.waitForSelector(".shell");
-  await expect(member.locator(".card.stat", { hasText: "Expenses This Month" }).locator(".value")).toHaveText("₱900.00");
+  await expect(member.locator(".hero-month-expense .amt")).toHaveText("₱900.00");
 
   await member.locator(".nav-item", { hasText: "Budgets" }).click();
   await expect(member.locator(".card", { hasText: "Food" }).first()).toContainText("₱900.00");

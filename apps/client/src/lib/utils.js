@@ -41,3 +41,7 @@ export function statusBadgeClass(s) {
 export function txStatusBadge(s) {
   return { "Approved": "ok", "Pending Review": "warn", "Rejected": "danger", "Needs Revision": "danger", "Superseded": "neutral" }[s] || "neutral";
 }
+
+// "John Paul Dela Cruz" -> "JP", for avatar circles.
+export const initials = (name = "") =>
+  String(name).split(" ").filter(Boolean).slice(0, 2).map((p) => p[0].toUpperCase()).join("") || "?";
