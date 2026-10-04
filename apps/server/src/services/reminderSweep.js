@@ -1,10 +1,15 @@
-const Bill = require("../../../apps/server/src/models/Bill");
-const Notification = require("../../../apps/server/src/models/Notification");
-const AuditLog = require("../../../apps/server/src/models/AuditLog");
-// Philippine calendar dates, shared with the API. The old UTC-based "today"
-// was a day behind until 8 AM Manila time, and the old horizon arithmetic
-// mixed local and UTC time, so the lead window came out a day short in UTC+8.
-const { todayISO, addDaysISO, daysBetweenISO } = require("../../../apps/server/src/utils/dates");
+const Bill = require("../models/Bill");
+const Notification = require("../models/Notification");
+const AuditLog = require("../models/AuditLog");
+// Philippine calendar dates, shared with the rest of the API.
+const { todayISO, addDaysISO, daysBetweenISO } = require("../utils/dates");
+
+// The bill reminder sweep. Two callers run it:
+//   - the stand-alone reminder worker (services/reminder), on its schedule;
+//   - the API itself (services/reminderScheduler.js), once a day when it is
+//     awake, for hosting where a separate worker is not available.
+// Both may run on the same day, even at the same moment; see the claim step
+// below for why that never produces a duplicate alert.
 
 // Matches the peso() formatting the interface uses, so a reminder reads the
 // same way as the amount shown on the bill.
@@ -47,7 +52,18 @@ async function runReminderSweep({ leadDays = 3, today = todayISO(), log = consol
     createdBy: { $ne: null },
   });
 
-  const toRemind = due.filter((b) => b.lastRemindedOn !== today);
+  // Claim each bill for today before alerting about it. Matching on
+  // lastRemindedOn inside the update means that if two sweeps run at once,
+  // exactly one of them wins each bill and only that one sends the alert.
+  const toRemind = [];
+  for (const bill of due) {
+    if (bill.lastRemindedOn === today) continue;
+    const claim = await Bill.updateOne(
+      { _id: bill._id, paid: false, lastRemindedOn: { $ne: today } },
+      { $set: { lastRemindedOn: today } }
+    );
+    if (claim.modifiedCount === 1) toRemind.push(bill);
+  }
 
   if (toRemind.length === 0) {
     log(`[reminder] ${today}: ${due.length} bill(s) in range, none need a new alert.`);
@@ -60,10 +76,6 @@ async function runReminderSweep({ leadDays = 3, today = todayISO(), log = consol
   });
 
   await Notification.insertMany(notifications);
-  await Bill.updateMany(
-    { _id: { $in: toRemind.map((b) => b._id) } },
-    { $set: { lastRemindedOn: today } }
-  );
 
   const overdue = notifications.filter((n) => n.type === "overdue").length;
   await AuditLog.create({
@@ -76,4 +88,4 @@ async function runReminderSweep({ leadDays = 3, today = todayISO(), log = consol
   return { scanned: due.length, notified: notifications.length, notifications };
 }
 
-module.exports = { runReminderSweep, todayISO };
+module.exports = { runReminderSweep };

@@ -1,6 +1,8 @@
 const { test, expect } = require("@playwright/test");
 const { api, accounts, signIn, gotoScreen, registerUser } = require("./helpers");
 const { todayISO, addDaysISO } = require("../apps/server/src/utils/dates");
+const { execFile } = require("child_process");
+const path = require("path");
 
 // Regression cases for the defects found in the pre-launch audit. Each one
 // reproduced a real failure before its fix; they stay so it cannot return.
@@ -429,5 +431,27 @@ test.describe("Pre-launch audit regressions", () => {
     // The calls to action lead into the app.
     await page.locator(".lp-hero").getByRole("button", { name: "Create free account" }).click();
     await expect(page).toHaveURL(/\/register$/);
+  });
+
+  test("RT-23 bill reminders run inside the API, and never twice", async () => {
+    // The API ran today's sweep itself, with no separate worker.
+    const health = await api("/api/health");
+    expect(health.data.reminders.lastSweep).toBe(todayISO());
+
+    // Two sweeps at the same moment (the worker and the API, or two
+    // workers) must still send a bill's alert exactly once.
+    const person = await registerUser("twosweeps");
+    await api("/api/bills", {
+      method: "POST", token: person.token,
+      body: { name: "Concurrent sweep bill", category: "Utilities", amount: 999, due: addDaysISO(todayISO(), -2) },
+    });
+    const sweep = () => new Promise((resolve, reject) =>
+      execFile("node", [path.join(__dirname, "..", "services", "reminder", "index.js"), "--once"],
+        { cwd: path.join(__dirname, "..") }, (err, out) => (err ? reject(err) : resolve(out))));
+    await Promise.all([sweep(), sweep(), sweep()]);
+    const notes = (await api("/api/notifications", { token: person.token })).data
+      .filter((n) => n.type !== "bill" && n.message.includes("Concurrent sweep bill"));
+    expect(notes).toHaveLength(1);
+    expect(notes[0].type).toBe("overdue");
   });
 });

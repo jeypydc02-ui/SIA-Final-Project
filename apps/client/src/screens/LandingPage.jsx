@@ -46,7 +46,7 @@ const FACTS = [
 const FAQ = [
   { q: "What is FinTrack Stark?", a: "A personal finance app for tracking bills, payments, income, expenses and monthly budgets, with a review step that checks entries before they count toward your balance." },
   { q: "Does it move real money?", a: "No. FinTrack Stark is a record-keeping tool. Marking a bill as paid records a payment you made elsewhere — it never connects to a bank or e-wallet." },
-  { q: "How do bill reminders work?", a: "A separate reminder service checks every unpaid bill each day and sends you an alert when one is due within three days or overdue. Monthly bills schedule next month's bill when you pay them." },
+  { q: "How do bill reminders work?", a: "Once a day, the reminder service checks every unpaid bill and sends an alert to your Inbox when one is due within three days or already overdue. Monthly bills schedule next month's bill when you pay them." },
   { q: "Who reviews my entries?", a: "A Reviewer or Admin approves, rejects or sends back each income and expense entry. Nobody can review their own entry, and you are notified of every decision." },
   { q: "Is my financial data safe?", a: "Passwords are hashed, sessions expire after eight hours, and other users cannot see your bills, budgets or notes. Read the Privacy Policy for the details." },
   { q: "Can I install it on my phone?", a: "Yes. On Android or Chrome, choose Install app. On iPhone, open it in Safari and tap Share, then Add to Home Screen. It opens like an app and still opens without a connection." },

@@ -42,7 +42,7 @@ SIA/
 ```
 
 How a request flows: `screens/*` call `lib/api.js` → `routes/*` → `controllers/*` → `models/*` (MongoDB).
-The reminder worker never calls the API; it reads and writes the same database.
+Bill reminders: once a day, every unpaid bill due within three days (or overdue) raises an alert in its owner's Inbox. The sweep (`apps/server/src/services/reminderSweep.js`) is run by the stand-alone worker in `services/reminder` on a schedule, and by the API itself on the first request of each day, for hosting where only one process runs. The worker never calls the API; both share the database, and each bill is claimed atomically so an alert is never sent twice.
 
 ## Roles
 

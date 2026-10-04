@@ -11,7 +11,8 @@ A checklist for putting the system on a real server. Everything here is required
 | `PORT` | Whatever the host assigns | Defaults to 4000. |
 | `TRUST_PROXY` | `1` **only** if a reverse proxy or platform load balancer sits in front (nginx, Render, Railway, Heroku and similar). Leave it unset if clients connect to Node directly. | The login rate limiter counts per client address. Trusting `X-Forwarded-For` with no proxy in front lets anyone fake a new address on every request. |
 | `APP_TIMEZONE` | Optional. Defaults to `Asia/Manila`. | Decides what "today" means for due dates, payments and reminders. |
-| `REMINDER_CRON`, `REMINDER_LEAD_DAYS` | Optional. Default `0 8 * * *` and `3`. | When the reminder worker runs, and how far ahead it looks. |
+| `REMINDER_CRON`, `REMINDER_LEAD_DAYS` | Optional. Default `0 8 * * *` and `3`. | When the separate reminder worker runs, and how far ahead reminders look. |
+| `REMINDERS_IN_API` | Optional. Leave unset. | The API runs the daily bill-reminder sweep itself (on start-up and on the first request of each day). Set to `0` only if a separate reminder worker runs instead. Running both is safe: no alert is ever sent twice. |
 
 Do **not** set `RATE_LIMIT_LOGIN_MAX` or `RATE_LIMIT_REGISTER_MAX` in production. They exist so the test suite can log in many times.
 
@@ -29,7 +30,7 @@ ADMIN_PASSWORD='at least 12 characters' \
 ADMIN_FIRST_NAME=Juan ADMIN_LAST_NAME='Dela Cruz' \
 npm run create-admin               # the first Admin; never run `npm run seed` in production
 npm start                          # API + built frontend on one port
-npm run reminder                   # the reminder worker, as a second long-running process
+npm run reminder                   # optional: the stand-alone reminder worker, if the host allows a second process
 ```
 
 Everyone else signs up through the app as a User. The Admin promotes Reviewers from User & Role Management.

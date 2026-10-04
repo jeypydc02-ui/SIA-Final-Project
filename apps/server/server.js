@@ -4,6 +4,7 @@ const express = require("express");
 const compression = require("compression");
 const { connectDB, mongoose } = require("./src/config/db");
 const { securityHeaders } = require("./src/middleware/securityHeaders");
+const { startInProcessReminders, reminderCheck, reminderStatus } = require("./src/services/reminderScheduler");
 
 const authRoutes = require("./src/routes/auth");
 const billRoutes = require("./src/routes/bills");
@@ -39,6 +40,14 @@ async function main() {
   // an unbounded parser is a free denial-of-service.
   app.use(express.json({ limit: "100kb" }));
 
+  // Daily bill reminders from inside the API (see reminderScheduler.js), for
+  // hosting with no separate worker. REMINDERS_IN_API=0 turns it off.
+  const remindersInApi = process.env.REMINDERS_IN_API !== "0";
+  if (remindersInApi) {
+    startInProcessReminders();
+    app.use(reminderCheck);
+  }
+
   // Unauthenticated liveness probe: used by the test runner to know the API is
   // up, and by the deployment evidence to show the service responding.
   app.get("/api/health", (req, res) => {
@@ -46,6 +55,8 @@ async function main() {
       status: "ok",
       service: "fintrack-stark-api",
       db: mongoose.connection.readyState === 1 ? "connected" : "disconnected",
+      // The PH date of the last reminder sweep run by this API process.
+      reminders: remindersInApi ? reminderStatus() : "off",
       time: new Date().toISOString(),
     });
   });

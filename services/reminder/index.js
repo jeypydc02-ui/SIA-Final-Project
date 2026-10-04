@@ -1,6 +1,8 @@
 const cron = require("node-cron");
 const { connectDB, mongoose } = require("../../apps/server/src/config/db");
-const { runReminderSweep } = require("./src/reminderJob");
+// The sweep itself lives with the API's other services, so the worker and the
+// API's own daily check run exactly the same code.
+const { runReminderSweep } = require("../../apps/server/src/services/reminderSweep");
 
 // FinTrack Stark Reminder Service.
 //
