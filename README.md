@@ -3,7 +3,7 @@
 Personal Finance, Bill Reminder, and Payment Tracking Integration System.
 SIA capstone project of Group Project Stark.
 
-Live: https://sia-final-project.onrender.com
+Live: https://finstrack-stark.onrender.com
 
 ## Folder structure
 
