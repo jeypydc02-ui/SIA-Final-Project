@@ -122,9 +122,10 @@ test.describe("Functional", () => {
     await gotoScreen(page, "Notes / Feedback");
 
     await page.locator(".tab", { hasText: "On Entries" }).click();
-    await expect(page.locator(".card").last()).toContainText("Shared with my sister, she owes half.");
+    const card = page.locator(".note-card", { hasText: "Shared with my sister, she owes half." });
+    await expect(card).toBeVisible();
     // The note names the entry it belongs to rather than floating loose.
-    await expect(page.locator(".card").last()).toContainText("₱210.00");
+    await expect(card).toContainText("₱210.00");
   });
 
   test("FT-07 (FR-009) the dashboard summarises balance, bills and budgets", async ({ page }) => {

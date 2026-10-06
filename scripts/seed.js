@@ -137,7 +137,21 @@ async function seed() {
   await Comment.create({
     transactionId: originalEntry._id,
     author: jp.name, authorId: jp._id,
+    title: "Airport transfer fix",
     text: "Typed 2,400 by mistake — the receipt says 1,650.",
+  });
+  await Comment.create({
+    author: jp.name, authorId: jp._id,
+    title: "Ipon goal for December",
+    text: [
+      "Set aside ₱3,000 every payday.",
+      "",
+      "- Christmas gifts: ₱5,000",
+      "- Noche Buena: ₱4,000",
+      "- Emergency fund top-up: ₱3,000",
+      "",
+      "Check the Food budget mid-month — it went over last time.",
+    ].join("\n"),
   });
 
   // Bill reminders are deliberately NOT seeded: the reminder service raises

@@ -445,8 +445,15 @@ test.describe("Pre-launch audit regressions", () => {
         firstName: "Old", lastName: "Reviewer", name: "Old Reviewer", email: `oldreviewer${Date.now()}@example.test`,
         passwordHash: "x", role: "Reviewer",
       });
+      const Notification = require("../apps/server/src/models/Notification");
+      const queueAlert = await Notification.collection.insertOne({
+        user: new mongoose.Types.ObjectId(user.user.id), type: "submission", read: false, ts: new Date(),
+        message: "Someone submitted an income of 300 for review.",
+      });
       await runMigrations(() => {});
       expect((await Transaction.collection.findOne({ _id: pending.insertedId })).status).toBe("Approved");
+      // An alert asking someone to review a queue that no longer exists is removed.
+      expect(await Notification.collection.findOne({ _id: queueAlert.insertedId })).toBeNull();
       expect((await User.collection.findOne({ _id: reviewer.insertedId })).role).toBe("User");
       // Running it again changes nothing.
       await runMigrations(() => {});
@@ -482,5 +489,78 @@ test.describe("Pre-launch audit regressions", () => {
     await expect(page.locator("table")).toContainText("My own new bill");
     await page.waitForTimeout(1500);
     await expect(page.locator(".toast.notice")).toHaveCount(0);
+  });
+
+  test("RT-27 notes have a title and open in full, like notes on a phone", async ({ page }) => {
+    await signIn(page, "user");
+    await gotoScreen(page, "Notes / Feedback");
+    await page.getByRole("button", { name: "+ New Note" }).click();
+    await page.getByLabel("Title").fill("Grocery plan");
+    const body = "Line one: rice and eggs\nLine two: vegetables\nLine three: coffee\nLine four: soap\nLine five: the last line";
+    await page.getByLabel("Note", { exact: true }).fill(body);
+    await page.getByRole("button", { name: "Save Note" }).click();
+    await expect(page.locator(".toast")).toContainText("Note saved");
+
+    // The list shows the title and a short preview, not the whole note.
+    const card = page.locator(".note-card", { hasText: "Grocery plan" });
+    await expect(card.locator(".note-title")).toHaveText("Grocery plan");
+    // Tapping it opens the whole note.
+    await card.click();
+    const view = page.locator(".note-view");
+    await expect(view.locator(".note-view-title")).toHaveText("Grocery plan");
+    await expect(view.locator(".note-view-text")).toContainText("Line one: rice and eggs");
+    await expect(view.locator(".note-view-text")).toContainText("Line five: the last line");
+
+    // Edit it in place.
+    await view.getByRole("button", { name: "Edit" }).click();
+    await page.getByLabel("Title").fill("Grocery plan (Sat)");
+    await page.getByRole("button", { name: "Save Note" }).click();
+    await expect(page.locator(".note-view .note-view-title")).toHaveText("Grocery plan (Sat)");
+    await expect(page.locator(".note-view")).toContainText("edited");
+
+    // Search finds it; delete removes it.
+    await page.getByRole("button", { name: "Back to notes" }).click();
+    await page.getByLabel("Search notes").fill("vegetables");
+    await expect(page.locator(".note-card")).toHaveCount(1);
+    await page.locator(".note-card").click();
+    await page.locator(".note-view").getByRole("button", { name: "Delete" }).click();
+    await page.getByRole("button", { name: "Delete Note" }).click();
+    await expect(page.locator(".toast")).toContainText("Note deleted");
+    await expect(page.locator(".note-card", { hasText: "Grocery plan" })).toHaveCount(0);
+  });
+
+  test("RT-28 a note can only be changed by the person who wrote it", async () => {
+    const { user, other } = accounts();
+    const note = await api("/api/comments", { method: "POST", token: user.token, body: { title: "Mine", text: "private" } });
+    expect(note.status).toBe(201);
+    expect(note.data.title).toBe("Mine");
+    expect((await api(`/api/comments/${note.data._id}`, { method: "PUT", token: other.token, body: { text: "hijacked" } })).status).toBe(403);
+    expect((await api(`/api/comments/${note.data._id}`, { method: "PUT", token: user.token, body: { text: "  " } })).status).toBe(400);
+    expect((await api(`/api/comments/${note.data._id}`, { method: "PUT", token: user.token, body: { title: ["x"], text: "ok" } })).status).toBe(400);
+    const edited = await api(`/api/comments/${note.data._id}`, { method: "PUT", token: user.token, body: { title: "Mine v2", text: "still private" } });
+    expect(edited.status).toBe(200);
+    expect(edited.data.editedAt).toBeTruthy();
+    const theirs = await api("/api/comments", { token: other.token });
+    expect(theirs.data.some((c) => c._id === note.data._id)).toBe(false);
+  });
+
+  test("RT-29 the Notification Log reads like a message list", async ({ page }) => {
+    const { user } = accounts();
+    await api("/api/bills", {
+      method: "POST", token: user.token,
+      body: { name: "Inbox Layout Bill", category: "Utilities", amount: 99, due: "2026-12-22" },
+    });
+    await signIn(page, "user");
+    await page.goto("/notifications");
+    const item = page.locator(".inbox-item", { hasText: "Inbox Layout Bill" });
+    // A plain sender line, not a bracketed type code.
+    await expect(item.locator(".inbox-title")).toHaveText("Bill added");
+    await expect(page.locator(".inbox")).not.toContainText("[bill]");
+    await expect(item).toHaveClass(/unread/);
+    // Tapping it marks it read and opens what it is about.
+    await item.click();
+    await expect(page).toHaveURL(/\/bills$/);
+    const inbox = await api("/api/notifications", { token: user.token });
+    expect(inbox.data.find((n) => n.message.includes("Inbox Layout Bill")).read).toBe(true);
   });
 });

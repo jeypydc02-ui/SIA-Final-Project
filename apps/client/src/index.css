@@ -1063,3 +1063,54 @@ input, select{border-radius:10px !important;}
   display:flex; align-items:center; justify-content:center; cursor:pointer;
 }
 .password-toggle:hover{color:var(--primary); background:var(--surface-hover);}
+
+/* Notification Log, laid out like a phone's message list */
+.inbox-group{margin-bottom:18px;}
+.inbox-day{font-size:12px; font-weight:600; color:var(--text-dim); text-transform:uppercase; letter-spacing:.04em; margin:0 0 8px 4px;}
+.inbox{background:var(--panel); border:1px solid var(--line); border-radius:16px; overflow:hidden;}
+.inbox-item{display:flex; align-items:flex-start; gap:12px; width:100%; padding:12px 14px; background:none; border:0; border-bottom:1px solid var(--line); text-align:left; font:inherit; color:inherit; cursor:pointer;}
+.inbox-item:last-child{border-bottom:0;}
+.inbox-item:hover{background:var(--row-hover);}
+.inbox-icon{flex:none; width:42px; height:42px; border-radius:50%; background:var(--accent-tint); color:var(--primary); display:flex; align-items:center; justify-content:center;}
+.inbox-icon.ok{background:var(--tint-ok); color:var(--ok);}
+.inbox-icon.warn{background:var(--tint-warn); color:var(--warn);}
+.inbox-icon.danger{background:var(--tint-danger); color:var(--danger);}
+.inbox-body{flex:1; min-width:0; display:flex; flex-direction:column; gap:2px;}
+.inbox-top{display:flex; align-items:baseline; gap:8px;}
+.inbox-title{flex:1; font-size:14px; font-weight:500; color:var(--text);}
+.inbox-time{flex:none; font-size:12px; color:var(--text-dim);}
+.inbox-text{font-size:13px; color:var(--text-dim); line-height:1.4;}
+.inbox-item.unread .inbox-title{font-weight:700;}
+.inbox-item.unread .inbox-text{color:var(--text);}
+.inbox-item.unread .inbox-time{color:var(--primary); font-weight:600;}
+.inbox-item .unread-dot{align-self:center; flex:none; margin:0; width:9px; height:9px;}
+
+/* Notes, like a phone's notes app */
+.notes-tools{display:flex; align-items:center; gap:12px; flex-wrap:wrap; margin-bottom:16px;}
+.notes-tools .tabrow{margin:0;}
+.notes-search{flex:1; min-width:180px; max-width:320px; margin-left:auto;}
+.notes-grid{display:grid; grid-template-columns:repeat(auto-fill, minmax(220px, 1fr)); gap:12px;}
+.note-card{display:flex; flex-direction:column; gap:6px; min-height:120px; padding:14px 16px; background:var(--panel); border:1px solid var(--line); border-radius:16px; text-align:left; font:inherit; color:inherit; cursor:pointer;}
+.note-card:hover{border-color:var(--accent-tint-border);}
+.note-title{font-size:15px; font-weight:700; color:var(--text); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+.note-preview{font-size:13px; color:var(--text-dim); line-height:1.45; white-space:pre-line; display:-webkit-box; -webkit-line-clamp:4; -webkit-box-orient:vertical; overflow:hidden;}
+.note-meta{margin-top:auto; font-size:11.5px; color:var(--text-dim); display:flex; align-items:center; flex-wrap:wrap; gap:4px;}
+.note-meta .chip{margin-left:0;}
+.note-view, .note-edit{width:560px; max-height:88vh; overflow:auto;}
+.note-view-head{display:flex; align-items:center; justify-content:space-between; margin-bottom:12px;}
+.note-back{display:inline-flex; align-items:center; gap:4px; background:none; border:0; padding:4px 0; font:inherit; font-size:14px; color:var(--primary); cursor:pointer;}
+.note-view-actions{display:flex; gap:8px;}
+.flip{transform:rotate(180deg);}
+.modal h3.note-view-title{font-size:20px; margin:0 0 4px; overflow-wrap:anywhere;}
+.note-view-meta{font-size:12px; color:var(--text-dim); margin-bottom:16px;}
+.note-view-text{font-size:14.5px; line-height:1.6; color:var(--text); white-space:pre-wrap; overflow-wrap:anywhere;}
+.note-title-input{font-size:17px; font-weight:700; border:0 !important; border-bottom:1px solid var(--line) !important; border-radius:0 !important; padding:8px 2px; width:100%; background:transparent; color:var(--text);}
+.note-title-input:focus{outline:none; border-bottom-color:var(--primary) !important;}
+.note-text-input{width:100%; min-height:220px; margin:10px 0 14px; padding:10px 2px; border:0; resize:vertical; background:transparent; color:var(--text); font:inherit; font-size:14.5px; line-height:1.6;}
+.note-text-input:focus{outline:none;}
+@media(max-width:600px){
+  .notes-search{max-width:none; margin-left:0;}
+  .notes-grid{grid-template-columns:1fr 1fr; gap:10px;}
+  .note-card{min-height:110px; padding:12px;}
+  .note-view, .note-edit{max-height:calc(100vh - 32px);}
+}

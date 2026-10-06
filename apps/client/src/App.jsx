@@ -189,7 +189,9 @@ function FinTrackStark() {
     if (!before) return; // first load: nothing is "new"
     const fresh = list.filter((n) => !n.read && !before.has(n._id));
     if (!fresh.length || Date.now() - lastOwnAction.current < 4000) return;
-    setToast({ kind: "notice", text: fresh.length === 1 ? fresh[0].message : `${fresh.length} new notifications` });
+    setToast(fresh.length === 1
+      ? { kind: "notice", type: fresh[0].type, text: fresh[0].message }
+      : { kind: "notice", text: `${fresh.length} new notifications` });
   }
 
   // Every write goes through here. It resolves to true as soon as the server
@@ -326,7 +328,15 @@ function FinTrackStark() {
       await perform(() => api("/api/transactions/" + entry._id, { method: "DELETE" }), "Entry deleted.");
     }, "Delete Entry");
   }
-  const addComment = (text) => perform(() => api("/api/comments", { method: "POST", body: { text } }), "Note posted.");
+  // ---- Notes ----
+  const addNote = (note) => perform(() => api("/api/comments", { method: "POST", body: note }), "Note saved.");
+  const editNote = (id, note) => perform(() => api("/api/comments/" + id, { method: "PUT", body: note }), "Note updated.");
+  function deleteNote(note) {
+    askConfirm(`Delete the note "${note.title || note.text.split("\n")[0].slice(0, 40)}"?`, async () => {
+      setConfirmDialog(null);
+      await perform(() => api("/api/comments/" + note._id, { method: "DELETE" }), "Note deleted.");
+    }, "Delete Note");
+  }
 
   // ---- Budgets ----
   const addBudget = (b) => perform(() => api("/api/budgets", { method: "POST", body: b }), `Budget for ${b.category} set.`);
@@ -480,9 +490,9 @@ function FinTrackStark() {
           <Route path="/entries" element={<EntriesScreen tx={tx} editTx={editTx} deleteTx={deleteTx} onNavigate={navigate} />} />
           {/* Old address of the former review screen, kept for bookmarks. */}
           <Route path="/review" element={<Navigate to="/entries" replace />} />
-          <Route path="/notes" element={<NotesScreen comments={comments} addComment={addComment} tx={tx} />} />
+          <Route path="/notes" element={<NotesScreen comments={comments} addNote={addNote} editNote={editNote} deleteNote={deleteNote} tx={tx} me={session?.id} />} />
           <Route path="/payments" element={<PaymentHistoryScreen bills={bills} />} />
-          <Route path="/notifications" element={<NotificationsScreen notifs={notifs} markRead={markNotifRead} markAllRead={markAllNotifsRead} />} />
+          <Route path="/notifications" element={<NotificationsScreen notifs={notifs} markRead={markNotifRead} markAllRead={markAllNotifsRead} onNavigate={navigate} />} />
           <Route path="/reports" element={<ReportsScreen tx={tx} bills={bills} budgets={budgets} />} />
           <Route path="/settings" element={<SettingsScreen session={session} updateProfile={updateProfile} changePassword={changePassword} theme={theme} setTheme={setTheme} />} />
 

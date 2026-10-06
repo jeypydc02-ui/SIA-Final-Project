@@ -143,7 +143,7 @@ export default function UserHome({ bills, tx, budgets, onNavigate }) {
               <span className={"row-amount " + (r.type === "Income" ? "pos" : "spent")}>{money(r.value)}</span>
             </div>
           ))}
-          {rows.length === 0 && <div className="empty small">No approved income or spending in {monthLabel(month)}.</div>}
+          {rows.length === 0 && <div className="empty small">No income or spending recorded in {monthLabel(month)}.</div>}
           <div className="quick-strip">
             {QUICK.map((q) => (
               <button key={q.label} type="button" className="quick-btn" onClick={() => onNavigate(q.to)}>

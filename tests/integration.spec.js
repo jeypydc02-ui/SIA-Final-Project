@@ -194,7 +194,7 @@ test.describe("Integration", () => {
     await page.addInitScript((t) => window.sessionStorage.setItem("fts_token", t), owner.token);
     await page.goto("/notifications");
     await page.waitForSelector(".shell");
-    const log = page.locator(".card").last();
+    const log = page.locator(".inbox").first();
     await expect(log).toContainText("Scheduled Sweep Overdue");
     await expect(log).toContainText("overdue by 1 day");
   });

@@ -163,7 +163,7 @@ export default function BillsScreen({ bills, addBill, markPaid, editBill, delete
           <div className="modal" onClick={e => e.stopPropagation()}>
             <h3>Mark "{payTarget.name}" as Paid</h3>
             <p style={{ fontSize: 12.5, color: "var(--text-dim)" }}>
-              <span className="flow-badge">integration</span> &nbsp;This will log an approved expense entry, generate a notification, and write an audit log entry automatically.
+              <span className="flow-badge">integration</span> &nbsp;This will record an expense entry, generate a notification, and write an audit log entry automatically.
               {payTarget.repeat === "monthly" && " Next month's bill will be added for you."}
             </p>
             <div className="form-row">

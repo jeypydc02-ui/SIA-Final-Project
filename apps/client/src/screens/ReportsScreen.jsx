@@ -18,7 +18,7 @@ export default function ReportsScreen({ tx, bills, budgets }) {
 
   return (
     <div>
-      <div className="pagehead"><div><h2>Reports</h2><div className="desc">Summarized spending and bill-payment performance (approved entries only).</div></div></div>
+      <div className="pagehead"><div><h2>Reports</h2><div className="desc">Summarized spending and bill-payment performance (current entries only — earlier versions and deleted entries are left out).</div></div></div>
       <div className="grid grid-2">
         <div className="card">
           <h3>Expenses by Category <span style={{ fontWeight: 400, color: "var(--text-dim)" }}>· all time</span></h3>
@@ -30,7 +30,7 @@ export default function ReportsScreen({ tx, bills, budgets }) {
               <div className="progress-track"><div className="progress-fill" style={{ width: (amt / max * 100) + "%" }}></div></div>
             </div>
           ))}
-          {Object.keys(byCat).length === 0 && <div className="empty">No approved expenses yet.</div>}
+          {Object.keys(byCat).length === 0 && <div className="empty">No expenses recorded yet.</div>}
         </div>
         <div className="card">
           <h3>Bill Payment Summary</h3>

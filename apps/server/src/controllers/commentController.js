@@ -1,6 +1,6 @@
 const Comment = require("../models/Comment");
 const Transaction = require("../models/Transaction");
-const { isNonEmptyString } = require("../utils/validate");
+const { isNonEmptyString, isString } = require("../utils/validate");
 const { publish } = require("../services/events");
 
 // Two kinds of comment live in this collection, both private to the person
@@ -27,10 +27,19 @@ async function list(req, res) {
   res.json(comments);
 }
 
+// Title is optional; the body is what makes it a note.
+function noteProblem(title, text) {
+  if (title !== undefined && title !== null && !isString(title)) return "The title must be text.";
+  if (!isNonEmptyString(text)) return "Write something in the note first.";
+  return null;
+}
+
 async function create(req, res) {
-  const { text, transactionId } = req.body || {};
-  if (!isNonEmptyString(text)) {
-    return res.status(400).json({ error: "Comment text is required." });
+  const { title, text, transactionId } = req.body || {};
+  const problem = noteProblem(title, text);
+  if (problem) return res.status(400).json({ error: problem });
+  if (transactionId !== undefined && transactionId !== null && transactionId !== "" && typeof transactionId !== "string") {
+    return res.status(400).json({ error: "That record id is not valid." });
   }
 
   // You may only attach a comment to an entry you can actually see.
@@ -45,11 +54,29 @@ async function create(req, res) {
   const comment = await Comment.create({
     author: req.user.name,
     authorId: req.user.id,
+    title: (title || "").trim(),
     text: text.trim(),
     transactionId: transactionId || null,
   });
   publish(req.user.id, "comments");
   res.status(201).json(comment);
+}
+
+async function update(req, res) {
+  const { title, text } = req.body || {};
+  const problem = noteProblem(title, text);
+  if (problem) return res.status(400).json({ error: problem });
+  const comment = await Comment.findById(req.params.id);
+  if (!comment) return res.status(404).json({ error: "Note not found." });
+  if (String(comment.authorId) !== req.user.id) {
+    return res.status(403).json({ error: "You can only edit your own notes." });
+  }
+  comment.title = (title || "").trim();
+  comment.text = text.trim();
+  comment.editedAt = new Date();
+  await comment.save();
+  publish(req.user.id, "comments");
+  res.json(comment);
 }
 
 async function remove(req, res) {
@@ -63,4 +90,4 @@ async function remove(req, res) {
   res.json({ ok: true });
 }
 
-module.exports = { list, create, remove, visibilityFilter };
+module.exports = { list, create, update, remove, visibilityFilter };

@@ -51,7 +51,7 @@ export default function BudgetsScreen({ budgets, tx, addBudget, editBudget, dele
       <div className="pagehead">
         <div>
           <h2>Budgets</h2>
-          <div className="desc">Set a monthly limit per category. This month's approved expenses are counted against it.</div>
+          <div className="desc">Set a monthly limit per category. This month's recorded expenses are counted against it.</div>
         </div>
         <button className="btn" onClick={() => { setForm({ category: available[0] || "Other", limit: "" }); setShowAdd(true); }}>
           + Add Budget

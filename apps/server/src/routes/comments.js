@@ -7,6 +7,7 @@ const router = express.Router();
 
 router.get("/", requireAuth, commentController.list);
 router.post("/", requireAuth, commentController.create);
+router.put("/:id", requireAuth, commentController.update);
 router.delete("/:id", requireAuth, commentController.remove);
 
 module.exports = router;
