@@ -2,6 +2,7 @@ const Budget = require("../models/Budget");
 const { logAction } = require("../services/audit");
 const { publish } = require("../services/events");
 const { EXPENSE_CATEGORIES } = require("../utils/categories");
+const { isString, parseAmount } = require("../utils/validate");
 
 // Budgets limit spending, so only expense categories can have one.
 const notBudgetable = (name) => !EXPENSE_CATEGORIES.includes(name);
@@ -16,10 +17,10 @@ async function list(req, res) {
 
 async function create(req, res) {
   const { category, limit } = req.body || {};
-  if (!category || !String(category).trim()) {
+  if (!isString(category) || !category.trim()) {
     return res.status(400).json({ error: "Category is required." });
   }
-  if (limit === undefined || limit === null || isNaN(Number(limit)) || Number(limit) <= 0) {
+  if (limit === undefined || limit === null || limit === "" || parseAmount(limit) === null) {
     return res.status(400).json({ error: "Limit must be a number greater than zero." });
   }
   const name = String(category).trim();
@@ -28,7 +29,7 @@ async function create(req, res) {
   if (existing) {
     return res.status(409).json({ error: `You already have a budget for "${name}".` });
   }
-  const budget = await Budget.create({ user: req.user.id, category: name, limit: Number(limit) });
+  const budget = await Budget.create({ user: req.user.id, category: name, limit: parseAmount(limit) });
   await logAction(req.user.name, "Budget Created", `${budget.category} limit set to ${budget.limit}.`);
   publish(req.user.id, "budgets");
   res.status(201).json(budget);
@@ -42,18 +43,19 @@ async function update(req, res) {
   }
 
   const { category, limit } = req.body || {};
-  if (limit !== undefined && (isNaN(Number(limit)) || Number(limit) <= 0)) {
+  if (limit !== undefined && parseAmount(limit) === null) {
     return res.status(400).json({ error: "Limit must be a number greater than zero." });
   }
   if (category !== undefined) {
-    const name = String(category).trim();
+    if (!isString(category)) return res.status(400).json({ error: "Category is required." });
+    const name = category.trim();
     if (!name) return res.status(400).json({ error: "Category cannot be empty." });
     if (notBudgetable(name)) return res.status(400).json({ error: BUDGET_CATEGORY_ERROR });
     const clash = await Budget.findOne({ user: req.user.id, category: name, _id: { $ne: budget._id } });
     if (clash) return res.status(409).json({ error: `You already have a budget for "${name}".` });
     budget.category = name;
   }
-  if (limit !== undefined) budget.limit = Number(limit);
+  if (limit !== undefined) budget.limit = parseAmount(limit);
   await budget.save();
 
   await logAction(req.user.name, "Budget Updated", `${budget.category} limit now ${budget.limit}.`);

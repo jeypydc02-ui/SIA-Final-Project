@@ -63,6 +63,10 @@ function FinTrackStark() {
   const [comments, setComments] = useState([]);
   const [toast, setToast] = useState(null);
   const [loadError, setLoadError] = useState("");
+  // False until the first data load after signing in arrives. Until then the
+  // screens would show empty lists and a ₱0.00 balance, which on a slow
+  // connection reads as "my data is gone"; a loading message shows instead.
+  const [dataReady, setDataReady] = useState(false);
   const [confirmDialog, setConfirmDialog] = useState(null); // {message, confirmLabel, onConfirm}
   const [theme, setTheme] = useState(() => {
     const stored = readStorage("fts_theme");
@@ -169,6 +173,7 @@ function FinTrackStark() {
         setSession((s) => (s ? { ...s, ...data.me } : s));
         announceNew(data.notifications);
         setLoadError("");
+        setDataReady(true);
       } catch (err) {
         if (err.status !== 401) setLoadError(err.message);
       } finally {
@@ -286,6 +291,8 @@ function FinTrackStark() {
     setSession(null);
     setSessionEnded(false);
     setBills([]); setTx([]); setBudgets([]); setNotifs([]); setAuditLog([]); setUsers([]); setComments([]);
+    setDataReady(false);
+    setLoadError("");
     seenNotifs.current = null;
   }
   async function logout() {
@@ -476,7 +483,7 @@ function FinTrackStark() {
         <Route
           element={
             <RequireAuth session={session}>
-              <Shell session={session} logout={requestLogout} theme={theme} setTheme={setTheme} notifs={notifs} loadError={loadError} />
+              <Shell session={session} logout={requestLogout} theme={theme} setTheme={setTheme} notifs={notifs} loadError={loadError} dataReady={dataReady} onRetry={refreshAll} />
             </RequireAuth>
           }
         >

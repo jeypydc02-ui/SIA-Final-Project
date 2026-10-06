@@ -5,7 +5,7 @@ const { notify } = require("../services/notifications");
 const { checkBudget } = require("../services/budgetAlerts");
 const { publish } = require("../services/events");
 const { todayISO, nextMonthlyDueISO, isRealDate } = require("../utils/dates");
-const { isNonEmptyString, parseAmount } = require("../utils/validate");
+const { isNonEmptyString, isString, parseAmount } = require("../utils/validate");
 
 const REPEATS = ["none", "monthly"];
 const dayOf = (iso) => Number(String(iso).slice(8, 10));
@@ -21,17 +21,17 @@ async function list(req, res) {
 
 async function create(req, res) {
   const { name, category, amount, due, repeat = "none" } = req.body || {};
-  if (!isNonEmptyString(name) || !isNonEmptyString(category) || !due || amount === undefined || amount === null || isNaN(Number(amount))) {
+  if (!isNonEmptyString(name) || !isNonEmptyString(category) || !isNonEmptyString(due) || amount === undefined || amount === null || amount === "") {
     return res.status(400).json({ error: "Bill name, category, due date, and a numeric amount are required." });
   }
-  if (Number(amount) <= 0) {
-    return res.status(400).json({ error: "Amount must be greater than zero." });
+  if (parseAmount(amount) === null) {
+    return res.status(400).json({ error: "Amount must be a number between 0.01 and 1,000,000,000,000." });
   }
   if (!REPEATS.includes(repeat)) {
     return res.status(400).json({ error: "Repeat must be none or monthly." });
   }
   const bill = await Bill.create({
-    name, category, amount: Number(amount), due, paid: false, createdBy: req.user.id,
+    name, category, amount: parseAmount(amount), due, paid: false, createdBy: req.user.id,
     repeat, repeatDay: repeat === "monthly" && isRealDate(due) ? dayOf(due) : null,
   });
   await logAction(req.user.name, "Bill Created", `${bill.name} added, due ${bill.due}, amount ${bill.amount}.`);
@@ -155,8 +155,11 @@ async function update(req, res) {
   if (repeat !== undefined && !REPEATS.includes(repeat)) {
     return res.status(400).json({ error: "Repeat must be none or monthly." });
   }
-  if (amount !== undefined && (isNaN(Number(amount)) || Number(amount) <= 0)) {
-    return res.status(400).json({ error: "Amount must be a number greater than zero." });
+  if (amount !== undefined && parseAmount(amount) === null) {
+    return res.status(400).json({ error: "Amount must be a number between 0.01 and 1,000,000,000,000." });
+  }
+  if (due !== undefined && !isString(due)) {
+    return res.status(400).json({ error: "Due date must be a real calendar date (YYYY-MM-DD)." });
   }
   if (name !== undefined && !isNonEmptyString(name)) {
     return res.status(400).json({ error: "Bill name cannot be empty." });
@@ -167,7 +170,7 @@ async function update(req, res) {
   const changes = {};
   if (name !== undefined) changes.name = name;
   if (category !== undefined) changes.category = category;
-  if (amount !== undefined) changes.amount = Number(amount);
+  if (amount !== undefined) changes.amount = parseAmount(amount);
   if (due !== undefined) changes.due = due;
   if (repeat !== undefined) changes.repeat = repeat;
   // The monthly schedule follows the (possibly new) due date's day.

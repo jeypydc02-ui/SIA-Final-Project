@@ -1,6 +1,6 @@
 const fs = require("fs");
 const path = require("path");
-const { connectDB, mongoose } = require("../apps/server/src/config/db");
+const { connectDB, mongoose, MONGO_URI, redact } = require("../apps/server/src/config/db");
 
 const User = require("../apps/server/src/models/User");
 const Bill = require("../apps/server/src/models/Bill");
@@ -17,8 +17,12 @@ const Session = require("../apps/server/src/models/Session");
 // contents entirely — a restore returns the system to the state captured in
 // the file, it does not merge.
 //
-//   npm run restore -- backups/fintrack-stark-2026-09-23T01-00-00.json
-//   npm run restore -- --latest
+//   npm run restore -- backups/fintrack-stark-2026-09-23T01-00-00.json --yes
+//   npm run restore -- --latest --yes
+//
+// Without --yes it only says what it would do: a restore deletes everything
+// in the target database first, and MONGO_URI may still be pointing at the
+// live database from an earlier command in the same terminal.
 
 const COLLECTIONS = {
   users: User,
@@ -65,6 +69,13 @@ async function restore() {
 
   console.log(`[restore] source: ${source}`);
   console.log(`[restore] taken:  ${payload.meta.takenAt}`);
+  console.log(`[restore] target: ${redact(MONGO_URI)}`);
+  if (!process.argv.includes("--yes")) {
+    console.log("[restore] Nothing was changed. A restore DELETES everything in the target");
+    console.log("          database and replaces it with the backup. Check the target above,");
+    console.log("          then run the same command again with --yes to go ahead.");
+    process.exit(1);
+  }
 
   await connectDB();
 
@@ -98,8 +109,8 @@ async function restore() {
 
 // JSON turns ObjectIds and Dates into strings; convert the ones the schemas
 // expect back into their real types.
-const ID_FIELDS = ["_id", "user", "createdBy", "submittedBy", "reviewedBy", "parentId", "transactionId", "authorId"];
-const DATE_FIELDS = ["ts", "createdAt"];
+const ID_FIELDS = ["_id", "user", "createdBy", "submittedBy", "reviewedBy", "parentId", "transactionId", "authorId", "previousBill"];
+const DATE_FIELDS = ["ts", "createdAt", "editedAt"];
 
 function reviveIds(row) {
   const out = { ...row };

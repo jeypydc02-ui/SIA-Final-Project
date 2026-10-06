@@ -87,7 +87,7 @@ Open http://localhost:5173. Demo accounts (local database only, never on the liv
 | `npm run build` | builds the web app into `apps/client/dist` |
 | `npm start` | serves the API and the built web app on one port |
 | `npm run reminder:once` | runs one reminder sweep and exits |
-| `npm run backup` / `npm run restore -- <file>` | database backup and restore |
+| `npm run backup` / `npm run restore -- <file> --yes` | database backup and restore (without `--yes`, restore only shows which database it would replace) |
 | `npm run create-admin` | creates the first Admin on a new database |
 
 Deployment steps are in [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).

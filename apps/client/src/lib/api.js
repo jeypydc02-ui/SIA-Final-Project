@@ -4,26 +4,44 @@
 // those are also announced as window events App listens for.
 export const SESSION_ENDED = "fts:session-ended";
 export const PASSWORD_CHANGE_REQUIRED = "fts:password-change-required";
+const REQUEST_TIMEOUT_MS = 60000;
 
 export async function api(path, opts = {}) {
   const token = sessionStorage.getItem("fts_token");
   const headers = { "Content-Type": "application/json" };
   if (token) headers.Authorization = "Bearer " + token;
 
+  // A request the server never answers (a dead connection, a hung host) would
+  // otherwise leave its button on "Saving…" for good. Generous, because free
+  // hosting can take most of a minute to wake up after a quiet spell.
+  const method = opts.method || "GET";
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+
   let res;
   try {
     res = await fetch(path, {
-      method: opts.method || "GET",
+      method,
       headers,
       body: opts.body ? JSON.stringify(opts.body) : undefined,
+      signal: controller.signal,
     });
   } catch (networkError) {
     // fetch only rejects when the request never reached the server. Marking it
     // lets callers tell "you are signed out" apart from "the server is not
     // answering", which are very different things to tell someone.
-    const err = new Error("Could not reach the server. Check your connection and try again.");
+    const timedOut = networkError.name === "AbortError";
+    const err = new Error(timedOut
+      // A change that timed out may still have been saved; say so, rather
+      // than invite a second save of the same thing.
+      ? (method === "GET"
+        ? "The server is taking too long to answer. Please try again."
+        : "The server is taking too long to answer. Your change may still have been saved — check before trying again.")
+      : "Could not reach the server. Check your connection and try again.");
     err.offline = true;
     throw err;
+  } finally {
+    clearTimeout(timer);
   }
 
   let data = null;

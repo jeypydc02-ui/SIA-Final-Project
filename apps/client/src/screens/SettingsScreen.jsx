@@ -4,8 +4,8 @@ import ThemeToggle from "../components/ThemeToggle.jsx";
 import InstallCard from "../components/InstallCard.jsx";
 
 const ROLE_ACCESS = {
-  Admin: "Manage users and roles, view all audit logs and reports, and administer system settings.",
-  User: "Submit and track your own bills, entries, budgets, and notes.",
+  Admin: "Manage accounts and roles, reset passwords, and read the system audit log — plus everything a User can do with your own money.",
+  User: "Record and track your own bills, entries, budgets and notes. Nobody else can see them.",
 };
 
 export default function SettingsScreen({ session, updateProfile, changePassword, theme, setTheme }) {

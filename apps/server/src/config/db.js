@@ -64,4 +64,4 @@ async function connectDB() {
   console.log("[db] connected to " + redact(MONGO_URI));
 }
 
-module.exports = { connectDB, mongoose };
+module.exports = { connectDB, mongoose, MONGO_URI, redact };

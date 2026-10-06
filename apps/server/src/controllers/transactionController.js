@@ -3,7 +3,7 @@ const { logAction } = require("../services/audit");
 const { checkBudget } = require("../services/budgetAlerts");
 const { publish } = require("../services/events");
 const { todayISO } = require("../utils/dates");
-const { isNonEmptyString } = require("../utils/validate");
+const { isNonEmptyString, isString, parseAmount } = require("../utils/validate");
 const { categoriesFor } = require("../utils/categories");
 
 // Income and expense entries. An entry counts toward the owner's balance and
@@ -34,12 +34,14 @@ function categoryProblem(type, category) {
     : `${type} category must be one of: ${allowed.join(", ")}.`;
 }
 
-function validateFields({ type, category, amount }) {
+function validateFields({ type, category, amount, date, note }) {
   if (type !== undefined && !["Income", "Expense"].includes(type)) return "Type must be Income or Expense.";
   if (category !== undefined && !isNonEmptyString(category)) return "Category cannot be empty.";
-  if (amount !== undefined && (amount === null || amount === "" || isNaN(Number(amount)) || Number(amount) <= 0)) {
-    return "Amount must be a number greater than zero.";
+  if (amount !== undefined && parseAmount(amount) === null) {
+    return "Amount must be a number between 0.01 and 1,000,000,000,000.";
   }
+  if (date !== undefined && !isString(date)) return "Date must be a real calendar date (YYYY-MM-DD).";
+  if (note !== undefined && note !== null && !isString(note)) return "Note must be text.";
   return null;
 }
 
@@ -55,19 +57,18 @@ async function create(req, res) {
   if (!type || !["Income", "Expense"].includes(type)) {
     return res.status(400).json({ error: "Type must be Income or Expense." });
   }
-  if (!isNonEmptyString(category) || amount === undefined || amount === null || isNaN(Number(amount))) {
+  if (!isNonEmptyString(category) || amount === undefined || amount === null || amount === "") {
     return res.status(400).json({ error: "Category and a numeric amount are required." });
   }
-  if (Number(amount) <= 0) {
-    return res.status(400).json({ error: "Amount must be greater than zero." });
-  }
+  const fieldProblem = validateFields({ amount, date, note });
+  if (fieldProblem) return res.status(400).json({ error: fieldProblem });
   const catProblem = categoryProblem(type, category);
   if (catProblem) return res.status(400).json({ error: catProblem });
 
   const tx = await Transaction.create({
     type,
     category,
-    amount: Number(amount),
+    amount: parseAmount(amount),
     date: date || todayISO(),
     note: note || "",
     status: COUNTED,
@@ -84,7 +85,9 @@ async function create(req, res) {
 async function versions(req, res) {
   const tx = await Transaction.findById(req.params.id);
   if (!tx) return res.status(404).json({ error: "Transaction not found." });
-  if (req.user.role !== "Admin" && String(tx.submittedBy) !== req.user.id) {
+  // Private to the owner, Admin included (NFR-002): with no review step,
+  // nobody else has a reason to read someone's entries.
+  if (String(tx.submittedBy) !== req.user.id) {
     return res.status(403).json({ error: "You can only view your own entries." });
   }
 
@@ -133,7 +136,7 @@ async function update(req, res) {
   if (!existing) return;
 
   const { type, category, amount, date, note } = req.body || {};
-  const fieldProblem = validateFields({ type, category, amount });
+  const fieldProblem = validateFields({ type, category, amount, date, note });
   if (fieldProblem) return res.status(400).json({ error: fieldProblem });
 
   // Build and fully validate the new version BEFORE touching the current one,
@@ -141,7 +144,7 @@ async function update(req, res) {
   const revised = new Transaction({
     type: type !== undefined ? type : existing.type,
     category: category !== undefined ? category : existing.category,
-    amount: amount !== undefined ? Number(amount) : existing.amount,
+    amount: amount !== undefined ? parseAmount(amount) : existing.amount,
     date: date !== undefined ? date : existing.date,
     note: note !== undefined ? note : existing.note,
     status: COUNTED,

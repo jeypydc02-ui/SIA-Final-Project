@@ -11,7 +11,7 @@ import ErrorBoundary from "./ErrorBoundary.jsx";
 // swallows more than half a phone's width and squeezes the content off-screen;
 // a bottom tab bar then takes over everyday navigation, opening the drawer
 // from its "More" tab.
-export default function Shell({ session, logout, theme, setTheme, notifs, loadError }) {
+export default function Shell({ session, logout, theme, setTheme, notifs, loadError, dataReady = true, onRetry }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [adding, setAdding] = useState(false);
   const { pathname } = useLocation();
@@ -38,15 +38,25 @@ export default function Shell({ session, logout, theme, setTheme, notifs, loadEr
         <Topbar onAdd={() => setAdding(true)} />
         <div className="content">
           {loadError && (
-            <div className="card" style={{ marginBottom: 16, borderColor: "var(--danger)" }}>
-              <div style={{ color: "var(--danger)", fontSize: 13 }}>⚠ Could not load your latest data: {loadError}</div>
+            <div className="card load-error" role="alert">
+              <span>⚠ Could not load your latest data: {loadError}</span>
+              {onRetry && <button type="button" className="btn small ghost" onClick={onRetry}>Try again</button>}
             </div>
           )}
-          {/* Keyed on the address, so a screen that crashed does not stay
-              broken after navigating somewhere else. */}
-          <ErrorBoundary key={pathname} inline>
-            <Outlet />
-          </ErrorBoundary>
+          {!dataReady ? (
+            !loadError && (
+              <div className="loading-block" role="status">
+                <span className="loading-bar" />
+                Loading your data…
+              </div>
+            )
+          ) : (
+            /* Keyed on the address, so a screen that crashed does not stay
+               broken after navigating somewhere else. */
+            <ErrorBoundary key={pathname} inline>
+              <Outlet />
+            </ErrorBoundary>
+          )}
         </div>
       </div>
     </div>

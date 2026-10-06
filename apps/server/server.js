@@ -128,7 +128,12 @@ async function main() {
     }
     if (err.name === "ValidationError") {
       const first = Object.values(err.errors || {})[0];
-      return res.status(400).json({ error: first ? first.message : "Some fields are invalid." });
+      // A value of the wrong type (an object where text belongs) carries the
+      // database's own wording, which means nothing to the person reading it.
+      if (!first || first.name === "CastError") {
+        return res.status(400).json({ error: first ? `The ${first.path} field has an invalid value.` : "Some fields are invalid." });
+      }
+      return res.status(400).json({ error: first.message });
     }
     if (err.code === 11000) {
       return res.status(409).json({ error: "That record already exists." });

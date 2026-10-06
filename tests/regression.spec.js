@@ -563,4 +563,93 @@ test.describe("Pre-launch audit regressions", () => {
     const inbox = await api("/api/notifications", { token: user.token });
     expect(inbox.data.find((n) => n.message.includes("Inbox Layout Bill")).read).toBe(true);
   });
+
+  test("RT-30 amounts must be real numbers, and fields of the wrong type are refused in plain words", async () => {
+    const { user } = accounts();
+    const cases = [
+      ["/api/transactions", { type: "Expense", category: "Food", amount: true }],
+      ["/api/transactions", { type: "Expense", category: "Food", amount: [5] }],
+      ["/api/transactions", { type: "Expense", category: "Food", amount: 5, note: { a: 1 } }],
+      ["/api/transactions", { type: "Expense", category: "Food", amount: 5, date: { $gt: "" } }],
+      ["/api/bills", { name: "x", category: "Utilities", amount: true, due: "2026-12-01" }],
+      ["/api/budgets", { category: "Transport", limit: true }],
+    ];
+    for (const [path, body] of cases) {
+      const res = await api(path, { method: "POST", token: user.token, body });
+      expect(res.status, JSON.stringify(body)).toBe(400);
+      expect(res.data.error, JSON.stringify(body)).not.toMatch(/Cast to|ObjectId|\$gt/);
+    }
+    const profile = await api("/api/auth/me", { method: "PUT", token: user.token, body: { firstName: { a: 1 } } });
+    expect(profile.status).toBe(400);
+    // Numbers typed as text still work.
+    const ok = await api("/api/transactions", { method: "POST", token: user.token, body: { type: "Expense", category: "Food", amount: "12.50" } });
+    expect(ok.status).toBe(201);
+    expect(ok.data.amount).toBe(12.5);
+  });
+
+  test("RT-31 an Admin cannot read another person's entries through their history", async () => {
+    const { user, admin } = accounts();
+    const entry = await api("/api/transactions", { method: "POST", token: user.token, body: { type: "Income", category: "Salary", amount: 77 } });
+    expect((await api(`/api/transactions/${entry.data._id}/versions`, { token: admin.token })).status).toBe(403);
+    expect((await api(`/api/transactions/${entry.data._id}/versions`, { token: user.token })).status).toBe(200);
+  });
+
+  test("RT-32 a slow first load shows a loading message, not an empty account", async ({ page }) => {
+    // Signing in through the form: a page reload instead waits on its own
+    // "Restoring your session…" screen until the data is there.
+    const { user } = accounts();
+    await page.route("**/api/sync", async (route) => { await new Promise((r) => setTimeout(r, 2500)); await route.continue(); });
+    await page.goto("/login");
+    await page.locator(".auth-form input").first().fill(user.email);
+    await page.locator(".auth-form input[type=password]").fill(user.password);
+    await page.locator(".auth-form button[type=submit]").click();
+    await expect(page.locator(".loading-block")).toBeVisible();
+    await expect(page.locator(".wallet-balance")).toHaveCount(0);
+    await expect(page.locator(".wallet-balance")).toBeVisible({ timeout: 10000 });
+    await expect(page.locator(".loading-block")).toHaveCount(0);
+  });
+
+  test("RT-33 the public pages fit small phones without sideways scrolling", async ({ page }) => {
+    for (const width of [320, 360]) {
+      await page.setViewportSize({ width, height: 760 });
+      for (const route of ["/", "/login", "/register"]) {
+        await page.goto(route);
+        await page.waitForTimeout(300);
+        const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+        expect(overflow, `${route} at ${width}px`).toBe(0);
+      }
+      await page.goto("/");
+      await expect(page.locator(".lp-burger")).toBeVisible();
+    }
+  });
+
+  test("RT-34 a restore changes nothing unless it is confirmed", async () => {
+    const { user } = accounts();
+    const before = (await api("/api/transactions", { token: user.token })).data.length;
+    const sample = path.join(__dirname, "..", "docs", "appendices", "sample-database-backup.json");
+    const result = await new Promise((resolve) => {
+      execFile("node", [path.join(__dirname, "..", "scripts", "restore.js"), sample], { cwd: path.join(__dirname, "..") },
+        (err, stdout, stderr) => resolve({ code: err ? err.code : 0, out: stdout + stderr }));
+    });
+    expect(result.code).not.toBe(0);
+    expect(result.out).toContain("Nothing was changed");
+    expect(result.out).toContain("fintrack_stark_test");
+    // Still signed in, with the same data.
+    expect((await api("/api/transactions", { token: user.token })).data.length).toBe(before);
+  });
+
+  test("RT-35 one account cannot hold unlimited live connections open", async () => {
+    const u = await registerUser("streams");
+    const controllers = [];
+    const statuses = [];
+    for (let i = 0; i < 11; i++) {
+      const c = new AbortController();
+      controllers.push(c);
+      const res = await fetch("http://localhost:4000/api/events", { headers: { Authorization: "Bearer " + u.token }, signal: c.signal });
+      statuses.push(res.status);
+    }
+    controllers.forEach((c) => c.abort());
+    expect(statuses.slice(0, 10).every((s) => s === 200)).toBe(true);
+    expect(statuses[10]).toBe(429);
+  });
 });

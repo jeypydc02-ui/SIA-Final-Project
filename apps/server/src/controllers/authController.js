@@ -91,8 +91,11 @@ async function updateProfile(req, res) {
   if (!user) return res.status(404).json({ error: "Account not found." });
 
   const { firstName, lastName, email } = req.body || {};
+  if ([firstName, lastName, email].some((v) => v !== undefined && !isString(v))) {
+    return res.status(400).json({ error: "Name and email must be text." });
+  }
   if (email !== undefined) {
-    const normalized = String(email).toLowerCase().trim();
+    const normalized = email.toLowerCase().trim();
     if (!EMAIL_RE.test(normalized)) {
       return res.status(400).json({ error: "Please enter a valid email address." });
     }
@@ -101,12 +104,12 @@ async function updateProfile(req, res) {
     user.email = normalized;
   }
   if (firstName !== undefined) {
-    if (!String(firstName).trim()) return res.status(400).json({ error: "First name cannot be empty." });
-    user.firstName = String(firstName).trim();
+    if (!firstName.trim()) return res.status(400).json({ error: "First name cannot be empty." });
+    user.firstName = firstName.trim();
   }
   if (lastName !== undefined) {
-    if (!String(lastName).trim()) return res.status(400).json({ error: "Last name cannot be empty." });
-    user.lastName = String(lastName).trim();
+    if (!lastName.trim()) return res.status(400).json({ error: "Last name cannot be empty." });
+    user.lastName = lastName.trim();
   }
   user.name = `${user.firstName} ${user.lastName}`.trim();
   await user.save();
