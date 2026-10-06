@@ -81,7 +81,7 @@ test.describe("Functional", () => {
     await expect(timeline).toContainText("₱500.00 → ₱650.00");
   });
 
-  test("FT-05 (FR-005) a user can correct and delete their own entries", async ({ page }) => {
+  test("FT-05 (FR-015) a user can correct and delete their own entries", async ({ page }) => {
     const { user } = accounts();
     await api("/api/transactions", {
       method: "POST", token: user.token,

@@ -155,7 +155,7 @@ async function create(req, res) {
   await logAction(req.user.name, previous ? "Receipt Resubmitted" : "Receipt Submitted",
     `v${receipt.version} for ${describe(entry)}: ${what}. Status set to For Review.`, { ref: receipt._id });
   await notifyRole("Reviewer", "receipt",
-    `${req.user.name} submitted ${previous ? `receipt v${receipt.version}` : "a receipt"} for a ${describe(entry)}.`, req.user.id);
+    `${req.user.name} submitted ${previous ? `receipt v${receipt.version}` : "a receipt"} for an ${describe(entry)}.`, req.user.id);
   publish(req.user.id, "receipts");
   publishToRole("Reviewer", "receipts");
   res.status(201).json(publicReceipt(receipt));

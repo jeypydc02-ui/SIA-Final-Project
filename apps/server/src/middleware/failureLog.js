@@ -14,7 +14,10 @@ function failureLog(req, res, next) {
   const json = res.json.bind(res);
   res.json = (body) => {
     if (res.statusCode >= 400 && res.statusCode !== 401 && req.user) {
-      const route = (req.baseUrl + (req.route ? req.route.path : req.path)).replace(/^\/api\//, "");
+      // Built from the address itself: by the time a database validation
+      // error reaches the central error handler, Express has already
+      // forgotten which router matched. Record ids become ":id".
+      const route = req.originalUrl.split("?")[0].replace(/^\/api\//, "").replace(/[0-9a-f]{24}/gi, ":id");
       const reason = (body && body.error) || `HTTP ${res.statusCode}`;
       logFailure(req.user.name, `Failed: ${req.method} ${route}`, `${res.statusCode} — ${reason}`, req.params && req.params.id);
     }

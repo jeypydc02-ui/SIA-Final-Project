@@ -46,7 +46,7 @@ test.describe("Pre-launch audit regressions", () => {
     expect(txs.data.some((t) => t.note === "Bill payment: Payment guard bill")).toBe(false);
   });
 
-  test("RT-03 the approval step is gone: entries count at once", async () => {
+  test("RT-03 entries count at once; only receipts go through review", async () => {
     const { user } = accounts();
     const created = await api("/api/transactions", {
       method: "POST", token: user.token, body: { type: "Income", category: "Salary", amount: 1234, note: "no approval needed" },
