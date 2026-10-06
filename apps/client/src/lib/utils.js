@@ -38,8 +38,13 @@ export function billStatus(due, paid) {
 export function statusBadgeClass(s) {
   return { Paid: "ok", "Due Today": "warn", Overdue: "danger", Upcoming: "neutral" }[s] || "neutral";
 }
+// What each stored status means to the person reading it. "Approved" is the
+// stored name for a current, counted entry (there is no approval step).
+export function txStatusLabel(s) {
+  return { Approved: "Recorded", Superseded: "Earlier version", Deleted: "Deleted", "Pending Review": "Recorded", "Needs Revision": "Needs correction", Rejected: "Rejected" }[s] || s;
+}
 export function txStatusBadge(s) {
-  return { "Approved": "ok", "Pending Review": "warn", "Rejected": "danger", "Needs Revision": "danger", "Superseded": "neutral" }[s] || "neutral";
+  return { "Approved": "ok", "Pending Review": "warn", "Rejected": "danger", "Needs Revision": "danger", "Superseded": "neutral", "Deleted": "neutral" }[s] || "neutral";
 }
 
 // "John Paul Dela Cruz" -> "JP", for avatar circles.

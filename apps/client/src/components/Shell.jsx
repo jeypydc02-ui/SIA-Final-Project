@@ -11,7 +11,7 @@ import ErrorBoundary from "./ErrorBoundary.jsx";
 // swallows more than half a phone's width and squeezes the content off-screen;
 // a bottom tab bar then takes over everyday navigation, opening the drawer
 // from its "More" tab.
-export default function Shell({ session, logout, theme, setTheme, notifs, queue, loadError }) {
+export default function Shell({ session, logout, theme, setTheme, notifs, loadError }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [adding, setAdding] = useState(false);
   const { pathname } = useLocation();
@@ -21,9 +21,6 @@ export default function Shell({ session, logout, theme, setTheme, notifs, queue,
   useEffect(() => { setMenuOpen(false); setAdding(false); }, [pathname]);
 
   const unread = notifs.filter((n) => !n.read).length;
-  const pendingReviews = queue.filter(
-    (t) => t.status === "Pending Review" && String(t.submittedBy) !== String(session.id)
-  ).length;
 
   return (
     <div className="shell">
@@ -33,7 +30,7 @@ export default function Shell({ session, logout, theme, setTheme, notifs, queue,
       />
       {menuOpen && <div className="side-backdrop" onClick={() => setMenuOpen(false)} />}
       <BottomNav
-        session={session} unread={unread} pendingReviews={pendingReviews} menuOpen={menuOpen}
+        unread={unread} menuOpen={menuOpen}
         onAdd={() => setAdding(true)} onMore={() => setMenuOpen((open) => !open)}
       />
       {adding && <QuickAdd onPick={(to) => { setAdding(false); navigate(to); }} onClose={() => setAdding(false)} />}

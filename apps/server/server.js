@@ -14,11 +14,17 @@ const notificationRoutes = require("./src/routes/notifications");
 const auditLogRoutes = require("./src/routes/auditLog");
 const userRoutes = require("./src/routes/users");
 const commentRoutes = require("./src/routes/comments");
+const eventRoutes = require("./src/routes/events");
+const { wrap } = require("./src/middleware/asyncHandler");
+const { requireAuth } = require("./src/middleware/auth");
+const syncController = wrap(require("./src/controllers/syncController"));
+const { runMigrations } = require("./src/config/migrations");
 
 const PORT = process.env.PORT || 4000;
 
 async function main() {
   await connectDB();
+  await runMigrations();
 
   const app = express();
   // req.ip is what the rate limiter counts. Trusting X-Forwarded-For when no
@@ -35,7 +41,9 @@ async function main() {
   app.use(securityHeaders);
   // List responses are repetitive JSON and shrink roughly tenfold, which is
   // the difference that matters on a slow mobile connection.
-  app.use(compression());
+  // The live-update stream is excluded: compression buffers output, and an
+  // event stream must reach the browser the moment each message is written.
+  app.use(compression({ filter: (req, res) => req.path !== "/api/events" && compression.filter(req, res) }));
   // A cap on body size: nothing this API accepts is anywhere near 100kb, and
   // an unbounded parser is a free denial-of-service.
   app.use(express.json({ limit: "100kb" }));
@@ -69,6 +77,8 @@ async function main() {
   app.use("/api/audit-log", auditLogRoutes);
   app.use("/api/users", userRoutes);
   app.use("/api/comments", commentRoutes);
+  app.use("/api/events", eventRoutes);
+  app.get("/api/sync", requireAuth, syncController.sync);
 
   // An unknown API address answers in JSON like every other API error, rather
   // than with Express's HTML page or, worse, the SPA's index.html.

@@ -1,12 +1,29 @@
 const Transaction = require("../models/Transaction");
-const Comment = require("../models/Comment");
-const User = require("../models/User");
 const { logAction } = require("../services/audit");
-const { notify, notifyRoles } = require("../services/notifications");
 const { checkBudget } = require("../services/budgetAlerts");
+const { publish } = require("../services/events");
 const { todayISO } = require("../utils/dates");
-const { isNonEmptyString, isString } = require("../utils/validate");
+const { isNonEmptyString } = require("../utils/validate");
 const { categoriesFor } = require("../utils/categories");
+
+// Income and expense entries. An entry counts toward the owner's balance and
+// budgets the moment it is recorded — there is no approval step. Mistakes are
+// fixed by editing, which keeps the old figures as an earlier version, so the
+// history of every entry stays visible (Revision History screen).
+//
+// Status values:
+//   "Approved"   the current version, counted in balances and budgets
+//                (shown as "Recorded" in the interface)
+//   "Superseded" an earlier version, replaced by an edit
+//   "Deleted"    removed by its owner; kept so the history and audit trail
+//                still make sense, but never counted
+//   "Pending Review", "Needs Revision", "Rejected"
+//                left over from the former review workflow (see
+//                config/migrations.js); never created any more
+
+const COUNTED = "Approved";
+// Entries their owner may still change. Rejected ones are kept as they were.
+const EDITABLE = ["Approved", "Needs Revision"];
 
 // An income category on an expense (or the reverse) is refused, so every
 // expense can be counted against a budget and no income is.
@@ -17,42 +34,18 @@ function categoryProblem(type, category) {
     : `${type} category must be one of: ${allowed.join(", ")}.`;
 }
 
-const REVIEWER_ROLES = ["Reviewer", "Admin"];
-
-// "an expense" / "an income" — both entry types start with a vowel, but pick
-// the article from the word so the messages stay correct if a type is added.
-function article(word) {
-  return /^[aeiou]/i.test(word) ? "an" : "a";
+function validateFields({ type, category, amount }) {
+  if (type !== undefined && !["Income", "Expense"].includes(type)) return "Type must be Income or Expense.";
+  if (category !== undefined && !isNonEmptyString(category)) return "Category cannot be empty.";
+  if (amount !== undefined && (amount === null || amount === "" || isNaN(Number(amount)) || Number(amount) <= 0)) {
+    return "Amount must be a number greater than zero.";
+  }
+  return null;
 }
 
-// How many already-decided entries the review screen shows alongside the
-// queue. Everything still pending is always included.
-const REVIEW_HISTORY_LIMIT = 300;
-
-// Everyone's own entries by default (NFR-002) — this is what the dashboard,
-// budgets and reports add up, so it must be the caller's money only. Returning
-// every user's entries to staff accounts made an Admin with no entries of their
-// own see a balance of over a million pesos.
-//
-// ?scope=review is the approval queue, for Reviewers and Admins: every pending
-// entry plus the most recent decided ones. Bounded, because this list is
-// reloaded after every action and the full history grows without limit.
+// The caller's own entries (NFR-002): what the dashboard, budgets and reports
+// add up, so it must be their money only, whatever their role.
 async function list(req, res) {
-  if (req.query.scope === "review") {
-    if (!REVIEWER_ROLES.includes(req.user.role)) {
-      return res.status(403).json({ error: "You do not have permission to perform this action." });
-    }
-    const [pending, decided] = await Promise.all([
-      Transaction.find({ status: "Pending Review" }).sort({ createdAt: -1 }).lean(),
-      Transaction.find({ status: { $ne: "Pending Review" } }).sort({ createdAt: -1 }).limit(REVIEW_HISTORY_LIMIT).lean(),
-    ]);
-    const rows = [...pending, ...decided].sort((a, b) => b.createdAt - a.createdAt);
-    // A reviewer needs to know whose entry they are deciding.
-    const ids = [...new Set(rows.map((t) => String(t.submittedBy)))];
-    const people = await User.find({ _id: { $in: ids } }).select("name").lean();
-    const names = new Map(people.map((p) => [String(p._id), p.name]));
-    return res.json(rows.map((t) => ({ ...t, submitterName: names.get(String(t.submittedBy)) || "Deleted account" })));
-  }
   const txs = await Transaction.find({ submittedBy: req.user.id }).sort({ createdAt: -1 }).lean();
   res.json(txs);
 }
@@ -70,154 +63,28 @@ async function create(req, res) {
   }
   const catProblem = categoryProblem(type, category);
   if (catProblem) return res.status(400).json({ error: catProblem });
+
   const tx = await Transaction.create({
     type,
     category,
     amount: Number(amount),
     date: date || todayISO(),
     note: note || "",
-    status: "Pending Review",
+    status: COUNTED,
     submittedBy: req.user.id,
   });
-  await logAction(req.user.name, `${type} Submitted`, `${category}: ${amount} — submitted for review.`);
-  await notifyRoles(
-    "submission",
-    `${req.user.name} submitted ${article(type)} ${type.toLowerCase()} of ${amount} for review.`,
-    REVIEWER_ROLES
-  );
+  await logAction(req.user.name, `${type} Recorded`, `${category}: ${tx.amount} on ${tx.date}.`);
+  await checkBudget(tx);
+  publish(req.user.id, "transactions");
   res.status(201).json(tx);
 }
 
-// Review and Approval workflow (FR-005): a Reviewer or Admin approves,
-// rejects, or requests revision on a pending submission.
-async function review(req, res) {
-  const { action, comment } = req.body || {};
-  const map = { approve: "Approved", reject: "Rejected", revise: "Needs Revision" };
-  if (!isString(action) || !map[action]) {
-    return res.status(400).json({ error: "Action must be one of: approve, reject, revise." });
-  }
-  if (comment !== undefined && comment !== null && !isString(comment)) {
-    return res.status(400).json({ error: "Comment must be text." });
-  }
-  // Claim the entry atomically: matching on "Pending Review" inside the update
-  // means that if two reviewers act at the same moment, exactly one decision is
-  // recorded. Reading the status and then saving lets both of them through, and
-  // the slower one silently overwrites the first reviewer's verdict.
-  //
-  // submittedBy must not be the reviewer: separation of duties (spec section
-  // 8.2). Without it a Reviewer could log a large income and approve it
-  // themselves, which defeats the point of having a review step.
-  const tx = await Transaction.findOneAndUpdate(
-    { _id: req.params.id, status: "Pending Review", submittedBy: { $ne: req.user.id } },
-    { $set: { status: map[action], reviewedBy: req.user.id, reviewComment: comment || "" } },
-    // findOneAndUpdate skips schema validators unless asked, and reviewComment
-    // has a length limit to honour.
-    { new: true, runValidators: true }
-  );
-  if (!tx) {
-    const existing = await Transaction.findById(req.params.id);
-    if (!existing) return res.status(404).json({ error: "Transaction not found." });
-    if (String(existing.submittedBy) === req.user.id) {
-      return res.status(403).json({ error: "You cannot review your own entry — another Reviewer or Admin must decide it." });
-    }
-    return res.status(400).json({ error: `This entry is already "${existing.status}" and cannot be reviewed again.` });
-  }
-
-  if (comment) {
-    await Comment.create({
-      transactionId: tx._id,
-      author: req.user.name,
-      authorId: req.user.id,
-      text: comment,
-    });
-  }
-
-  await logAction(req.user.name, `Transaction ${map[action]}`, `${tx.category} (${tx.amount}) — ${comment || "no comment"}.`);
-  // The outcome goes to the submitter, not to everyone.
-  await notify(
-    action === "approve" ? "approved" : action === "reject" ? "rejected" : "revision",
-    `Your ${tx.type.toLowerCase()} of ${tx.amount} was ${map[action].toLowerCase()}${comment ? `: "${comment}"` : "."}`,
-    tx.submittedBy
-  );
-  // An approved expense now counts against the submitter's budget.
-  if (tx.status === "Approved") await checkBudget(tx);
-
-  res.json(tx);
-}
-
-// A submitter resubmits a "Needs Revision" entry as a new version (FR-004).
-async function resubmit(req, res) {
-  const existing = await Transaction.findById(req.params.id);
-  if (!existing) return res.status(404).json({ error: "Transaction not found." });
-  if (String(existing.submittedBy) !== req.user.id) {
-    return res.status(403).json({ error: "You can only resubmit your own entries." });
-  }
-
-  if (existing.status !== "Needs Revision") {
-    return res.status(400).json({ error: "Only entries marked \"Needs Revision\" can be resubmitted." });
-  }
-
-  const { type, category, amount, date, note } = req.body || {};
-  if (amount !== undefined && (isNaN(Number(amount)) || Number(amount) <= 0)) {
-    return res.status(400).json({ error: "Amount must be a number greater than zero." });
-  }
-
-  // Build and fully validate the new version BEFORE touching the original.
-  // Previously the original was marked Superseded first; if the new version
-  // was then refused (an emptied amount field sends 0), the entry was stranded
-  // as Superseded with no successor and could never be resubmitted.
-  const revised = new Transaction({
-    type: type || existing.type,
-    category: category || existing.category,
-    amount: amount !== undefined ? Number(amount) : existing.amount,
-    date: date || existing.date,
-    note: note !== undefined ? note : existing.note,
-    status: "Pending Review",
-    version: (existing.version || 1) + 1,
-    parentId: existing._id,
-    submittedBy: req.user.id,
-  });
-  const revisedProblem = categoryProblem(revised.type, revised.category);
-  if (revisedProblem) return res.status(400).json({ error: revisedProblem });
-  await revised.validate();
-
-  // Same reasoning as review(): claim the entry before writing the new version,
-  // so a double submission cannot produce two v2 records off one v1.
-  const original = await Transaction.findOneAndUpdate(
-    { _id: req.params.id, submittedBy: req.user.id, status: "Needs Revision" },
-    { $set: { status: "Superseded" } },
-    { new: false }
-  );
-  if (!original) {
-    return res.status(400).json({ error: "Only entries marked \"Needs Revision\" can be resubmitted." });
-  }
-
-  try {
-    await revised.save();
-  } catch (err) {
-    // Validation already passed, so this is the database itself failing.
-    // Hand the entry back so the submitter can simply try again.
-    await Transaction.updateOne({ _id: original._id }, { $set: { status: "Needs Revision" } });
-    throw err;
-  }
-
-  await logAction(req.user.name, "Transaction Resubmitted", `v${revised.version} of ${original._id} submitted for review.`);
-  await notifyRoles(
-    "submission",
-    `${req.user.name} resubmitted a revised ${revised.type.toLowerCase()} for review.`,
-    REVIEWER_ROLES
-  );
-
-  res.status(201).json(revised);
-}
-
-// Full version chain for one entry, oldest first — backs the Version History
-// screen (spec section 14 screen 6) with real stored versions rather than a
-// trail synthesised at render time.
+// Full version chain for one entry, oldest first — backs the Revision History
+// screen with the stored versions rather than a trail made up at render time.
 async function versions(req, res) {
   const tx = await Transaction.findById(req.params.id);
   if (!tx) return res.status(404).json({ error: "Transaction not found." });
-  if (req.user.role === "User" && String(tx.submittedBy) !== req.user.id) {
+  if (req.user.role !== "Admin" && String(tx.submittedBy) !== req.user.id) {
     return res.status(403).json({ error: "You can only view your own entries." });
   }
 
@@ -239,69 +106,96 @@ async function versions(req, res) {
   res.json(chain);
 }
 
-// Editing is only allowed while nobody has acted on the entry yet; once it is
-// approved or rejected it belongs to the audit record.
-async function update(req, res) {
+// Shared by edit and delete: the entry must be the owner's, still current, and
+// not one the bill-payment workflow created (that one follows its bill).
+async function loadOwnCurrent(req, res) {
   const tx = await Transaction.findById(req.params.id);
-  if (!tx) return res.status(404).json({ error: "Transaction not found." });
+  if (!tx) { res.status(404).json({ error: "Transaction not found." }); return null; }
   if (String(tx.submittedBy) !== req.user.id) {
-    return res.status(403).json({ error: "You can only edit your own entries." });
+    res.status(403).json({ error: "You can only change your own entries." });
+    return null;
   }
-  if (tx.status !== "Pending Review") {
-    return res.status(400).json({ error: `This entry is "${tx.status}" and can no longer be edited.` });
+  if (tx.autoApproved) {
+    res.status(400).json({ error: "This expense was recorded by paying a bill, so it follows that bill and cannot be changed here." });
+    return null;
   }
-
-  const { type, category, amount, date, note } = req.body || {};
-  if (category !== undefined && !isNonEmptyString(category)) {
-    return res.status(400).json({ error: "Category cannot be empty." });
+  if (!EDITABLE.includes(tx.status)) {
+    res.status(400).json({ error: `This entry is "${tx.status}" and can no longer be changed.` });
+    return null;
   }
-  if (type !== undefined && !["Income", "Expense"].includes(type)) {
-    return res.status(400).json({ error: "Type must be Income or Expense." });
-  }
-  if (amount !== undefined && (isNaN(Number(amount)) || Number(amount) <= 0)) {
-    return res.status(400).json({ error: "Amount must be a number greater than zero." });
-  }
-  if (type !== undefined || category !== undefined) {
-    const problem = categoryProblem(type !== undefined ? type : tx.type, category !== undefined ? category : tx.category);
-    if (problem) return res.status(400).json({ error: problem });
-  }
-  const changes = {};
-  if (type !== undefined) changes.type = type;
-  if (category !== undefined) changes.category = category;
-  if (amount !== undefined) changes.amount = Number(amount);
-  if (date !== undefined) changes.date = date;
-  if (note !== undefined) changes.note = note;
-
-  // Written only if the entry is still pending at the moment of writing, so an
-  // edit that races a reviewer's decision cannot change an approved figure.
-  const updated = await Transaction.findOneAndUpdate(
-    { _id: tx._id, status: "Pending Review" },
-    { $set: changes },
-    { new: true, runValidators: true }
-  );
-  if (!updated) {
-    return res.status(400).json({ error: "This entry was reviewed a moment ago and can no longer be edited." });
-  }
-
-  await logAction(req.user.name, "Transaction Updated", `${updated.category} (${updated.amount}) edited before review.`);
-  res.json(updated);
+  return tx;
 }
 
+// Editing records a new version (v2, v3 …) and keeps the previous one as
+// "Superseded", so the change is visible in Revision History.
+async function update(req, res) {
+  const existing = await loadOwnCurrent(req, res);
+  if (!existing) return;
+
+  const { type, category, amount, date, note } = req.body || {};
+  const fieldProblem = validateFields({ type, category, amount });
+  if (fieldProblem) return res.status(400).json({ error: fieldProblem });
+
+  // Build and fully validate the new version BEFORE touching the current one,
+  // so a refused edit can never leave the entry without a current version.
+  const revised = new Transaction({
+    type: type !== undefined ? type : existing.type,
+    category: category !== undefined ? category : existing.category,
+    amount: amount !== undefined ? Number(amount) : existing.amount,
+    date: date !== undefined ? date : existing.date,
+    note: note !== undefined ? note : existing.note,
+    status: COUNTED,
+    version: (existing.version || 1) + 1,
+    parentId: existing._id,
+    submittedBy: req.user.id,
+  });
+  const catProblem = categoryProblem(revised.type, revised.category);
+  if (catProblem) return res.status(400).json({ error: catProblem });
+  await revised.validate();
+
+  // Claim the current version atomically, so two quick edits (two tabs, a
+  // double tap) cannot both branch a v2 off the same v1.
+  const claimed = await Transaction.findOneAndUpdate(
+    { _id: existing._id, submittedBy: req.user.id, status: { $in: EDITABLE } },
+    { $set: { status: "Superseded" } },
+    { new: false }
+  );
+  if (!claimed) {
+    return res.status(409).json({ error: "This entry was changed a moment ago. Reload and try again." });
+  }
+
+  try {
+    await revised.save();
+  } catch (err) {
+    // Validation already passed, so this is the database itself failing.
+    // Put the previous version back so the entry is never left without one.
+    await Transaction.updateOne({ _id: claimed._id }, { $set: { status: claimed.status } });
+    throw err;
+  }
+
+  await logAction(req.user.name, "Transaction Edited", `${revised.category} ${revised.amount} — v${revised.version} replaces v${claimed.version || 1}.`);
+  await checkBudget(revised);
+  publish(req.user.id, "transactions");
+  res.json(revised);
+}
+
+// Deleting keeps the record, marked "Deleted": it stops counting at once, but
+// the version history and the audit log still make sense afterwards.
 async function remove(req, res) {
-  const tx = await Transaction.findById(req.params.id);
-  if (!tx) return res.status(404).json({ error: "Transaction not found." });
-  if (String(tx.submittedBy) !== req.user.id) {
-    return res.status(403).json({ error: "You can only delete your own entries." });
+  const existing = await loadOwnCurrent(req, res);
+  if (!existing) return;
+
+  const removed = await Transaction.findOneAndUpdate(
+    { _id: existing._id, submittedBy: req.user.id, status: { $in: EDITABLE } },
+    { $set: { status: "Deleted" } },
+    { new: true }
+  );
+  if (!removed) {
+    return res.status(409).json({ error: "This entry was changed a moment ago. Reload and try again." });
   }
-  if (tx.status !== "Pending Review") {
-    return res.status(400).json({ error: `This entry is "${tx.status}" and is part of the audit record.` });
-  }
-  const removed = await Transaction.deleteOne({ _id: tx._id, status: "Pending Review" });
-  if (!removed.deletedCount) {
-    return res.status(400).json({ error: "This entry was reviewed a moment ago and is now part of the audit record." });
-  }
-  await logAction(req.user.name, "Transaction Deleted", `${tx.category} (${tx.amount}) withdrawn before review.`);
+  await logAction(req.user.name, "Transaction Deleted", `${removed.type} ${removed.category} ${removed.amount} (v${removed.version || 1}) deleted.`);
+  publish(req.user.id, "transactions");
   res.json({ ok: true });
 }
 
-module.exports = { list, create, review, resubmit, versions, update, remove };
+module.exports = { list, create, versions, update, remove };

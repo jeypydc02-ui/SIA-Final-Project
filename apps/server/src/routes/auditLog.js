@@ -5,6 +5,6 @@ const auditLogController = wrap(require("../controllers/auditLogController"));
 
 const router = express.Router();
 
-router.get("/", requireAuth, requireRole("Admin", "Reviewer"), auditLogController.list);
+router.get("/", requireAuth, requireRole("Admin"), auditLogController.list);
 
 module.exports = router;

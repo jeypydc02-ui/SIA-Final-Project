@@ -57,84 +57,63 @@ test.describe("Integration", () => {
     expect(audit.data.some((l) => l.action === "Payment Recorded" && l.detail.includes("Cascade Test Bill"))).toBe(true);
   });
 
-  test("IT-02 a new submission is routed to reviewers, not to everyone", async () => {
-    const { user, reviewer, admin } = accounts();
+  test("IT-02 a notification reaches an open screen without a refresh", async ({ page }) => {
+    const { user } = accounts();
+    await signIn(page, "user");
+    const badge = page.locator(".nav-item", { hasText: "Notification Log" }).locator(".nav-badge");
+    const before = Number((await badge.count()) ? await badge.innerText() : 0);
 
-    await api("/api/transactions", {
+    // Something happens elsewhere — here, a bill added from another device.
+    await api("/api/bills", {
       method: "POST", token: user.token,
-      body: { type: "Income", category: "Freelance", amount: 4321, note: "routing check" },
+      body: { name: "Live Update Bill", category: "Utilities", amount: 321, due: "2026-12-20" },
     });
 
-    const reviewerInbox = await api("/api/notifications", { token: reviewer.token });
-    const adminInbox = await api("/api/notifications", { token: admin.token });
-    const submitterInbox = await api("/api/notifications", { token: user.token });
-
-    expect(reviewerInbox.data.some((n) => n.type === "submission" && n.message.includes("4321"))).toBe(true);
-    expect(adminInbox.data.some((n) => n.type === "submission" && n.message.includes("4321"))).toBe(true);
-    // The submitter is not told about their own submission.
-    expect(submitterInbox.data.some((n) => n.type === "submission" && n.message.includes("4321"))).toBe(false);
+    // The open page hears about it by itself, like a chat app: a pop-up and
+    // a higher unread count, with no reload.
+    await expect(page.locator(".toast.notice")).toContainText("Live Update Bill");
+    await expect(badge).toHaveText(String(before + 1));
+    await expect(page).toHaveTitle(/^\(\d+\) FinTrack Stark$/);
   });
 
-  test("IT-03 a review outcome is delivered only to the submitter", async () => {
-    const { user, reviewer } = accounts();
-
-    const created = await api("/api/transactions", {
+  test("IT-03 notifications reach only the person they are about", async () => {
+    const { user, other } = accounts();
+    await api("/api/bills", {
       method: "POST", token: user.token,
-      body: { type: "Expense", category: "Food", amount: 8888, note: "outcome routing" },
+      body: { name: "Private Routing Bill", category: "Housing", amount: 8888, due: "2026-12-21" },
     });
-    await api(`/api/transactions/${created.data._id}/review`, {
-      method: "POST", token: reviewer.token,
-      body: { action: "approve", comment: "Looks right." },
-    });
-
-    const submitterInbox = await api("/api/notifications", { token: user.token });
-    const reviewerInbox = await api("/api/notifications", { token: reviewer.token });
-
-    expect(submitterInbox.data.some((n) => n.type === "approved" && n.message.includes("8888"))).toBe(true);
-    expect(reviewerInbox.data.some((n) => n.type === "approved" && n.message.includes("8888"))).toBe(false);
+    const ownerInbox = await api("/api/notifications", { token: user.token });
+    const otherInbox = await api("/api/notifications", { token: other.token });
+    expect(ownerInbox.data.some((n) => n.message.includes("Private Routing Bill"))).toBe(true);
+    expect(otherInbox.data.some((n) => n.message.includes("Private Routing Bill"))).toBe(false);
   });
 
-  test("IT-04 an approved entry flows through to the dashboard totals", async ({ page }) => {
-    const { user, reviewer } = accounts();
+  test("IT-04 a recorded entry reaches the dashboard at once, without a refresh", async ({ page }) => {
+    const { user } = accounts();
 
     await signIn(page, "user");
     const balanceBefore = await page.locator(".wallet-balance").innerText();
 
-    const created = await api("/api/transactions", {
+    await api("/api/transactions", {
       method: "POST", token: user.token,
       body: { type: "Income", category: "Salary", amount: 10000, note: "dashboard flow" },
     });
 
-    // Still pending: it must not count yet.
-    await page.reload();
-    await page.waitForSelector(".shell");
-    const balancePending = await page.locator(".wallet-balance").innerText();
-    expect(balancePending).toBe(balanceBefore);
-
-    await api(`/api/transactions/${created.data._id}/review`, {
-      method: "POST", token: reviewer.token, body: { action: "approve" },
-    });
-
-    await page.reload();
-    await page.waitForSelector(".shell");
-    const balanceAfter = await page.locator(".wallet-balance").innerText();
-    expect(balanceAfter).not.toBe(balanceBefore);
+    // No approval step, and no reload: the live update brings the new balance.
+    await expect(page.locator(".wallet-balance")).not.toHaveText(balanceBefore);
   });
 
-  test("IT-05 approved expenses are counted against the matching budget", async ({ page }) => {
-    const { user, reviewer } = accounts();
+  test("IT-05 recorded expenses are counted against the matching budget", async ({ page }) => {
+    const { user } = accounts();
 
-    const created = await api("/api/transactions", {
+    await api("/api/transactions", {
       method: "POST", token: user.token,
       body: { type: "Expense", category: "Transport", amount: 900, note: "budget flow" },
-    });
-    await api(`/api/transactions/${created.data._id}/review`, {
-      method: "POST", token: reviewer.token, body: { action: "approve" },
     });
 
     // Derive the expected figures from the data rather than hardcoding them,
     // so the assertion tests the invariant and not the current seed.
-    // Budgets are monthly, so only this month's (Philippine calendar) approved
+    // Budgets are monthly, so only this month's (Philippine calendar) recorded
     // expenses count against them.
     const peso = (n) => "₱" + n.toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     const month = todayISO().slice(0, 7);
@@ -145,7 +124,7 @@ test.describe("Integration", () => {
     const budgets = await api("/api/budgets", { token: user.token });
     const transportBudget = budgets.data.find((b) => b.category === "Transport");
 
-    expect(expectedSpent).toBeGreaterThanOrEqual(900); // the entry just approved is in there
+    expect(expectedSpent).toBeGreaterThanOrEqual(900); // the entry just recorded is in there
 
     await signIn(page, "user");
     await gotoScreen(page, "Budgets");

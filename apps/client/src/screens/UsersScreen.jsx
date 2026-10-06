@@ -1,11 +1,10 @@
 import { useState } from "react";
 
-const ROLES = ["Admin", "Reviewer", "User"];
+const ROLES = ["Admin", "User"];
 
 const RBAC = [
   { role: "Admin", access: "Full access: manage users and roles, view all audit logs, all reports, system settings." },
-  { role: "Reviewer", access: "Reviews submitted entries (approve/reject/request revision), views audit log; cannot manage users." },
-  { role: "User", access: "Submits own bills and transactions for review; views own reports, history, budgets, and notes only." },
+  { role: "User", access: "Records own bills, payments, income and expenses; sees only their own wallet, reports, history, budgets and notes." },
 ];
 
 export default function UsersScreen({ users, session, setUserRole, deleteUser, resetUserPassword }) {

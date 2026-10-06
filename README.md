@@ -17,7 +17,7 @@ SIA/
 │   │       ├── components/     shared UI: Shell, Sidebar, Topbar, BottomNav,
 │   │       │                   QuickAdd, dialogs, route guards, error boundary
 │   │       ├── screens/        one file per page, named <Page>Screen.jsx
-│   │       │   └── dashboard/  UserHome, ReviewerDesk, AdminConsole
+│   │       │   └── dashboard/  UserHome, AdminConsole
 │   │       └── lib/            api.js, nav.js (menu), utils.js (dates, money),
 │   │                           categories.js, pwa.js (install + service worker)
 │   │
@@ -48,9 +48,14 @@ Bill reminders: once a day, every unpaid bill due within three days (or overdue)
 
 | Role | Dashboard | Can do |
 |---|---|---|
-| User | Home: balance, quick actions, bills, spending, budgets | own bills, budgets, income/expense entries, notes |
-| Reviewer | Review Desk: queue with approve / revise / reject (+ My Wallet tab) | review other people's entries; read the audit log |
-| Admin | Admin Console: system status, users, review pipeline, security (+ My Wallet tab) | everything a Reviewer can, plus manage accounts, roles and password resets |
+| User | Home: wallet, spending by category, bills, budgets, recent entries | own bills, budgets, income/expense entries, notes |
+| Admin | Admin Console: system status, accounts, weekly activity, security (+ My Wallet tab) | everything a User can for their own money, plus manage accounts, roles, password resets and the audit log |
+
+Income and expense entries count the moment they are recorded. Editing one saves a new version (v1 → v2) and keeps the earlier one in Revision History; deleting one keeps it in the history as "Deleted".
+
+## Live updates
+
+Signed-in screens hold a Server-Sent Events connection (`GET /api/events`). When something changes for that person — a notification, a bill, an entry — the server pushes a short "changed" message and the screen reloads its data through `GET /api/sync` (one request for everything), so new notifications appear without refreshing.
 
 ## Installing it as an app
 
@@ -62,7 +67,7 @@ Requirements: Node.js 20+ and MongoDB running on `127.0.0.1:27017`.
 
 ```sh
 npm install
-npm run seed          # demo data (local only)
+npm run seed          # demo data (local only): jp@ / demo123, arvy@ / demo456, admin@ / admin123
 npm run dev           # API :4000, web :5173, reminder worker
 ```
 
@@ -71,7 +76,7 @@ Open http://localhost:5173. Demo accounts (local database only, never on the liv
 | Role | Email | Password |
 |---|---|---|
 | User | jp@fintrackstark.app | demo123 |
-| Reviewer | reviewer@fintrackstark.app | reviewer123 |
+| User | arvy@fintrackstark.app | demo456 |
 | Admin | admin@fintrackstark.app | admin123 |
 
 ## Other commands

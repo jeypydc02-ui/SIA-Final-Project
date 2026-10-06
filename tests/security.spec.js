@@ -53,15 +53,18 @@ test.describe("Security and access control", () => {
   });
 
   test("ST-03 (section 8.2) privileges cannot be escalated from a lower role", async ({ page }) => {
-    const { user, reviewer, admin } = accounts();
+    const { user, other, admin } = accounts();
 
-    // A User may not act as a reviewer.
-    const pending = await api("/api/transactions", {
+    // A User may not change someone else's entry.
+    const entry = await api("/api/transactions", {
       method: "POST", token: user.token,
       body: { type: "Expense", category: "Food", amount: 250, note: "escalation probe" },
     });
-    expect((await api(`/api/transactions/${pending.data._id}/review`, {
-      method: "POST", token: user.token, body: { action: "approve" },
+    expect((await api(`/api/transactions/${entry.data._id}`, {
+      method: "PUT", token: other.token, body: { amount: 1 },
+    })).status).toBe(403);
+    expect((await api(`/api/transactions/${entry.data._id}`, {
+      method: "DELETE", token: other.token,
     })).status).toBe(403);
 
     // A User may not administer accounts or read the audit trail.
@@ -71,9 +74,10 @@ test.describe("Security and access control", () => {
       method: "PUT", token: user.token, body: { role: "Admin" },
     })).status).toBe(403);
 
-    // A Reviewer may read the audit trail but may not administer accounts.
-    expect((await api("/api/audit-log", { token: reviewer.token })).status).toBe(200);
-    expect((await api("/api/users", { token: reviewer.token })).status).toBe(403);
+    // Only Admin and User exist; the retired Reviewer role cannot be given.
+    expect((await api(`/api/users/${other.user.id}/role`, {
+      method: "PUT", token: admin.token, body: { role: "Reviewer" },
+    })).status).toBe(400);
 
     // Registration never grants elevated rights, whatever the caller asks for.
     const sneaky = await api("/api/auth/register", {

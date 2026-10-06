@@ -33,7 +33,7 @@ npm start                          # API + built frontend on one port
 npm run reminder                   # optional: the stand-alone reminder worker, if the host allows a second process
 ```
 
-Everyone else signs up through the app as a User. The Admin promotes Reviewers from User & Role Management.
+Everyone else signs up through the app as a User. An Admin can make another account an Admin from User & Role Management.
 
 ## 4. Forgotten passwords
 

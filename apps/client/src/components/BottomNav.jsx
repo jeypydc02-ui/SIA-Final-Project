@@ -18,15 +18,11 @@ function Tab({ to, icon, label, badge }) {
   );
 }
 
-export default function BottomNav({ session, unread, pendingReviews, onAdd, onMore, menuOpen }) {
-  const staff = session.role === "Admin" || session.role === "Reviewer";
+export default function BottomNav({ unread, onAdd, onMore, menuOpen }) {
   return (
     <nav className="bottom-nav" aria-label="Main">
       <Tab to="/dashboard" icon="home" label="Home" />
-      {/* A reviewer's daily job is the queue; a user's is their bills. */}
-      {staff
-        ? <Tab to="/review" icon="check" label="Review" badge={pendingReviews} />
-        : <Tab to="/bills" icon="receipt" label="Bills" />}
+      <Tab to="/bills" icon="receipt" label="Bills" />
       <button type="button" className="bn-add" onClick={onAdd} aria-label="Add an entry">
         <Icon name="plus" size={24} strokeWidth={2.2} />
       </button>

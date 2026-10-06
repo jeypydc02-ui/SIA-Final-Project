@@ -9,8 +9,9 @@ const { refreshUserSessions, destroyUserSessions } = require("../services/sessio
 const { hashPassword } = require("../services/passwords");
 const { logAction } = require("../services/audit");
 const { notify } = require("../services/notifications");
+const { publish } = require("../services/events");
 
-const ROLES = ["Admin", "Reviewer", "User"];
+const ROLES = ["Admin", "User"];
 
 async function list(req, res) {
   const users = await User.find().select("-passwordHash").sort({ role: 1, name: 1 });
@@ -19,7 +20,7 @@ async function list(req, res) {
 
 // Role assignment is Admin-only and never self-service: this is the other half
 // of least privilege (spec section 8.2). Registration always creates a User;
-// promotion to Reviewer or Admin happens only here.
+// promotion to Admin happens only here.
 async function setRole(req, res) {
   const { role } = req.body || {};
   if (!ROLES.includes(role)) {
@@ -50,6 +51,8 @@ async function setRole(req, res) {
   await refreshUserSessions(user._id, { role });
   await logAction(req.user.name, "Role Changed", `${user.name}: ${previous} -> ${role}.`);
   await notify("role", `Your role was changed from ${previous} to ${role}.`, user._id);
+  // Their open tabs reload, so the menu matches the new role straight away.
+  publish(user._id, "session");
 
   res.json({ id: user._id, name: user.name, email: user.email, role: user.role });
 }
@@ -97,19 +100,18 @@ async function remove(req, res) {
   await user.deleteOne();
   await destroyUserSessions(user._id);
 
-  // The person's own records go with them, so nothing is left orphaned. Their
-  // reviewed entries stay: those are part of the audit record, and other
-  // people's review decisions refer to them. Entries still waiting for review
-  // are withdrawn so the queue does not fill with work nobody can follow up.
+  // The person's own records go with them, so nothing is left orphaned and
+  // nobody else's screens show a deleted person's money. The audit log keeps
+  // the history of what was done.
   await Promise.all([
     Bill.deleteMany({ createdBy: user._id }),
     Budget.deleteMany({ user: user._id }),
     Notification.deleteMany({ user: user._id }),
-    Comment.deleteMany({ authorId: user._id, transactionId: null }),
-    Transaction.deleteMany({ submittedBy: user._id, status: "Pending Review" }),
+    Comment.deleteMany({ authorId: user._id }),
+    Transaction.deleteMany({ submittedBy: user._id }),
   ]);
 
-  await logAction(req.user.name, "Account Deleted", `${user.name} (${user.email}) removed, with their bills, budgets, notes and pending entries.`);
+  await logAction(req.user.name, "Account Deleted", `${user.name} (${user.email}) removed, with their bills, budgets, entries and notes.`);
   res.json({ ok: true });
 }
 

@@ -3,17 +3,17 @@ const Transaction = require("../models/Transaction");
 const { logAction } = require("../services/audit");
 const { notify } = require("../services/notifications");
 const { checkBudget } = require("../services/budgetAlerts");
+const { publish } = require("../services/events");
 const { todayISO, nextMonthlyDueISO, isRealDate } = require("../utils/dates");
 const { isNonEmptyString, parseAmount } = require("../utils/validate");
 
 const REPEATS = ["none", "monthly"];
 const dayOf = (iso) => Number(String(iso).slice(8, 10));
 
-// NFR-002: a bill is personal money, so everyone — Admin and Reviewer
-// included — sees only the bills they created. Returning every user's bills to
-// staff accounts put other people's figures into their dashboard, reports and
-// bill list as though they were their own, with Mark Paid buttons that could
-// only ever fail. Nothing in the review workflow needs anyone else's bills.
+// NFR-002: a bill is personal money, so everyone — Admin included — sees only
+// the bills they created. Returning every user's bills to an Admin put other
+// people's figures into their dashboard, reports and bill list as though they
+// were their own, with Mark Paid buttons that could only ever fail.
 async function list(req, res) {
   const bills = await Bill.find({ createdBy: req.user.id }).sort({ due: 1 }).lean();
   res.json(bills);
@@ -36,6 +36,7 @@ async function create(req, res) {
   });
   await logAction(req.user.name, "Bill Created", `${bill.name} added, due ${bill.due}, amount ${bill.amount}.`);
   await notify("bill", `Bill "${bill.name}" added — due ${bill.due}. The reminder service will alert you as the date approaches.`, req.user.id);
+  publish(req.user.id, "bills");
   res.status(201).json(bill);
 }
 
@@ -136,6 +137,7 @@ async function pay(req, res) {
   // The payment is an approved expense, so it may have pushed a budget over.
   await checkBudget(tx);
 
+  publish(req.user.id, "bills");
   res.json({ bill: claimed, transaction: tx, nextBill });
 }
 
@@ -185,6 +187,7 @@ async function update(req, res) {
   }
 
   await logAction(req.user.name, "Bill Updated", `${updated.name} (${updated._id}) edited.`);
+  publish(req.user.id, "bills");
   res.json(updated);
 }
 
@@ -203,6 +206,7 @@ async function remove(req, res) {
     return res.status(400).json({ error: "A paid bill is part of the payment record and cannot be deleted." });
   }
   await logAction(req.user.name, "Bill Deleted", `${bill.name} (${bill._id}) removed.`);
+  publish(req.user.id, "bills");
   res.json({ ok: true });
 }
 

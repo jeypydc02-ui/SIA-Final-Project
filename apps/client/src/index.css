@@ -1034,3 +1034,32 @@ input, select{border-radius:10px !important;}
   .install-pop{left:0; right:0; bottom:0; width:auto; max-width:none; border-radius:22px 22px 0 0; padding-bottom:calc(18px + env(safe-area-inset-bottom, 0px));}
   .shell ~ .install-pop, body:has(.bottom-nav) .install-pop{bottom:calc(60px + env(safe-area-inset-bottom, 0px)); border-radius:22px;  left:8px; right:8px;}
 }
+
+/* Incoming notification, chat-style */
+.toast.notice{
+  display:flex; align-items:flex-start; gap:12px; text-align:left; cursor:pointer; font:inherit;
+  background:var(--panel); color:var(--text); border:1px solid var(--line); border-left:4px solid var(--primary);
+  border-radius:16px; padding:12px 16px; max-width:380px; box-shadow:0 14px 40px rgba(15,30,70,.2);
+}
+.toast-bell{flex:none; width:34px; height:34px; border-radius:50%; background:var(--accent-tint); color:var(--primary); display:flex; align-items:center; justify-content:center;}
+.toast-body{display:flex; flex-direction:column; gap:2px; font-size:13px; color:var(--text-dim);}
+.toast-body strong{color:var(--text); font-size:13.5px;}
+
+/* My Entries rows: actions sit to the right of the amount */
+.entry-row{flex-wrap:wrap;}
+.entry-actions{display:flex; gap:6px; margin-left:8px;}
+@media(max-width:860px){
+  .entry-actions{width:100%; justify-content:flex-end; margin:6px 0 0;}
+}
+.lp-roles.two{grid-template-columns:repeat(2,1fr);}
+@media(max-width:1000px){ .lp-roles.two{grid-template-columns:1fr;} }
+
+/* Password field with a show/hide button */
+.password-field{position:relative;}
+.password-field input{padding-right:44px !important; width:100%;}
+.password-toggle{
+  position:absolute; right:6px; top:50%; transform:translateY(-50%);
+  width:34px; height:34px; border:none; border-radius:8px; background:none; color:var(--text-dim);
+  display:flex; align-items:center; justify-content:center; cursor:pointer;
+}
+.password-toggle:hover{color:var(--primary); background:var(--surface-hover);}

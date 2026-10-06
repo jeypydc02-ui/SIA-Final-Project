@@ -1,6 +1,7 @@
 const Bill = require("../models/Bill");
 const Notification = require("../models/Notification");
 const AuditLog = require("../models/AuditLog");
+const { publish, publishToAdmins } = require("./events");
 // Philippine calendar dates, shared with the rest of the API.
 const { todayISO, addDaysISO, daysBetweenISO } = require("../utils/dates");
 
@@ -76,6 +77,9 @@ async function runReminderSweep({ leadDays = 3, today = todayISO(), log = consol
   });
 
   await Notification.insertMany(notifications);
+  // Inside the API this reaches open tabs at once; in the stand-alone worker
+  // nobody is listening, and the alerts appear on the next refresh.
+  new Set(toRemind.map((b) => String(b.createdBy))).forEach((id) => publish(id, "notifications"));
 
   const overdue = notifications.filter((n) => n.type === "overdue").length;
   await AuditLog.create({
@@ -83,6 +87,7 @@ async function runReminderSweep({ leadDays = 3, today = todayISO(), log = consol
     action: "Reminder Sweep",
     detail: `${today}: scanned ${due.length} unpaid bill(s) within ${leadDays} day(s); raised ${notifications.length} alert(s) (${overdue} overdue).`,
   });
+  publishToAdmins("audit");
 
   log(`[reminder] ${today}: raised ${notifications.length} alert(s) across ${new Set(toRemind.map((b) => String(b.createdBy))).size} account(s).`);
   return { scanned: due.length, notified: notifications.length, notifications };

@@ -7,33 +7,25 @@ const path = require("path");
 // Regression cases for the defects found in the pre-launch audit. Each one
 // reproduced a real failure before its fix; they stay so it cannot return.
 
-async function needsRevision(user, reviewer, note) {
-  const created = await api("/api/transactions", {
-    method: "POST", token: user.token, body: { type: "Expense", category: "Food", amount: 500, note },
-  });
-  await api(`/api/transactions/${created.data._id}/review`, {
-    method: "POST", token: reviewer.token, body: { action: "revise", comment: "fix it" },
-  });
-  return created.data._id;
-}
-
 test.describe("Pre-launch audit regressions", () => {
-  test("RT-01 a refused resubmission leaves the entry resubmittable", async () => {
-    const { user, reviewer } = accounts();
-    const id = await needsRevision(user, reviewer, "resubmit guard");
+  test("RT-01 a refused edit leaves the entry exactly as it was", async () => {
+    const { user } = accounts();
+    const created = await api("/api/transactions", {
+      method: "POST", token: user.token, body: { type: "Expense", category: "Food", amount: 500, note: "edit guard" },
+    });
+    const id = created.data._id;
 
-    // An emptied amount field arrives as 0.
-    const bad = await api(`/api/transactions/${id}/resubmit`, { method: "POST", token: user.token, body: { amount: 0 } });
-    expect(bad.status).toBe(400);
-    const badType = await api(`/api/transactions/${id}/resubmit`, { method: "POST", token: user.token, body: { type: "Nonsense" } });
-    expect(badType.status).toBe(400);
-
+    // An emptied amount field arrives as 0; a made-up type; a wrong category.
+    for (const body of [{ amount: 0 }, { type: "Nonsense" }, { category: "Salary" }, { date: "2099-01-01" }]) {
+      const res = await api(`/api/transactions/${id}`, { method: "PUT", token: user.token, body });
+      expect(res.status, JSON.stringify(body)).toBe(400);
+    }
     const list = await api("/api/transactions", { token: user.token });
-    expect(list.data.find((t) => t._id === id).status).toBe("Needs Revision");
+    expect(list.data.find((t) => t._id === id).status).toBe("Approved");
     expect(list.data.some((t) => t.parentId === id)).toBe(false);
 
-    const good = await api(`/api/transactions/${id}/resubmit`, { method: "POST", token: user.token, body: { amount: 450 } });
-    expect(good.status).toBe(201);
+    const good = await api(`/api/transactions/${id}`, { method: "PUT", token: user.token, body: { amount: 450 } });
+    expect(good.status).toBe(200);
     expect(good.data.version).toBe(2);
   });
 
@@ -54,17 +46,16 @@ test.describe("Pre-launch audit regressions", () => {
     expect(txs.data.some((t) => t.note === "Bill payment: Payment guard bill")).toBe(false);
   });
 
-  test("RT-03 nobody reviews their own entry", async () => {
-    const { reviewer, admin } = accounts();
-    const own = await api("/api/transactions", {
-      method: "POST", token: reviewer.token, body: { type: "Income", category: "Salary", amount: 999999, note: "self review probe" },
+  test("RT-03 the approval step is gone: entries count at once", async () => {
+    const { user } = accounts();
+    const created = await api("/api/transactions", {
+      method: "POST", token: user.token, body: { type: "Income", category: "Salary", amount: 1234, note: "no approval needed" },
     });
-    const self = await api(`/api/transactions/${own.data._id}/review`, { method: "POST", token: reviewer.token, body: { action: "approve" } });
-    expect(self.status).toBe(403);
-
-    // Another reviewer can.
-    const other = await api(`/api/transactions/${own.data._id}/review`, { method: "POST", token: admin.token, body: { action: "approve" } });
-    expect(other.status).toBe(200);
+    expect(created.status).toBe(201);
+    expect(created.data.status).toBe("Approved"); // stored name for a counted entry
+    // The old review endpoints no longer exist.
+    expect((await api(`/api/transactions/${created.data._id}/review`, { method: "POST", token: user.token, body: { action: "approve" } })).status).toBe(404);
+    expect((await api(`/api/transactions/${created.data._id}/resubmit`, { method: "POST", token: user.token, body: {} })).status).toBe(404);
   });
 
   test("RT-04 dates and field types are validated, never a 500", async () => {
@@ -89,21 +80,18 @@ test.describe("Pre-launch audit regressions", () => {
     expect(pw.status).toBe(400);
   });
 
-  test("RT-05 staff see only their own money; the queue is separate", async () => {
-    const { user, reviewer, admin } = accounts();
+  test("RT-05 an Admin sees only their own money", async () => {
+    const { user, admin } = accounts();
     const userBills = await api("/api/bills", { token: user.token });
     expect(userBills.data.length).toBeGreaterThan(0);
 
-    for (const staff of [reviewer, admin]) {
-      const bills = await api("/api/bills", { token: staff.token });
-      expect(bills.data.every((b) => b.createdBy === staff.user.id)).toBe(true);
-      const own = await api("/api/transactions", { token: staff.token });
-      expect(own.data.every((t) => t.submittedBy === staff.user.id)).toBe(true);
-      const queue = await api("/api/transactions?scope=review", { token: staff.token });
-      expect(queue.status).toBe(200);
-      expect(queue.data.some((t) => t.submittedBy === user.user.id)).toBe(true);
-    }
-    expect((await api("/api/transactions?scope=review", { token: user.token })).status).toBe(403);
+    const bills = await api("/api/bills", { token: admin.token });
+    expect(bills.data.every((b) => b.createdBy === admin.user.id)).toBe(true);
+    const own = await api("/api/transactions", { token: admin.token });
+    expect(own.data.every((t) => t.submittedBy === admin.user.id)).toBe(true);
+    // The old all-users queue is gone: asking for it returns only their own.
+    const queue = await api("/api/transactions?scope=review", { token: admin.token });
+    expect(queue.data.every((t) => t.submittedBy === admin.user.id)).toBe(true);
   });
 
   test("RT-06 an Admin password reset forces a new password", async () => {
@@ -161,7 +149,7 @@ test.describe("Pre-launch audit regressions", () => {
 
     await page.locator("input[type=number]").fill("4321");
     await page.locator('input[placeholder*="Groceries"]').fill("typed before expiry");
-    await page.getByRole("button", { name: "Submit for Review" }).click();
+    await page.getByRole("button", { name: "Save Entry" }).click();
 
     const dialog = page.locator(".modal", { hasText: "Your session has ended" });
     await expect(dialog).toBeVisible();
@@ -171,8 +159,8 @@ test.describe("Pre-launch audit regressions", () => {
 
     // What was typed survived, and submitting now works.
     await expect(page.locator("input[type=number]")).toHaveValue("4321");
-    await page.getByRole("button", { name: "Submit for Review" }).click();
-    await expect(page.locator(".toast")).toContainText("submitted for review");
+    await page.getByRole("button", { name: "Save Entry" }).click();
+    await expect(page.locator(".toast")).toContainText("recorded");
   });
 
   test("RT-10 a malformed address does not blank the app", async ({ page }) => {
@@ -209,23 +197,13 @@ test.describe("Pre-launch audit regressions", () => {
     await expect(page).toHaveURL(/view=wallet/);
     await expect(page.locator(".wallet")).toContainText("Balance");
 
-    const reviewerPage = await page.context().newPage();
-    const { reviewer } = accounts();
-    await reviewerPage.addInitScript((t) => window.sessionStorage.setItem("fts_token", t), reviewer.token);
-    await reviewerPage.goto("/dashboard");
-    await reviewerPage.waitForSelector(".shell");
-    await expect(reviewerPage.locator(".desk-hero")).toContainText("Review Desk");
-    await expect(reviewerPage.locator(".console-status")).toHaveCount(0);
-    await expect(reviewerPage.locator(".segmented button", { hasText: "My Wallet" })).toBeVisible();
-    await reviewerPage.close();
-
     const userPage = await page.context().newPage();
     const { user } = accounts();
     await userPage.addInitScript((t) => window.sessionStorage.setItem("fts_token", t), user.token);
     await userPage.goto("/dashboard");
     await userPage.waitForSelector(".shell");
     await expect(userPage.locator(".wallet")).toContainText("Balance");
-    await expect(userPage.locator(".desk-hero")).toHaveCount(0);
+    await expect(userPage.locator(".console-status")).toHaveCount(0);
     await expect(userPage.locator(".segmented")).toHaveCount(0);
     await userPage.close();
   });
@@ -305,12 +283,9 @@ test.describe("Pre-launch audit regressions", () => {
 
   test("RT-18 crossing 80% and 100% of a budget sends a warning", async () => {
     const person = await registerUser("budgeter");
-    const { admin } = accounts();
     await api("/api/budgets", { method: "POST", token: person.token, body: { category: "Food", limit: 1000 } });
-    const submitAndApprove = async (amount) => {
-      const t = await api("/api/transactions", { method: "POST", token: person.token, body: { type: "Expense", category: "Food", amount } });
-      await api(`/api/transactions/${t.data._id}/review`, { method: "POST", token: admin.token, body: { action: "approve" } });
-    };
+    const submitAndApprove = (amount) =>
+      api("/api/transactions", { method: "POST", token: person.token, body: { type: "Expense", category: "Food", amount } });
     const budgetNotes = async () => (await api("/api/notifications", { token: person.token })).data.filter((n) => n.type === "budget");
 
     await submitAndApprove(500);
@@ -327,56 +302,53 @@ test.describe("Pre-launch audit regressions", () => {
     expect(notes[0].message).toContain("over your Food budget");
   });
 
-  test("RT-19 reviewers see who submitted each entry, and a resubmission can fix its category and date", async () => {
-    const { user, reviewer } = accounts();
+  test("RT-19 an edit can fix the type, category and date of an entry", async () => {
+    const { user } = accounts();
     const created = await api("/api/transactions", {
       method: "POST", token: user.token, body: { type: "Expense", category: "Food", amount: 300, note: "wrong category probe" },
     });
-    const queue = await api("/api/transactions?scope=review", { token: reviewer.token });
-    expect(queue.data.find((t) => t._id === created.data._id).submitterName).toBe(user.user.name);
-
-    await api(`/api/transactions/${created.data._id}/review`, { method: "POST", token: reviewer.token, body: { action: "revise", comment: "This was transport." } });
     const yesterday = addDaysISO(todayISO(), -1);
-    const v2 = await api(`/api/transactions/${created.data._id}/resubmit`, {
-      method: "POST", token: user.token, body: { category: "Transport", date: yesterday, amount: 300 },
+    const v2 = await api(`/api/transactions/${created.data._id}`, {
+      method: "PUT", token: user.token, body: { category: "Transport", date: yesterday },
     });
-    expect(v2.status).toBe(201);
+    expect(v2.status).toBe(200);
     expect(v2.data.category).toBe("Transport");
     expect(v2.data.date).toBe(yesterday);
-  });
-
-  test("RT-12 a reviewer's own pending entry has no approve buttons", async ({ page }) => {
-    const { reviewer } = accounts();
-    await api("/api/transactions", {
-      method: "POST", token: reviewer.token, body: { type: "Expense", category: "Food", amount: 12, note: "reviewer own entry ui" },
+    const v3 = await api(`/api/transactions/${v2.data._id}`, {
+      method: "PUT", token: user.token, body: { type: "Income", category: "Freelance" },
     });
-    await signIn(page, "reviewer");
-    await gotoScreen(page, "Review & Approval");
-    const row = page.locator(".card", { hasText: "Pending Review (" }).locator("tr", { hasText: "reviewer own entry ui" });
-    await expect(row).toContainText("awaiting another reviewer");
-    await expect(row.getByRole("button", { name: "Approve" })).toHaveCount(0);
+    expect(v3.data.type).toBe("Income");
+    expect(v3.data.version).toBe(3);
+    const chain = await api(`/api/transactions/${v3.data._id}/versions`, { token: user.token });
+    expect(chain.data.map((t) => t.status)).toEqual(["Superseded", "Superseded", "Approved"]);
   });
 
-  test("RT-20 a reviewer can decide entries straight from the Review Desk", async ({ page }) => {
-    // The desk shows the six oldest entries first, so clear what earlier tests
-    // left waiting; this entry is then the next one up.
-    const { admin } = accounts();
-    const queue = await api("/api/transactions?scope=review", { token: admin.token });
-    for (const t of queue.data.filter((x) => x.status === "Pending Review" && x.submittedBy !== admin.user.id)) {
-      await api(`/api/transactions/${t._id}/review`, { method: "POST", token: admin.token, body: { action: "approve" } });
+  test("RT-12 the old review address leads to My Entries", async ({ page }) => {
+    await signIn(page, "user");
+    await page.goto("/review");
+    await expect(page).toHaveURL(/\/entries$/);
+    await expect(page.locator(".pagehead h2")).toHaveText("My Entries");
+    await expect(page.locator(".nav-item", { hasText: "Review" })).toHaveCount(0);
+  });
+
+  test("RT-20 one request brings everything a screen needs, and only your own", async () => {
+    const { user, admin } = accounts();
+    const mine = await api("/api/sync", { token: user.token });
+    expect(mine.status).toBe(200);
+    expect(mine.data.me.email).toBe(user.email);
+    for (const key of ["bills", "transactions", "budgets", "notifications", "comments"]) {
+      expect(Array.isArray(mine.data[key]), key).toBe(true);
     }
-    const person = await registerUser("deskflow");
-    const created = await api("/api/transactions", {
-      method: "POST", token: person.token, body: { type: "Expense", category: "Transport", amount: 4321.5, note: "desk inline approve" },
-    });
-    await signIn(page, "reviewer");
-    const card = page.locator(".review-card", { hasText: "desk inline approve" });
-    await expect(card).toContainText("Test Account");
-    await card.getByRole("button", { name: "Approve" }).click();
-    await expect(page.locator(".toast")).toContainText("Review recorded");
-    await expect(page.locator(".review-card", { hasText: "desk inline approve" })).toHaveCount(0);
-    const mine = await api("/api/transactions", { token: person.token });
-    expect(mine.data.find((t) => t._id === created.data._id).status).toBe("Approved");
+    expect(mine.data.transactions.every((t) => t.submittedBy === user.user.id)).toBe(true);
+    expect(mine.data.bills.every((b) => b.createdBy === user.user.id)).toBe(true);
+    // Admin-only lists are empty for a User …
+    expect(mine.data.auditLog).toEqual([]);
+    expect(mine.data.users).toEqual([]);
+    // … and present for an Admin.
+    const theirs = await api("/api/sync", { token: admin.token });
+    expect(theirs.data.auditLog.length).toBeGreaterThan(0);
+    expect(theirs.data.users.length).toBeGreaterThan(0);
+    expect((await api("/api/sync")).status).toBe(401);
   });
 
   test("RT-21 the app is installable and opens offline", async ({ browser, request }) => {
@@ -453,5 +425,62 @@ test.describe("Pre-launch audit regressions", () => {
       .filter((n) => n.type !== "bill" && n.message.includes("Concurrent sweep bill"));
     expect(notes).toHaveLength(1);
     expect(notes[0].type).toBe("overdue");
+  });
+
+  test("RT-24 data from the old review workflow is converted on start-up", async () => {
+    // Runs the same migration the API runs when it starts, against the test
+    // database, on rows shaped like the old workflow left them.
+    const mongoose = require("mongoose");
+    const Transaction = require("../apps/server/src/models/Transaction");
+    const User = require("../apps/server/src/models/User");
+    const { runMigrations } = require("../apps/server/src/config/migrations");
+    const { user } = accounts();
+    await mongoose.connect(process.env.MONGO_URI);
+    try {
+      const pending = await Transaction.collection.insertOne({
+        type: "Expense", category: "Food", amount: 77, date: todayISO(), note: "left pending by the old workflow",
+        status: "Pending Review", version: 1, submittedBy: new mongoose.Types.ObjectId(user.user.id), createdAt: new Date(),
+      });
+      const reviewer = await User.collection.insertOne({
+        firstName: "Old", lastName: "Reviewer", name: "Old Reviewer", email: `oldreviewer${Date.now()}@example.test`,
+        passwordHash: "x", role: "Reviewer",
+      });
+      await runMigrations(() => {});
+      expect((await Transaction.collection.findOne({ _id: pending.insertedId })).status).toBe("Approved");
+      expect((await User.collection.findOne({ _id: reviewer.insertedId })).role).toBe("User");
+      // Running it again changes nothing.
+      await runMigrations(() => {});
+      expect(await User.collection.countDocuments({ role: "Reviewer" })).toBe(0);
+    } finally {
+      await mongoose.disconnect();
+    }
+  });
+
+  test("RT-25 password fields can be shown and hidden", async ({ page }) => {
+    await page.goto("/login");
+    const field = page.locator(".auth-form .password-field");
+    const input = field.locator("input");
+    await input.fill("my secret 123");
+    await expect(input).toHaveAttribute("type", "password");
+    await field.getByRole("button", { name: "Show password" }).click();
+    await expect(input).toHaveAttribute("type", "text");
+    await expect(input).toHaveValue("my secret 123");
+    await field.getByRole("button", { name: "Hide password" }).click();
+    await expect(input).toHaveAttribute("type", "password");
+  });
+
+  test("RT-26 your own action is confirmed once, not announced back as news", async ({ page }) => {
+    await signIn(page, "user");
+    await gotoScreen(page, "Bill Reminders");
+    await page.getByRole("button", { name: "+ Add Bill" }).click();
+    await page.locator(".modal input").first().fill("My own new bill");
+    await page.locator(".modal input[type=number]").fill("150");
+    await page.getByRole("button", { name: "Save Bill" }).click();
+    await expect(page.locator(".toast")).toContainText("Bill added");
+    // The live update that follows refreshes the list, but does not pop up
+    // "New notification" for something the person just did themselves.
+    await expect(page.locator("table")).toContainText("My own new bill");
+    await page.waitForTimeout(1500);
+    await expect(page.locator(".toast.notice")).toHaveCount(0);
   });
 });

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { peso, fmtDate, billStatus, thisMonthISO, todayISO } from "../../lib/utils.js";
+import { peso, fmtDate, billStatus, thisMonthISO, todayISO, txStatusLabel } from "../../lib/utils.js";
 import Icon from "../../components/Icon.jsx";
 import CategoryIcon, { categoryTone } from "../../components/CategoryIcon.jsx";
 import DonutChart from "../../components/DonutChart.jsx";
@@ -54,7 +54,6 @@ export default function UserHome({ bills, tx, budgets, onNavigate }) {
   const monthApproved = approved.filter((t) => String(t.date).startsWith(month));
   const monthIncome = sum(monthApproved, "Income");
   const monthExpense = sum(monthApproved, "Expense");
-  const pendingCount = tx.filter((t) => t.status === "Pending Review").length;
 
   // Category totals for the chosen month: income first, then spending, largest first.
   const totals = {};
@@ -74,7 +73,8 @@ export default function UserHome({ bills, tx, budgets, onNavigate }) {
 
   const unpaid = bills.filter((b) => !b.paid).sort((a, b) => a.due.localeCompare(b.due));
   const overdue = unpaid.filter((b) => billStatus(b.due, false) === "Overdue").length;
-  const recent = tx.slice(0, 6);
+  // Earlier versions and deleted entries are history, not activity.
+  const recent = tx.filter((t) => t.status !== "Superseded" && t.status !== "Deleted").slice(0, 6);
 
   const QUICK = [
     { label: "Pay bills", icon: "receipt", to: "/bills" },
@@ -115,7 +115,6 @@ export default function UserHome({ bills, tx, budgets, onNavigate }) {
           </div>
 
           <div className="wallet-balance-pill">Balance <strong className="wallet-balance">{money(balance)}</strong></div>
-          {pendingCount > 0 && <div className="wallet-pending">{pendingCount} entr{pendingCount === 1 ? "y" : "ies"} waiting for review — not counted yet</div>}
 
           <div className="wallet-buttons">
             <button type="button" className="round-btn minus" onClick={() => onNavigate("/submit?type=Expense")} aria-label="Log an expense">
@@ -215,14 +214,14 @@ export default function UserHome({ bills, tx, budgets, onNavigate }) {
         <section className="panel">
           <div className="panel-head">
             <h3>Recent entries</h3>
-            <button className="linkbtn" onClick={() => onNavigate("/review")}>All entries</button>
+            <button className="linkbtn" onClick={() => onNavigate("/entries")}>All entries</button>
           </div>
           {recent.map((t) => (
             <div key={t._id} className="row static">
               <CategoryIcon category={t.category} />
               <span className="row-main">
                 <span className="row-title">{t.note || t.category}</span>
-                <span className="row-sub">{fmtDate(t.date)} · <span className={"status-" + t.status.replace(/\s/g, "-").toLowerCase()}>{t.status}</span></span>
+                <span className="row-sub">{fmtDate(t.date)} · <span className={"status-" + t.status.replace(/\s/g, "-").toLowerCase()}>{txStatusLabel(t.status)}</span></span>
               </span>
               <span className={"row-amount " + (t.status !== "Approved" ? "muted" : t.type === "Income" ? "pos" : "spent")} title={t.status !== "Approved" ? "Not counted in your balance" : undefined}>
                 {hidden ? "••••" : (t.type === "Income" ? "+" : "−") + peso(t.amount)}

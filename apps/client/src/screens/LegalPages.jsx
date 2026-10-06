@@ -30,21 +30,20 @@ export function PrivacyPage() {
       <ul>
         <li><strong>Account details:</strong> your first and last name, email address, and your password in hashed form. Your actual password is never stored.</li>
         <li><strong>Financial records you enter:</strong> bills, payments you mark as made, income and expense entries, budgets, and personal notes.</li>
-        <li><strong>Activity records:</strong> an audit log of important actions (sign-ins, failed sign-ins, payments, submissions and reviews) with your name and the time, and the notifications addressed to you.</li>
+        <li><strong>Activity records:</strong> an audit log of important actions (sign-ins, failed sign-ins, payments, entries, edits and deletions) with your name and the time, and the notifications addressed to you.</li>
       </ul>
 
       <h2>Why we use it</h2>
       <p>
         Only to run the service: to sign you in, show you your own records, send you bill reminders inside the app,
-        route your income and expense entries through review, and keep an audit trail that protects the integrity of the records.
+        keep the history of your income and expense entries, and keep an audit trail that protects the integrity of the records.
         We do not sell your data, show advertising, or share it with third parties.
       </p>
 
       <h2>Who can see it</h2>
       <ul>
         <li><strong>You</strong> see your own bills, budgets, entries, notes and notifications.</li>
-        <li><strong>Reviewers and Administrators</strong> see the income and expense entries submitted for review, and the comments left on them, because approving them is their role. They do not see your bills, budgets or personal notes.</li>
-        <li><strong>Administrators</strong> also see the list of accounts (name, email and role) and the audit log. Reviewers can read the audit log as well.</li>
+        <li><strong>Administrators</strong> see the list of accounts (name, email and role) and the audit log of actions. They do not see your bills, budgets, entries or notes.</li>
       </ul>
 
       <h2>Storage on your device</h2>
@@ -56,8 +55,8 @@ export function PrivacyPage() {
       <h2>How long we keep it</h2>
       <p>
         Your records are kept while your account exists. If an Administrator deletes your account, your bills, budgets,
-        personal notes, notifications and entries still awaiting review are deleted with it. Entries that were already
-        reviewed, and the audit log, are kept as part of the financial record.
+        income and expense entries, notes and notifications are deleted with it. The audit log of actions is kept as
+        the system's record.
       </p>
 
       <h2>Your rights</h2>
@@ -85,13 +84,13 @@ export function TermsPage() {
       <h2>Your records</h2>
       <ul>
         <li>FinTrack Stark is a record-keeping tool. It does not move money: marking a bill as paid records a payment you made elsewhere.</li>
-        <li>Enter information that is accurate. Income and expense entries are reviewed, and reviewed entries become part of a permanent audit record that cannot be edited or deleted.</li>
+        <li>Enter information that is accurate. You can correct an entry at any time; the earlier version is kept, and every change is recorded in the audit log.</li>
         <li>Bill reminders are a convenience. You remain responsible for paying your bills on time.</li>
       </ul>
 
       <h2>Acceptable use</h2>
       <p>
-        Do not try to access other people's records, get around the review process or access controls, or disrupt the service.
+        Do not try to access other people's records, get around the access controls, or disrupt the service.
         Accounts that do may be suspended or deleted by an administrator.
       </p>
 

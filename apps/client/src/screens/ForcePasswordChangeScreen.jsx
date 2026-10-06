@@ -1,4 +1,5 @@
 import { useState } from "react";
+import PasswordInput from "../components/PasswordInput.jsx";
 
 // Shown instead of the app when an Admin has reset this account's password.
 // The temporary one must be replaced before anything else; the server refuses
@@ -28,9 +29,9 @@ export default function ForcePasswordChangeScreen({ session, changePassword, log
           {session.name}, an administrator reset your password. Replace the temporary password with one only you know to continue.
         </p>
         <form onSubmit={submit}>
-          <div className="form-row"><label className="field">Temporary password</label><input type="password" autoComplete="current-password" value={pw.current} onChange={(e) => setPw({ ...pw, current: e.target.value })} required /></div>
-          <div className="form-row"><label className="field">New password</label><input type="password" autoComplete="new-password" value={pw.next} onChange={(e) => setPw({ ...pw, next: e.target.value })} required minLength={8} /><div className="hint">At least 8 characters.</div></div>
-          <div className="form-row"><label className="field">Confirm new password</label><input type="password" autoComplete="new-password" value={pw.confirm} onChange={(e) => setPw({ ...pw, confirm: e.target.value })} required /></div>
+          <div className="form-row"><label className="field">Temporary password</label><PasswordInput autoComplete="current-password" value={pw.current} onChange={(e) => setPw({ ...pw, current: e.target.value })} required /></div>
+          <div className="form-row"><label className="field">New password</label><PasswordInput autoComplete="new-password" value={pw.next} onChange={(e) => setPw({ ...pw, next: e.target.value })} required minLength={8} /><div className="hint">At least 8 characters.</div></div>
+          <div className="form-row"><label className="field">Confirm new password</label><PasswordInput autoComplete="new-password" value={pw.confirm} onChange={(e) => setPw({ ...pw, confirm: e.target.value })} required /></div>
           {err && <div className="form-msg error">{err}</div>}
           <div className="actions">
             <button type="button" className="btn ghost" onClick={logout}>Log out</button>

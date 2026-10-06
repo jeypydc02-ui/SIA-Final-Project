@@ -21,33 +21,32 @@ const FEATURES = [
   { icon: "receipt", title: "Bill reminders", text: "Add your bills once. The reminder service alerts you before each due date, and monthly bills come back on their own." },
   { icon: "card", title: "Payment tracking", text: "Mark a bill as paid and the payment is logged as an expense, with a notification and an audit record — in one tap." },
   { icon: "pie", title: "Monthly budgets", text: "Set a limit per category. FinTrack Stark shows what is left and warns you at 80% and when you go over." },
-  { icon: "check", title: "Review & approval", text: "Income and expense entries are checked by a reviewer before they count, so the numbers stay honest." },
+  { icon: "history", title: "Version history", text: "Fix a wrong entry any time. The earlier figures are kept as a version, so nothing changes silently." },
 ];
 
 const STEPS = [
   { n: 1, title: "Add your bills and budgets", text: "Rent, electricity, internet — set the due date and whether it repeats every month." },
-  { n: 2, title: "Log what comes in and goes out", text: "Record income and expenses, or pay a bill. Entries go to a reviewer for approval." },
+  { n: 2, title: "Log what comes in and goes out", text: "Record income and expenses, or pay a bill. Your balance and budgets update right away." },
   { n: 3, title: "Stay ahead of every due date", text: "Reminders, budget warnings and a clear monthly picture of where your money went." },
 ];
 
 const ROLES = [
   { role: "User", icon: "wallet", title: "Your wallet", points: ["Balance and monthly spending at a glance", "Bills, budgets and payment history", "Quick add for expenses, income and bills"] },
-  { role: "Reviewer", icon: "check", title: "The review desk", points: ["Queue of entries waiting for a decision", "Approve, send back or reject in one tap", "Cannot approve their own entries"] },
-  { role: "Admin", icon: "server", title: "The admin console", points: ["System status, accounts and roles", "Review pipeline and failed-login alerts", "Password resets for locked-out users"] },
+  { role: "Admin", icon: "server", title: "The admin console", points: ["System status, accounts and roles", "This week's activity and failed-login alerts", "Password resets for locked-out users"] },
 ];
 
 const FACTS = [
   { value: "8 hrs", label: "before a sign-in expires, so a forgotten session on a shared computer does not stay open" },
   { value: "0", label: "financial records stored on your device by the app — your data always comes fresh from the server" },
   { value: "3", label: "roles with separate access: people only ever see their own bills, budgets and notes" },
-  { value: "2 people", label: "involved in every reviewed entry — whoever submits it can never approve it" },
+  { value: "v1 → v2", label: "every edit to an entry keeps the earlier version, and every change is written to the audit log" },
 ];
 
 const FAQ = [
-  { q: "What is FinTrack Stark?", a: "A personal finance app for tracking bills, payments, income, expenses and monthly budgets, with a review step that checks entries before they count toward your balance." },
+  { q: "What is FinTrack Stark?", a: "A personal finance app for tracking bills, payments, income, expenses and monthly budgets, with reminders before due dates and live notifications." },
   { q: "Does it move real money?", a: "No. FinTrack Stark is a record-keeping tool. Marking a bill as paid records a payment you made elsewhere — it never connects to a bank or e-wallet." },
   { q: "How do bill reminders work?", a: "Once a day, the reminder service checks every unpaid bill and sends an alert to your Inbox when one is due within three days or already overdue. Monthly bills schedule next month's bill when you pay them." },
-  { q: "Who reviews my entries?", a: "A Reviewer or Admin approves, rejects or sends back each income and expense entry. Nobody can review their own entry, and you are notified of every decision." },
+  { q: "Can I fix a wrong entry?", a: "Yes. Edit it from My Entries and the corrected version counts from then on, while the earlier one stays in Revision History. Deleting an entry stops it counting but keeps it in the history." },
   { q: "Is my financial data safe?", a: "Passwords are hashed, sessions expire after eight hours, and other users cannot see your bills, budgets or notes. Read the Privacy Policy for the details." },
   { q: "Can I install it on my phone?", a: "Yes. On Android or Chrome, choose Install app. On iPhone, open it in Safari and tap Share, then Add to Home Screen. It opens like an app and still opens without a connection." },
 ];
@@ -125,7 +124,7 @@ export default function LandingPage({ theme, setTheme, onLogin, onGetStarted }) 
             <div className="lp-badges">
               <span className="lp-badge"><Icon name="receipt" size={16} /> Bill reminders</span>
               <span className="lp-badge"><Icon name="download" size={16} /> Installable app</span>
-              <span className="lp-badge"><Icon name="shield" size={16} /> Reviewed entries</span>
+              <span className="lp-badge"><Icon name="bell" size={16} /> Live notifications</span>
             </div>
             <h1>Take control of every peso.</h1>
             <p className="lp-lead">
@@ -214,8 +213,8 @@ export default function LandingPage({ theme, setTheme, onLogin, onGetStarted }) 
         <div className="lp-container">
           <span className="lp-tag">Roles</span>
           <h2 className="lp-h2">One app, three ways to use it</h2>
-          <p className="lp-sub">Every account starts as a User. An Admin can make someone a Reviewer or another Admin.</p>
-          <div className="lp-roles">
+          <p className="lp-sub">Every account starts as a User. An Admin can make someone else an Admin.</p>
+          <div className="lp-roles two">
             {ROLES.map((r) => (
               <div key={r.role} className={"lp-role role-" + r.role.toLowerCase()}>
                 <span className="lp-role-ico"><Icon name={r.icon} size={24} /></span>

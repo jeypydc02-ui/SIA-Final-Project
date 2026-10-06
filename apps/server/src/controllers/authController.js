@@ -45,8 +45,8 @@ async function login(req, res) {
   res.json({ token, user: publicUser(user) });
 }
 
-// Public self-registration. Always creates a "User" role account — Reviewer
-// and Admin accounts are assigned by an existing Admin, never self-selected,
+// Public self-registration. Always creates a "User" role account — Admin
+// accounts are assigned by an existing Admin, never self-selected,
 // to keep least-privilege intact (spec section 8.2).
 async function register(req, res) {
   const { firstName, lastName, email, password } = req.body || {};

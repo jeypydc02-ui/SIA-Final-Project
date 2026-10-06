@@ -1,4 +1,5 @@
 import { useState } from "react";
+import PasswordInput from "./PasswordInput.jsx";
 
 // Shown over whatever screen was open when the server ended the session.
 export default function ReauthDialog({ email, onSubmit, onLogout }) {
@@ -27,7 +28,7 @@ export default function ReauthDialog({ email, onSubmit, onLogout }) {
           <div className="form-row"><label className="field">Email</label><input value={email} disabled /></div>
           <div className="form-row">
             <label className="field" htmlFor="reauth-password">Password</label>
-            <input id="reauth-password" type="password" autoFocus autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} />
+            <PasswordInput id="reauth-password" autoFocus autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} />
           </div>
           {err && <div className="form-msg error">{err}</div>}
           <div className="actions">

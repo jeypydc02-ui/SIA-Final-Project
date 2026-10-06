@@ -56,9 +56,9 @@ async function seed() {
     return;
   }
 
-  const [userHash, reviewerHash, adminHash] = await Promise.all([
+  const [userHash, user2Hash, adminHash] = await Promise.all([
     bcrypt.hash("demo123", 10),
-    bcrypt.hash("reviewer123", 10),
+    bcrypt.hash("demo456", 10),
     bcrypt.hash("admin123", 10),
   ]);
 
@@ -70,15 +70,17 @@ async function seed() {
     passwordHash: userHash,
     role: "User",
   });
-  const reviewer = await User.create({
+  // A second ordinary account, so the Admin Console has more than one person
+  // to show and per-user privacy can be demonstrated.
+  const arvy = await User.create({
     firstName: "Arvy Karlson",
     lastName: "Dabasol",
     name: "Arvy Karlson Dabasol",
-    email: "reviewer@fintrackstark.app",
-    passwordHash: reviewerHash,
-    role: "Reviewer",
+    email: "arvy@fintrackstark.app",
+    passwordHash: user2Hash,
+    role: "User",
   });
-  const admin = await User.create({
+  await User.create({
     firstName: "System",
     lastName: "Admin",
     name: "System Admin",
@@ -102,54 +104,54 @@ async function seed() {
     { name: "Condo Rent", category: "Housing", amount: 14000, due: addDays(0), paid: false, createdBy: jp._id, repeat: "monthly", repeatDay: Number(addDays(0).slice(8, 10)) },
     { name: "Netflix Subscription", category: "Subscription", amount: 549, due: addDays(-6), paid: true, paidOn: addDays(-6), paidAmount: 549, createdBy: jp._id },
     { name: "BPI Credit Card", category: "Credit", amount: 5230, due: addDays(15), paid: false, createdBy: jp._id },
+    { name: "Globe Postpaid", category: "Internet", amount: 999, due: addDays(5), paid: false, createdBy: arvy._id, repeat: "monthly", repeatDay: Number(addDays(5).slice(8, 10)) },
   ]);
 
+  // Entries count the moment they are recorded ("Approved" is the stored
+  // status for a current, counted entry).
   await Transaction.insertMany([
-    { type: "Income", category: "Salary", amount: 32000, date: addDays(-20), note: "Monthly salary", status: "Approved", submittedBy: jp._id, reviewedBy: reviewer._id, reviewComment: "Seed data." },
-    { type: "Expense", category: "Food", amount: 2100, date: addDays(-18), note: "Groceries", status: "Approved", submittedBy: jp._id, reviewedBy: reviewer._id, reviewComment: "Seed data." },
-    { type: "Expense", category: "Transport", amount: 850, date: addDays(-15), note: "Grab + fare", status: "Approved", submittedBy: jp._id, reviewedBy: reviewer._id, reviewComment: "Seed data." },
-    { type: "Income", category: "Freelance", amount: 6000, date: addDays(-10), note: "Web dev gig", status: "Approved", submittedBy: jp._id, reviewedBy: reviewer._id, reviewComment: "Seed data." },
-    { type: "Expense", category: "Utilities", amount: 549, date: addDays(-6), note: "Netflix", status: "Approved", autoApproved: true, submittedBy: jp._id, reviewedBy: jp._id, reviewComment: "Auto-approved via bill payment workflow." },
-    { type: "Expense", category: "Food", amount: 1200, date: todayISO(), note: "Weekly market run", status: "Pending Review", submittedBy: jp._id },
+    { type: "Income", category: "Salary", amount: 32000, date: addDays(-20), note: "Monthly salary", status: "Approved", submittedBy: jp._id },
+    { type: "Expense", category: "Food", amount: 2100, date: addDays(-18), note: "Groceries", status: "Approved", submittedBy: jp._id },
+    { type: "Expense", category: "Transport", amount: 850, date: addDays(-15), note: "Grab + fare", status: "Approved", submittedBy: jp._id },
+    { type: "Income", category: "Freelance", amount: 6000, date: addDays(-10), note: "Web dev gig", status: "Approved", submittedBy: jp._id },
+    { type: "Expense", category: "Subscription", amount: 549, date: addDays(-6), note: "Bill payment: Netflix Subscription", status: "Approved", autoApproved: true, submittedBy: jp._id, reviewComment: "Recorded by the bill payment workflow." },
+    { type: "Expense", category: "Food", amount: 1200, date: todayISO(), note: "Weekly market run", status: "Approved", submittedBy: jp._id },
+    { type: "Income", category: "Allowance", amount: 5000, date: addDays(-3), note: "Allowance", status: "Approved", submittedBy: arvy._id },
   ]);
 
-  // One entry that has been through the full revision loop, so the Revision
-  // History screen has a real v1 -> v2 chain to show at demo time rather than
-  // a table of single-version rows. Created in two steps because the second
-  // version has to reference the first.
-  const originalClaim = await Transaction.create({
+  // One entry that was corrected after it was recorded, so the Revision
+  // History screen has a real v1 -> v2 chain to show at demo time. Created in
+  // two steps because the second version has to reference the first.
+  const originalEntry = await Transaction.create({
     type: "Expense", category: "Transport", amount: 2400, date: addDays(-8),
-    note: "Airport transfer (original claim)",
+    note: "Airport transfer",
     status: "Superseded", version: 1,
-    submittedBy: jp._id, reviewedBy: reviewer._id,
-    reviewComment: "Amount looks high for this route — please check the receipt.",
+    submittedBy: jp._id,
   });
   await Transaction.create({
     type: "Expense", category: "Transport", amount: 1650, date: addDays(-8),
-    note: "Airport transfer (corrected)",
-    status: "Approved", version: 2, parentId: originalClaim._id,
-    submittedBy: jp._id, reviewedBy: reviewer._id,
-    reviewComment: "Approved after revision.",
+    note: "Airport transfer (corrected from receipt)",
+    status: "Approved", version: 2, parentId: originalEntry._id,
+    submittedBy: jp._id,
   });
   await Comment.create({
-    transactionId: originalClaim._id,
-    author: reviewer.name, authorId: reviewer._id,
-    text: "Amount looks high for this route — please check the receipt.",
+    transactionId: originalEntry._id,
+    author: jp.name, authorId: jp._id,
+    text: "Typed 2,400 by mistake — the receipt says 1,650.",
   });
 
-  // Notifications are addressed to a recipient. Bill reminders are deliberately
-  // NOT seeded: the reminder service raises those itself on its first sweep,
-  // which is what makes them real rather than sample text.
+  // Bill reminders are deliberately NOT seeded: the reminder service raises
+  // those itself on its first sweep, which is what makes them real.
   await Notification.insertMany([
-    { user: reviewer._id, type: "submission", message: "John Paul Dela Cruz submitted an expense of 1200 for review." },
+    { user: jp._id, type: "bill", message: "Welcome to FinTrack Stark. Your sample bills are set up — the reminder service will alert you before each due date." },
   ]);
 
   await AuditLog.create({ user: "System", action: "Seed", detail: "Sample data initialized for demo." });
 
   console.log("[seed] done. Demo accounts:");
-  console.log("  User     -> jp@fintrackstark.app / demo123");
-  console.log("  Reviewer -> reviewer@fintrackstark.app / reviewer123");
-  console.log("  Admin    -> admin@fintrackstark.app / admin123");
+  console.log("  User   -> jp@fintrackstark.app / demo123");
+  console.log("  User   -> arvy@fintrackstark.app / demo456");
+  console.log("  Admin  -> admin@fintrackstark.app / admin123");
 
   await mongoose.disconnect();
 }

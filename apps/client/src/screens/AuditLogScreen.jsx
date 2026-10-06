@@ -1,7 +1,7 @@
 export default function AuditLogScreen({ auditLog }) {
   return (
     <div>
-      <div className="pagehead"><div><h2>Audit Log</h2><div className="desc">Immutable record of key actions — logins, bill changes, payments, submissions, and reviews.</div></div></div>
+      <div className="pagehead"><div><h2>Audit Log</h2><div className="desc">Immutable record of key actions — logins, bill changes, payments, entries, edits and deletions.</div></div></div>
       <div className="card">
         <table>
           <thead><tr><th>Timestamp</th><th>User</th><th>Action</th><th>Detail</th></tr></thead>

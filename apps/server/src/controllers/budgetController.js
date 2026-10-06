@@ -1,5 +1,6 @@
 const Budget = require("../models/Budget");
 const { logAction } = require("../services/audit");
+const { publish } = require("../services/events");
 const { EXPENSE_CATEGORIES } = require("../utils/categories");
 
 // Budgets limit spending, so only expense categories can have one.
@@ -29,6 +30,7 @@ async function create(req, res) {
   }
   const budget = await Budget.create({ user: req.user.id, category: name, limit: Number(limit) });
   await logAction(req.user.name, "Budget Created", `${budget.category} limit set to ${budget.limit}.`);
+  publish(req.user.id, "budgets");
   res.status(201).json(budget);
 }
 
@@ -55,6 +57,7 @@ async function update(req, res) {
   await budget.save();
 
   await logAction(req.user.name, "Budget Updated", `${budget.category} limit now ${budget.limit}.`);
+  publish(req.user.id, "budgets");
   res.json(budget);
 }
 
@@ -66,6 +69,7 @@ async function remove(req, res) {
   }
   await budget.deleteOne();
   await logAction(req.user.name, "Budget Deleted", `${budget.category} budget removed.`);
+  publish(req.user.id, "budgets");
   res.json({ ok: true });
 }
 

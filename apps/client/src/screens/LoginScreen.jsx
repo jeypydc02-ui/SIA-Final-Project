@@ -1,8 +1,9 @@
 import { useState } from "react";
+import PasswordInput from "../components/PasswordInput.jsx";
 import { Link } from "react-router-dom";
 import ThemeToggle from "../components/ThemeToggle.jsx";
 
-const FEATURE_PILLS = ["Bill Reminders", "Payment Tracking", "Review Workflow"];
+const FEATURE_PILLS = ["Bill Reminders", "Payment Tracking", "Monthly Budgets"];
 
 export default function LoginScreen({ onLogin, onRegister, theme, setTheme, initialMode = "login", onBack, onSwitchMode }) {
   const mode = initialMode;
@@ -86,7 +87,7 @@ export default function LoginScreen({ onLogin, onRegister, theme, setTheme, init
               </div>
               <div className="form-row">
                 <label className="field">Password</label>
-                <input type="password" autoComplete="current-password" value={password} onChange={e => setPassword(e.target.value)} />
+                <PasswordInput autoComplete="current-password" value={password} onChange={e => setPassword(e.target.value)} />
               </div>
               <div style={{ margin: "-4px 0 12px", fontSize: 12 }}>
                 <button type="button" className="linkbtn" onClick={() => setShowForgot((v) => !v)}>Forgot your password?</button>
@@ -111,8 +112,8 @@ export default function LoginScreen({ onLogin, onRegister, theme, setTheme, init
                 <input type="email" autoComplete="email" value={regEmail} onChange={e => setRegEmail(e.target.value)} placeholder="you@example.com" />
               </div>
               <div className="form-grid">
-                <div className="form-row"><label className="field">Password</label><input type="password" autoComplete="new-password" value={regPassword} onChange={e => setRegPassword(e.target.value)} /></div>
-                <div className="form-row"><label className="field">Confirm Password</label><input type="password" autoComplete="new-password" value={regConfirm} onChange={e => setRegConfirm(e.target.value)} /></div>
+                <div className="form-row"><label className="field">Password</label><PasswordInput autoComplete="new-password" value={regPassword} onChange={e => setRegPassword(e.target.value)} /></div>
+                <div className="form-row"><label className="field">Confirm Password</label><PasswordInput autoComplete="new-password" value={regConfirm} onChange={e => setRegConfirm(e.target.value)} /></div>
               </div>
               {err && <div style={{ color: "var(--danger)", fontSize: 12, marginBottom: 12 }}>{err}</div>}
               <button className="btn" style={{ width: "100%" }} type="submit" disabled={busy}>{busy ? "Creating account…" : "Create Account"}</button>

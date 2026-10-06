@@ -19,8 +19,9 @@ const TransactionSchema = new Schema({
   note: { type: String, default: "", trim: true, maxlength: [300, "Note cannot be longer than 300 characters."] },
   status: {
     type: String,
-    enum: ["Pending Review", "Approved", "Rejected", "Needs Revision", "Superseded"],
-    default: "Pending Review",
+    // "Approved" is the current, counted version; see transactionController.js.
+    enum: ["Approved", "Superseded", "Deleted", "Pending Review", "Rejected", "Needs Revision"],
+    default: "Approved",
   },
   version: { type: Number, default: 1 },
   parentId: { type: Schema.Types.ObjectId, ref: "Transaction", default: null, index: true },
@@ -31,7 +32,7 @@ const TransactionSchema = new Schema({
   createdAt: { type: Date, default: Date.now },
 });
 
-// The review queue filters on status and lists newest first.
+// Lists filter on status and show newest first.
 TransactionSchema.index({ status: 1, createdAt: -1 });
 
 module.exports = model("Transaction", TransactionSchema);

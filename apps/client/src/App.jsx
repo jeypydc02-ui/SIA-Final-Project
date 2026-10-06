@@ -1,10 +1,12 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { BrowserRouter, Routes, Route, Navigate, useNavigate } from "react-router-dom";
 import { api, SESSION_ENDED, PASSWORD_CHANGE_REQUIRED } from "./lib/api.js";
+import { connectLive } from "./lib/live.js";
 import { peso } from "./lib/utils.js";
 
 // Frame and shared pieces
 import Shell from "./components/Shell.jsx";
+import Toast from "./components/Toast.jsx";
 import ErrorBoundary from "./components/ErrorBoundary.jsx";
 import ConfirmDialog from "./components/ConfirmDialog.jsx";
 import ReauthDialog from "./components/ReauthDialog.jsx";
@@ -24,7 +26,7 @@ import LogEntryScreen from "./screens/LogEntryScreen.jsx";
 import BudgetsScreen from "./screens/BudgetsScreen.jsx";
 import BillsScreen from "./screens/BillsScreen.jsx";
 import RevisionHistoryScreen from "./screens/RevisionHistoryScreen.jsx";
-import ReviewScreen from "./screens/ReviewScreen.jsx";
+import EntriesScreen from "./screens/EntriesScreen.jsx";
 import NotesScreen from "./screens/NotesScreen.jsx";
 import PaymentHistoryScreen from "./screens/PaymentHistoryScreen.jsx";
 import NotificationsScreen from "./screens/NotificationsScreen.jsx";
@@ -34,7 +36,6 @@ import UsersScreen from "./screens/UsersScreen.jsx";
 import SettingsScreen from "./screens/SettingsScreen.jsx";
 import NotFoundScreen from "./screens/NotFoundScreen.jsx";
 
-const isStaff = (s) => !!s && (s.role === "Admin" || s.role === "Reviewer");
 
 export default function App() {
   return (
@@ -54,11 +55,8 @@ function FinTrackStark() {
   const [sessionEnded, setSessionEnded] = useState(false);
   const [users, setUsers] = useState([]);
   const [bills, setBills] = useState([]);
-  // `tx` is always the signed-in person's own entries — what the dashboard,
-  // budgets and reports add up. `queue` is the review queue across everyone,
-  // loaded only for Reviewers and Admins.
+  // The signed-in person's own income and expense entries.
   const [tx, setTx] = useState([]);
-  const [queue, setQueue] = useState([]);
   const [budgets, setBudgets] = useState([]);
   const [notifs, setNotifs] = useState([]);
   const [auditLog, setAuditLog] = useState([]);
@@ -79,7 +77,8 @@ function FinTrackStark() {
 
   useEffect(() => {
     if (!toast) return;
-    const t = setTimeout(() => setToast(null), 3200);
+    // Incoming notifications stay a little longer than "saved" confirmations.
+    const t = setTimeout(() => setToast(null), toast.kind === "notice" ? 6000 : 3200);
     return () => clearTimeout(t);
   }, [toast]);
 
@@ -114,7 +113,7 @@ function FinTrackStark() {
         if (cancelled) return;
         const sess = { ...data.user, token };
         setSession(sess);
-        if (!sess.mustChangePassword) await refreshAll(sess);
+        if (!sess.mustChangePassword) await refreshAll();
       } catch (err) {
         if (cancelled) return;
         // Only a rejection from the server means the session is over. If the
@@ -144,44 +143,95 @@ function FinTrackStark() {
     setConfirmDialog({ message, confirmLabel, onConfirm });
   }
 
-  async function refreshAll(activeSession) {
-    const s = activeSession || session;
-    try {
-      const [billsData, txData, budgetsData, notifsData, commentsData] = await Promise.all([
-        api("/api/bills"), api("/api/transactions"), api("/api/budgets"), api("/api/notifications"), api("/api/comments"),
-      ]);
-      setBills(billsData); setTx(txData); setBudgets(budgetsData); setNotifs(notifsData); setComments(commentsData);
-      if (isStaff(s)) {
-        const [queueData, auditData] = await Promise.all([
-          api("/api/transactions?scope=review"), api("/api/audit-log"),
-        ]);
-        setQueue(queueData); setAuditLog(auditData);
-      } else {
-        setQueue(txData);
-      }
-      if (s && s.role === "Admin") {
-        setUsers(await api("/api/users"));
-      }
-      setLoadError("");
-    } catch (err) {
-      if (err.status !== 401) setLoadError(err.message);
+  // Notification ids already seen, to tell which ones just arrived; and when
+  // the person last did something themselves, so their own action's
+  // notification ("Bill added") is not announced back to them as news.
+  const seenNotifs = useRef(null);
+  const lastOwnAction = useRef(0);
+  const refreshing = useRef(null);
+  const refreshAgain = useRef(false);
+
+  // Everything the screens show comes from one request (/api/sync). Calls that
+  // arrive while one is in flight are folded into a single follow-up, so a
+  // burst of live updates costs at most two requests.
+  function refreshAll() {
+    if (refreshing.current) {
+      refreshAgain.current = true;
+      return refreshing.current;
     }
+    refreshing.current = (async () => {
+      try {
+        const data = await api("/api/sync");
+        setBills(data.bills); setTx(data.transactions); setBudgets(data.budgets);
+        setNotifs(data.notifications); setComments(data.comments);
+        setAuditLog(data.auditLog); setUsers(data.users);
+        // A role or name changed elsewhere (by an Admin, or on another device).
+        setSession((s) => (s ? { ...s, ...data.me } : s));
+        announceNew(data.notifications);
+        setLoadError("");
+      } catch (err) {
+        if (err.status !== 401) setLoadError(err.message);
+      } finally {
+        refreshing.current = null;
+        if (refreshAgain.current) {
+          refreshAgain.current = false;
+          refreshAll();
+        }
+      }
+    })();
+    return refreshing.current;
   }
 
-  // Every write goes through here. It resolves to true only once the server
-  // has accepted the change, so a form can keep what the person typed — and
-  // stay open — when the request fails, instead of clearing it optimistically.
+  function announceNew(list) {
+    const ids = new Set(list.map((n) => n._id));
+    const before = seenNotifs.current;
+    seenNotifs.current = ids;
+    if (!before) return; // first load: nothing is "new"
+    const fresh = list.filter((n) => !n.read && !before.has(n._id));
+    if (!fresh.length || Date.now() - lastOwnAction.current < 4000) return;
+    setToast({ kind: "notice", text: fresh.length === 1 ? fresh[0].message : `${fresh.length} new notifications` });
+  }
+
+  // Every write goes through here. It resolves to true as soon as the server
+  // has accepted the change, so the dialog closes at once; the fresh data
+  // loads in the background. On failure the form keeps what was typed.
   async function perform(request, successMessage) {
     try {
+      lastOwnAction.current = Date.now();
       await request();
       if (successMessage) fireToast(successMessage);
-      await refreshAll();
+      refreshAll();
       return true;
     } catch (err) {
       fireError(err);
       return false;
     }
   }
+
+  // Live updates while signed in: the server pushes "something changed" and
+  // the screens reload by themselves. Coming back to the tab or regaining a
+  // connection also refreshes, in case anything happened while away.
+  useEffect(() => {
+    if (!session || session.mustChangePassword) return undefined;
+    let timer = null;
+    const soon = () => { clearTimeout(timer); timer = setTimeout(refreshAll, 150); };
+    const stop = connectLive(session.token, { onChange: soon, onReconnect: soon });
+    const onVisible = () => { if (document.visibilityState === "visible") soon(); };
+    document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("online", soon);
+    return () => {
+      stop();
+      clearTimeout(timer);
+      document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("online", soon);
+    };
+  }, [session && session.token, session && session.mustChangePassword]);
+
+  // Unread count in the browser tab / installed app title, like a chat app.
+  useEffect(() => {
+    const unread = notifs.filter((n) => !n.read).length;
+    document.title = unread ? `(${unread}) FinTrack Stark` : "FinTrack Stark";
+  }, [notifs]);
 
   function startSession(data) {
     const sess = { ...data.user, token: data.token };
@@ -197,7 +247,7 @@ function FinTrackStark() {
       const sess = startSession(data);
       navigate("/dashboard", { replace: true });
       if (!sess.mustChangePassword) {
-        await refreshAll(sess);
+        refreshAll();
         fireToast(`Welcome back, ${sess.name.split(" ")[0]}!`);
       }
       return null;
@@ -210,7 +260,7 @@ function FinTrackStark() {
       const data = await api("/api/auth/register", { method: "POST", body: { firstName, lastName, email, password } });
       const sess = startSession(data);
       navigate("/dashboard", { replace: true });
-      await refreshAll(sess);
+      refreshAll();
       fireToast(`Welcome, ${sess.name.split(" ")[0]}! Your account has been created.`);
       return null; // no error
     } catch (err) {
@@ -223,7 +273,7 @@ function FinTrackStark() {
       const data = await api("/api/auth/login", { method: "POST", body: { email: session.email, password } });
       const sess = startSession(data);
       setSessionEnded(false);
-      if (!sess.mustChangePassword) await refreshAll(sess);
+      if (!sess.mustChangePassword) refreshAll();
       return null;
     } catch (err) {
       return err.message;
@@ -233,7 +283,8 @@ function FinTrackStark() {
     sessionStorage.removeItem("fts_token");
     setSession(null);
     setSessionEnded(false);
-    setBills([]); setTx([]); setQueue([]); setBudgets([]); setNotifs([]); setAuditLog([]); setUsers([]); setComments([]);
+    setBills([]); setTx([]); setBudgets([]); setNotifs([]); setAuditLog([]); setUsers([]); setComments([]);
+    seenNotifs.current = null;
   }
   async function logout() {
     try { await api("/api/auth/logout", { method: "POST", quiet: true }); } catch (e) { /* ignore */ }
@@ -263,23 +314,18 @@ function FinTrackStark() {
   }
   const addTx = (t) => perform(
     () => api("/api/transactions", { method: "POST", body: t }),
-    `${t.type} of ${peso(t.amount)} submitted for review.`
+    `${t.type} of ${peso(t.amount)} recorded.`
   );
-  const editTx = (id, patch) => perform(() => api("/api/transactions/" + id, { method: "PUT", body: patch }), "Entry updated.");
+  const editTx = (id, patch) => perform(
+    () => api("/api/transactions/" + id, { method: "PUT", body: patch }),
+    "Entry updated — the previous figures are kept in Revision History."
+  );
   function deleteTx(entry) {
-    askConfirm(`Withdraw this ${entry.type.toLowerCase()} of ${peso(entry.amount)}?`, async () => {
+    askConfirm(`Delete this ${entry.type.toLowerCase()} of ${peso(entry.amount)}? It stops counting in your balance.`, async () => {
       setConfirmDialog(null);
-      await perform(() => api("/api/transactions/" + entry._id, { method: "DELETE" }), "Entry withdrawn.");
-    }, "Withdraw Entry");
+      await perform(() => api("/api/transactions/" + entry._id, { method: "DELETE" }), "Entry deleted.");
+    }, "Delete Entry");
   }
-  const reviewTx = (id, action, comment) => perform(
-    () => api("/api/transactions/" + id + "/review", { method: "POST", body: { action, comment } }),
-    "Review recorded."
-  );
-  const resubmitTx = (id, patch) => perform(
-    () => api("/api/transactions/" + id + "/resubmit", { method: "POST", body: patch }),
-    "Resubmitted for review."
-  );
   const addComment = (text) => perform(() => api("/api/comments", { method: "POST", body: { text } }), "Note posted.");
 
   // ---- Budgets ----
@@ -302,7 +348,7 @@ function FinTrackStark() {
       const data = await api("/api/auth/me", { method: "PUT", body: patch });
       setSession((s) => ({ ...s, ...data.user }));
       fireToast("Profile updated.");
-      await refreshAll();
+      refreshAll();
       return null;
     } catch (err) { return err.message; }
   }
@@ -312,7 +358,7 @@ function FinTrackStark() {
       // The server invalidates every other session and hands back a fresh token.
       const sess = startSession(data);
       fireToast("Password changed — other devices were signed out.");
-      await refreshAll(sess);
+      refreshAll();
       return null;
     } catch (err) { return err.message; }
   }
@@ -323,7 +369,7 @@ function FinTrackStark() {
     "Role updated."
   );
   function deleteUser(user) {
-    askConfirm(`Delete the account for ${user.name}? Their bills, budgets, notes and pending entries are removed too. This cannot be undone.`, async () => {
+    askConfirm(`Delete the account for ${user.name}? Their bills, budgets, entries and notes are removed too. This cannot be undone.`, async () => {
       setConfirmDialog(null);
       await perform(() => api("/api/users/" + user._id, { method: "DELETE" }), "Account deleted.");
     }, "Delete Account");
@@ -332,7 +378,7 @@ function FinTrackStark() {
   async function resetUserPassword(user) {
     try {
       const data = await api("/api/users/" + user._id + "/reset-password", { method: "POST" });
-      await refreshAll();
+      refreshAll();
       return data.temporaryPassword;
     } catch (err) {
       fireError(err);
@@ -362,7 +408,7 @@ function FinTrackStark() {
     return (
       <>
         <ForcePasswordChangeScreen session={session} changePassword={changePassword} logout={logout} theme={theme} />
-        {toast && <div className="toast">{toast}</div>}
+        {toast && <Toast toast={toast} onOpen={() => { setToast(null); navigate("/notifications"); }} />}
       </>
     );
   }
@@ -420,19 +466,21 @@ function FinTrackStark() {
         <Route
           element={
             <RequireAuth session={session}>
-              <Shell session={session} logout={requestLogout} theme={theme} setTheme={setTheme} notifs={notifs} queue={queue} loadError={loadError} />
+              <Shell session={session} logout={requestLogout} theme={theme} setTheme={setTheme} notifs={notifs} loadError={loadError} />
             </RequireAuth>
           }
         >
-          <Route path="/dashboard" element={<DashboardScreen session={session} bills={bills} tx={tx} budgets={budgets} notifs={notifs} queue={queue} users={users} auditLog={auditLog} reviewTx={reviewTx} onNavigate={navigate} />} />
+          <Route path="/dashboard" element={<DashboardScreen session={session} bills={bills} tx={tx} budgets={budgets} notifs={notifs} users={users} auditLog={auditLog} onNavigate={navigate} />} />
           <Route path="/categories" element={<CategoryList bills={bills} onOpen={(name) => navigate("/categories/" + encodeURIComponent(name))} />} />
           <Route path="/categories/:name" element={<CategoryDetailRoute bills={bills} />} />
           <Route path="/submit" element={<LogEntryScreen addTx={addTx} />} />
           <Route path="/budgets" element={<BudgetsScreen budgets={budgets} tx={tx} addBudget={addBudget} editBudget={editBudget} deleteBudget={deleteBudget} />} />
           <Route path="/bills" element={<BillsScreen bills={bills} addBill={addBill} markPaid={markPaid} editBill={editBill} deleteBill={deleteBill} />} />
-          <Route path="/revisions" element={<RevisionHistoryScreen tx={queue} />} />
-          <Route path="/review" element={<ReviewScreen tx={tx} queue={queue} session={session} reviewTx={reviewTx} resubmitTx={resubmitTx} editTx={editTx} deleteTx={deleteTx} />} />
-          <Route path="/notes" element={<NotesScreen comments={comments} addComment={addComment} tx={queue} />} />
+          <Route path="/revisions" element={<RevisionHistoryScreen tx={tx} />} />
+          <Route path="/entries" element={<EntriesScreen tx={tx} editTx={editTx} deleteTx={deleteTx} onNavigate={navigate} />} />
+          {/* Old address of the former review screen, kept for bookmarks. */}
+          <Route path="/review" element={<Navigate to="/entries" replace />} />
+          <Route path="/notes" element={<NotesScreen comments={comments} addComment={addComment} tx={tx} />} />
           <Route path="/payments" element={<PaymentHistoryScreen bills={bills} />} />
           <Route path="/notifications" element={<NotificationsScreen notifs={notifs} markRead={markNotifRead} markAllRead={markAllNotifsRead} />} />
           <Route path="/reports" element={<ReportsScreen tx={tx} bills={bills} budgets={budgets} />} />
@@ -452,7 +500,7 @@ function FinTrackStark() {
       </Routes>
 
       <InstallPrompt />
-      {toast && <div className="toast">{toast}</div>}
+      {toast && <Toast toast={toast} onOpen={() => { setToast(null); navigate("/notifications"); }} />}
       {confirmDialog && (
         <ConfirmDialog
           message={confirmDialog.message}

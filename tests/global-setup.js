@@ -27,7 +27,7 @@ module.exports = async () => {
   // The webServer is already up by the time globalSetup runs.
   const accounts = {
     user: { email: "jp@fintrackstark.app", password: "demo123" },
-    reviewer: { email: "reviewer@fintrackstark.app", password: "reviewer123" },
+    other: { email: "arvy@fintrackstark.app", password: "demo456" },
     admin: { email: "admin@fintrackstark.app", password: "admin123" },
   };
 

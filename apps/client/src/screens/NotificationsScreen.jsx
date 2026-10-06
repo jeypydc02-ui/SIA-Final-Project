@@ -6,7 +6,7 @@ export default function NotificationsScreen({ notifs, markRead, markAllRead }) {
       <div className="pagehead">
         <div>
           <h2>Notification Log</h2>
-          <div className="desc">Alerts addressed to you from the Bill Reminder, Payment Tracking, and Review workflow integration.</div>
+          <div className="desc">Alerts addressed to you — bill reminders, payments and budget warnings. New ones appear here as they happen.</div>
         </div>
         {unread.length > 0 && (
           <button className="btn ghost" onClick={markAllRead}>Mark all as read ({unread.length})</button>

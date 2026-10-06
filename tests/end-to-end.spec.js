@@ -1,15 +1,15 @@
 const { test, expect } = require("@playwright/test");
 const { api, accounts } = require("./helpers");
 
-// End-to-end scenario (spec section 16: minimum 1, and section 9.5:
-// "one complete workflow from submission to final approval").
+// End-to-end scenario (spec section 16: minimum 1).
 //
 // One continuous journey through the browser, no API shortcuts for the steps
-// a person would perform: register -> submit -> reviewer requests revision ->
-// resubmit as v2 -> reviewer approves -> the figure reaches the dashboard and
-// reports, and the whole thing is visible in the audit trail.
+// a person would perform: register -> set a budget -> record an expense (it
+// counts at once) -> correct it, which keeps the first figure as v1 -> the
+// corrected figure reaches the dashboard, budget and reports -> the whole
+// thing is visible in the audit trail.
 
-test("E2E-01 a new account's entry travels from submission to approval", async ({ browser }) => {
+test("E2E-01 a new account records, corrects and reports an expense", async ({ browser }) => {
   const email = `e2e${Date.now()}@example.test`;
   const password = "e2epass123";
 
@@ -42,73 +42,39 @@ test("E2E-01 a new account's entry travels from submission to approval", async (
   await member.getByRole("button", { name: "Save Budget" }).click();
   await expect(member.locator(".card", { hasText: "Food" }).first()).toContainText("of ₱3,000.00");
 
-  // --- 3. Submit an expense for review ---
+  // --- 3. Record an expense: it counts straight away ---
   await member.locator(".nav-item", { hasText: "Log Income/Expense" }).click();
   await member.locator("select").first().selectOption("Expense");
   await member.locator("select").nth(1).selectOption("Food");
   await member.locator('input[type=number]').fill("1200");
   await member.locator('input[placeholder*="Groceries"]').fill("E2E weekly groceries");
-  await member.getByRole("button", { name: "Submit for Review" }).click();
-  await expect(member.locator(".toast")).toContainText("submitted for review");
+  await member.getByRole("button", { name: "Save Entry" }).click();
+  await expect(member.locator(".toast")).toContainText("recorded");
 
-  // Nothing counts yet: the entry is pending.
   await member.locator(".nav-item", { hasText: "Dashboard" }).click();
-  await expect(member.locator(".wallet-expense .amt")).toHaveText("₱0.00");
+  await expect(member.locator(".wallet-expense .amt")).toHaveText("₱1,200.00");
 
-  // --- 4. The reviewer sees it and asks for a revision ---
-  const reviewerContext = await browser.newContext();
-  const reviewerPage = await reviewerContext.newPage();
-  const { reviewer } = accounts();
-  await reviewerPage.addInitScript((t) => window.sessionStorage.setItem("fts_token", t), reviewer.token);
-  await reviewerPage.goto("/notifications");
-  await reviewerPage.waitForSelector(".shell");
-  await expect(reviewerPage.locator(".card").last()).toContainText("Ella Santos submitted an expense");
-
-  await reviewerPage.locator(".nav-item", { hasText: "Review & Approval" }).click();
-  const queueRow = reviewerPage.locator("tr", { hasText: "E2E weekly groceries" }).first();
-  await queueRow.getByRole("button", { name: "Revise" }).click();
-  await reviewerPage.locator(".modal input").fill("Please split the household items out.");
-  await reviewerPage.getByRole("button", { name: "Confirm" }).click();
-  await expect(reviewerPage.locator(".toast")).toContainText("Review recorded");
-
-  // --- 5. The member is told, and resubmits a corrected version ---
-  await member.reload();
-  await member.waitForSelector(".shell");
-  await expect(member.locator(".nav-badge")).toBeVisible();
-
-  await member.locator(".nav-item", { hasText: "Review & Approval" }).click();
-  const myRow = member.locator("tr", { hasText: "E2E weekly groceries" }).first();
-  await expect(myRow).toContainText("Needs Revision");
-  await expect(myRow).toContainText("Please split the household items out.");
-
-  await myRow.getByRole("button", { name: "Resubmit" }).click();
+  // --- 4. Correct the amount from My Entries ---
+  await member.locator(".nav-item", { hasText: "My Entries" }).click();
+  const row = member.locator(".entry-row", { hasText: "E2E weekly groceries" });
+  await expect(row).toContainText("Recorded");
+  await row.getByRole("button", { name: "Edit" }).click();
   await member.locator('.modal input[type=number]').fill("900");
   await member.locator(".modal input").last().fill("E2E groceries, corrected");
-  await member.getByRole("button", { name: "Resubmit" }).last().click();
-  await expect(member.locator(".toast")).toContainText("Resubmitted");
+  await member.getByRole("button", { name: "Save Changes" }).click();
+  await expect(member.locator(".toast")).toContainText("Entry updated");
+  await expect(member.locator(".entry-row", { hasText: "E2E groceries, corrected" })).toContainText("v2");
 
-  // --- 6. The revision trail is recorded, not synthesised ---
+  // --- 5. The first figure is kept as v1 in Revision History ---
   await member.locator(".nav-item", { hasText: "Revision History" }).click();
   const chainRow = member.locator("tr", { hasText: "E2E groceries, corrected" }).first();
   await expect(chainRow).toContainText("v2");
   await chainRow.click();
   await expect(member.locator(".timeline")).toContainText("₱1,200.00 → ₱900.00");
-  await expect(member.locator(".timeline")).toContainText("Superseded");
+  await expect(member.locator(".timeline")).toContainText("Earlier version");
 
-  // --- 7. The reviewer approves the corrected version ---
-  await reviewerPage.reload();
-  await reviewerPage.waitForSelector(".shell");
-  await reviewerPage.locator(".nav-item", { hasText: "Review & Approval" }).click();
-  const v2Row = reviewerPage.locator(".card", { hasText: "Pending Review (" }).locator("tr", { hasText: "E2E groceries, corrected" });
-  await v2Row.getByRole("button", { name: "Approve" }).click();
-  await reviewerPage.locator(".modal input").fill("Approved after revision.");
-  await reviewerPage.getByRole("button", { name: "Confirm" }).click();
-  await expect(reviewerPage.locator(".toast")).toContainText("Review recorded");
-
-  // --- 8. The approved figure now reaches the dashboard, budget and reports ---
+  // --- 6. The corrected figure reaches the dashboard, budget and reports ---
   await member.locator(".nav-item", { hasText: "Dashboard" }).click();
-  await member.reload();
-  await member.waitForSelector(".shell");
   await expect(member.locator(".wallet-expense .amt")).toHaveText("₱900.00");
 
   await member.locator(".nav-item", { hasText: "Budgets" }).click();
@@ -119,21 +85,19 @@ test("E2E-01 a new account's entry travels from submission to approval", async (
   await expect(member.locator(".card", { hasText: "Expenses by Category" })).toContainText("₱900.00");
   await expect(member.locator("tr", { hasText: "Food" })).toContainText("Within Budget");
 
-  // --- 9. The session survives a refresh ---
+  // --- 7. The session survives a refresh ---
   await member.reload();
   await expect(member.locator(".shell")).toBeVisible();
   await expect(member.locator(".side-foot")).toContainText("Ella Santos");
 
-  // --- 10. The whole journey is in the audit trail ---
+  // --- 8. The whole journey is in the audit trail ---
   const { admin } = accounts();
   const audit = await api("/api/audit-log", { token: admin.token });
-  const mine = audit.data.filter((l) => l.user === "Ella Santos" || l.detail.includes("E2E"));
+  const mine = audit.data.filter((l) => l.user === "Ella Santos");
   expect(mine.some((l) => l.action === "Account Created")).toBe(true);
-  expect(mine.some((l) => l.action === "Expense Submitted")).toBe(true);
-  expect(mine.some((l) => l.action === "Transaction Resubmitted")).toBe(true);
-  expect(audit.data.some((l) => l.action === "Transaction Needs Revision")).toBe(true);
-  expect(audit.data.some((l) => l.action === "Transaction Approved")).toBe(true);
+  expect(mine.some((l) => l.action === "Budget Created")).toBe(true);
+  expect(mine.some((l) => l.action === "Expense Recorded")).toBe(true);
+  expect(mine.some((l) => l.action === "Transaction Edited" && l.detail.includes("v2 replaces v1"))).toBe(true);
 
   await memberContext.close();
-  await reviewerContext.close();
 });

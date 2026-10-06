@@ -4,8 +4,9 @@ import { todayISO, phDateOf, initials } from "../../lib/utils.js";
 import Icon from "../../components/Icon.jsx";
 
 // An administrator runs the system, so their dashboard is a console: is it up,
-// who is using it, is review keeping up, is anyone trying passwords. Personal
-// money lives under "My Wallet", not here.
+// who is using it, what is happening in it, is anyone trying passwords.
+// Personal money lives under "My Wallet", not here. Everything is counted from
+// the audit log and the account list, so no one's figures are exposed here.
 
 // A MongoDB id starts with its creation time in seconds, so account age needs
 // no extra field.
@@ -15,7 +16,7 @@ const ACTION_ICON = (action) =>
   /Login|Logout/.test(action) ? "users"
   : /Failed|Reset/.test(action) ? "alert"
   : /Payment|Bill/.test(action) ? "receipt"
-  : /Approved|Rejected|Revision|Review/.test(action) ? "check"
+  : /Recorded|Edited|Deleted|Transaction/.test(action) ? "check"
   : /Budget/.test(action) ? "pie"
   : /Role|Account/.test(action) ? "shield"
   : "edit";
@@ -24,7 +25,7 @@ function timeOf(ts) {
   return new Date(ts).toLocaleString("en-PH", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit", timeZone: "Asia/Manila" });
 }
 
-export default function AdminConsole({ session, queue, users, auditLog, onNavigate }) {
+export default function AdminConsole({ users, auditLog, onNavigate }) {
   const [health, setHealth] = useState(null);
   useEffect(() => {
     let live = true;
@@ -32,22 +33,25 @@ export default function AdminConsole({ session, queue, users, auditLog, onNaviga
     return () => { live = false; };
   }, []);
 
-  const roles = ["Admin", "Reviewer", "User"].map((r) => ({ role: r, n: users.filter((u) => u.role === r).length }));
+  const roles = ["Admin", "User"].map((r) => ({ role: r, n: users.filter((u) => u.role === r).length }));
   const weekAgo = Date.now() - 7 * 86400000;
   const newThisWeek = users.filter((u) => createdAt(u._id).getTime() >= weekAgo).length;
   const newest = [...users].sort((a, b) => createdAt(b._id) - createdAt(a._id)).slice(0, 5);
 
-  const waiting = queue.filter((t) => t.status === "Pending Review" && String(t.submittedBy) !== String(session.id));
-  const pipeline = [
-    { label: "Pending review", n: queue.filter((t) => t.status === "Pending Review").length, tone: "warn" },
-    { label: "Approved", n: queue.filter((t) => t.status === "Approved").length, tone: "ok" },
-    { label: "Needs revision", n: queue.filter((t) => t.status === "Needs Revision").length, tone: "neutral" },
-    { label: "Rejected", n: queue.filter((t) => t.status === "Rejected").length, tone: "danger" },
-  ];
-  const pipelineMax = Math.max(1, ...pipeline.map((p) => p.n));
-
   const today = todayISO();
   const todays = auditLog.filter((l) => phDateOf(l.ts) === today);
+  const isEntry = (a) => / Recorded$/.test(a) || a === "Transaction Edited" || a === "Transaction Deleted";
+  const entriesToday = todays.filter((l) => isEntry(l.action)).length;
+
+  // What people did over the last seven days, by kind of action.
+  const week = auditLog.filter((l) => new Date(l.ts).getTime() >= weekAgo);
+  const activity = [
+    { label: "Income & expenses", n: week.filter((l) => isEntry(l.action)).length, tone: "ok" },
+    { label: "Bills & payments", n: week.filter((l) => /Bill|Payment/.test(l.action)).length, tone: "neutral" },
+    { label: "Sign-ins", n: week.filter((l) => l.action === "Login").length, tone: "neutral" },
+    { label: "Failed sign-ins", n: week.filter((l) => l.action === "Failed Login").length, tone: "danger" },
+  ];
+  const activityMax = Math.max(1, ...activity.map((p) => p.n));
   const failed = auditLog.filter((l) => l.action === "Failed Login");
   const failedToday = failed.filter((l) => phDateOf(l.ts) === today).length;
 
@@ -58,7 +62,7 @@ export default function AdminConsole({ session, queue, users, auditLog, onNaviga
     { label: "Manage users", hint: "Roles, deletions", icon: "users", to: "/users" },
     { label: "Reset a password", hint: "For a locked-out user", icon: "shield", to: "/users" },
     { label: "Audit log", hint: "Every recorded action", icon: "history", to: "/audit" },
-    { label: "Review queue", hint: `${waiting.length} waiting`, icon: "check", to: "/review" },
+    { label: "Reports", hint: "Your own figures", icon: "chart", to: "/reports" },
   ];
 
   return (
@@ -84,9 +88,9 @@ export default function AdminConsole({ session, queue, users, auditLog, onNaviga
           <div className="kpi-foot">{newThisWeek} new this week</div>
         </div>
         <div className="kpi">
-          <div className="kpi-label">Awaiting review</div>
-          <div className="kpi-value" style={{ color: waiting.length ? "var(--warn)" : undefined }}>{waiting.length}</div>
-          <div className="kpi-foot">{waiting.length ? "needs a reviewer's decision" : "queue is clear"}</div>
+          <div className="kpi-label">Entries today</div>
+          <div className="kpi-value">{entriesToday}</div>
+          <div className="kpi-foot">income & expenses recorded or changed</div>
         </div>
         <div className="kpi">
           <div className="kpi-label">Activity today</div>
@@ -120,11 +124,11 @@ export default function AdminConsole({ session, queue, users, auditLog, onNaviga
         </section>
 
         <section className="panel">
-          <div className="panel-head"><h3>Review pipeline</h3><button className="linkbtn" onClick={() => onNavigate("/review")}>Open queue</button></div>
-          {pipeline.map((p) => (
+          <div className="panel-head"><h3>Activity this week</h3><button className="linkbtn" onClick={() => onNavigate("/audit")}>Audit log</button></div>
+          {activity.map((p) => (
             <div key={p.label} className="bar-row">
               <span className="bar-label">{p.label}</span>
-              <span className="bar-track"><span className={"bar-fill tone-bar-" + p.tone} style={{ width: (p.n / pipelineMax) * 100 + "%" }} /></span>
+              <span className="bar-track"><span className={"bar-fill tone-bar-" + p.tone} style={{ width: (p.n / activityMax) * 100 + "%" }} /></span>
               <span className="bar-n">{p.n}</span>
             </div>
           ))}

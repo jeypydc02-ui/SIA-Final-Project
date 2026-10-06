@@ -61,7 +61,7 @@ test.describe("Error handling", () => {
   });
 
   test("ET-05 an invalid workflow transition is refused", async () => {
-    const { user, reviewer } = accounts();
+    const { user } = accounts();
 
     // A bill cannot be paid twice.
     const bill = await api("/api/bills", {
@@ -74,18 +74,24 @@ test.describe("Error handling", () => {
     expect(second.status).toBe(400);
     expect(second.data.error).toContain("already marked as paid");
 
-    // An entry cannot be reviewed twice.
+    // The expense that payment created follows its bill: it cannot be edited
+    // or deleted on its own.
+    const fromBill = first.data.transaction._id;
+    expect((await api(`/api/transactions/${fromBill}`, { method: "PUT", token: user.token, body: { amount: 1 } })).status).toBe(400);
+    expect((await api(`/api/transactions/${fromBill}`, { method: "DELETE", token: user.token })).status).toBe(400);
+
+    // An earlier version cannot be edited, and a deleted entry cannot be
+    // deleted again.
     const tx = await api("/api/transactions", {
       method: "POST", token: user.token,
-      body: { type: "Expense", category: "Food", amount: 120, note: "double review guard" },
+      body: { type: "Expense", category: "Food", amount: 120, note: "transition guard" },
     });
-    await api(`/api/transactions/${tx.data._id}/review`, { method: "POST", token: reviewer.token, body: { action: "approve" } });
-    const again = await api(`/api/transactions/${tx.data._id}/review`, { method: "POST", token: reviewer.token, body: { action: "reject" } });
-    expect(again.status).toBe(400);
-    expect(again.data.error).toContain("cannot be reviewed again");
-
-    // Only an entry marked "Needs Revision" can be resubmitted.
-    const badResubmit = await api(`/api/transactions/${tx.data._id}/resubmit`, { method: "POST", token: user.token, body: { amount: 1 } });
-    expect(badResubmit.status).toBe(400);
+    const v2 = await api(`/api/transactions/${tx.data._id}`, { method: "PUT", token: user.token, body: { amount: 130 } });
+    expect(v2.status).toBe(200);
+    const editOld = await api(`/api/transactions/${tx.data._id}`, { method: "PUT", token: user.token, body: { amount: 140 } });
+    expect(editOld.status).toBe(400);
+    expect(editOld.data.error).toContain("can no longer be changed");
+    expect((await api(`/api/transactions/${v2.data._id}`, { method: "DELETE", token: user.token })).status).toBe(200);
+    expect((await api(`/api/transactions/${v2.data._id}`, { method: "DELETE", token: user.token })).status).toBe(400);
   });
 });

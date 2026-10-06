@@ -6,7 +6,7 @@ export default function NotesScreen({ comments, addComment, tx = [] }) {
   const [filter, setFilter] = useState("all"); // all | notes | feedback
   const [busy, setBusy] = useState(false);
 
-  // Lets a review comment name the entry it was left on, instead of floating
+  // Lets a note on an entry name the entry it belongs to, instead of floating
   // in the list with no context (spec section 5, Comment / Feedback Module).
   const txById = new Map(tx.map((t) => [String(t._id), t]));
 
@@ -31,7 +31,7 @@ export default function NotesScreen({ comments, addComment, tx = [] }) {
       <div className="pagehead">
         <div>
           <h2>Notes / Feedback</h2>
-          <div className="desc">Your personal notes, plus reviewer comments left on your submitted entries.</div>
+          <div className="desc">Your personal notes, and notes attached to your income and expense entries.</div>
         </div>
       </div>
 
@@ -43,7 +43,7 @@ export default function NotesScreen({ comments, addComment, tx = [] }) {
       </div>
 
       <div className="tabrow" style={{ marginBottom: 16 }}>
-        {[["all", "All"], ["notes", "My Notes"], ["feedback", "Review Feedback"]].map(([id, label]) => (
+        {[["all", "All"], ["notes", "My Notes"], ["feedback", "On Entries"]].map(([id, label]) => (
           <button key={id} type="button" className={"tab" + (filter === id ? " active" : "")} onClick={() => setFilter(id)}>
             {label}
             <span className="tab-count">
@@ -61,7 +61,7 @@ export default function NotesScreen({ comments, addComment, tx = [] }) {
               {n.transactionId && (
                 <div style={{ marginBottom: 4 }}>
                   <span className="badge neutral">
-                    {entry ? `on ${entry.type} · ${entry.category} · ${peso(entry.amount)}` : "review feedback"}
+                    {entry ? `on ${entry.type} · ${entry.category} · ${peso(entry.amount)}` : "note on an entry"}
                   </span>
                 </div>
               )}

@@ -1,10 +1,10 @@
 import { useState } from "react";
+import PasswordInput from "../components/PasswordInput.jsx";
 import ThemeToggle from "../components/ThemeToggle.jsx";
 import InstallCard from "../components/InstallCard.jsx";
 
 const ROLE_ACCESS = {
   Admin: "Manage users and roles, view all audit logs and reports, and administer system settings.",
-  Reviewer: "Review submitted entries — approve, reject, or request revision — and view the audit log.",
   User: "Submit and track your own bills, entries, budgets, and notes.",
 };
 
@@ -86,16 +86,16 @@ export default function SettingsScreen({ session, updateProfile, changePassword,
           <form onSubmit={savePassword}>
             <div className="form-row">
               <label className="field">Current password</label>
-              <input type="password" value={pw.currentPassword} onChange={(e) => setPw({ ...pw, currentPassword: e.target.value })} required />
+              <PasswordInput value={pw.currentPassword} onChange={(e) => setPw({ ...pw, currentPassword: e.target.value })} required />
             </div>
             <div className="form-row">
               <label className="field">New password</label>
-              <input type="password" value={pw.newPassword} onChange={(e) => setPw({ ...pw, newPassword: e.target.value })} required minLength={8} />
+              <PasswordInput value={pw.newPassword} onChange={(e) => setPw({ ...pw, newPassword: e.target.value })} required minLength={8} />
               <div className="hint">At least 8 characters.</div>
             </div>
             <div className="form-row">
               <label className="field">Confirm new password</label>
-              <input type="password" value={pw.confirm} onChange={(e) => setPw({ ...pw, confirm: e.target.value })} required />
+              <PasswordInput value={pw.confirm} onChange={(e) => setPw({ ...pw, confirm: e.target.value })} required />
             </div>
             {pwMsg && <div className={"form-msg " + pwMsg.type}>{pwMsg.text}</div>}
             <button className="btn" type="submit" disabled={savingPw}>

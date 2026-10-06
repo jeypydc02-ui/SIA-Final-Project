@@ -37,12 +37,12 @@ export default function LogEntryScreen({ addTx }) {
   }
   return (
     <div>
-      <div className="pagehead"><div><h2>Log Income / Expense</h2><div className="desc">Manual entry — goes to Review &amp; Approval, then feeds the Dashboard and Reports once approved.</div></div></div>
+      <div className="pagehead"><div><h2>Log Income / Expense</h2><div className="desc">Recorded right away — it counts toward your balance, budgets and reports as soon as you save it.</div></div></div>
       <div className="card" style={{ maxWidth: 520 }}>
         <form onSubmit={submit}>
           <EntryFields value={form} onChange={(v) => { setForm(v); setErr(""); }} />
           {err && <div className="form-msg error">{err}</div>}
-          <button className="btn" type="submit" disabled={busy}>{busy ? "Submitting…" : "Submit for Review"}</button>
+          <button className="btn" type="submit" disabled={busy}>{busy ? "Saving…" : "Save Entry"}</button>
         </form>
       </div>
     </div>

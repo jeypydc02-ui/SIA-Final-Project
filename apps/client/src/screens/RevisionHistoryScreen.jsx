@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { peso, fmtDate, txStatusBadge } from "../lib/utils.js";
+import { peso, fmtDate, txStatusBadge, txStatusLabel } from "../lib/utils.js";
 
 // Builds the real revision chains out of the stored version/parentId fields
 // (spec FR-004). Nothing here is synthesised: every row is a record that was
@@ -26,11 +26,12 @@ function buildChains(tx) {
 
 function diff(prev, next) {
   const parts = [];
+  if (prev.type !== next.type) parts.push(`type ${prev.type} → ${next.type}`);
   if (prev.amount !== next.amount) parts.push(`amount ${peso(prev.amount)} → ${peso(next.amount)}`);
   if (prev.category !== next.category) parts.push(`category ${prev.category} → ${next.category}`);
   if (prev.date !== next.date) parts.push(`date ${fmtDate(prev.date)} → ${fmtDate(next.date)}`);
   if ((prev.note || "") !== (next.note || "")) parts.push("note edited");
-  return parts.length ? parts.join(", ") : "resubmitted without changes";
+  return parts.length ? parts.join(", ") : "saved again without changes";
 }
 
 export default function RevisionHistoryScreen({ tx }) {
@@ -51,7 +52,7 @@ export default function RevisionHistoryScreen({ tx }) {
       <div className="pagehead">
         <div>
           <h2>Revision History</h2>
-          <div className="desc">Version trail for submitted entries — v1 → v2 → v3, with what changed at each step.</div>
+          <div className="desc">Every edit keeps the earlier figures: v1 → v2 → v3, with what changed at each step.</div>
         </div>
       </div>
 
@@ -75,7 +76,7 @@ export default function RevisionHistoryScreen({ tx }) {
                   <td>{latest.type} · {latest.category}{latest.note ? ` — ${latest.note}` : ""}</td>
                   <td>{peso(latest.amount)}</td>
                   <td><span className="badge neutral">v{latest.version || 1}</span></td>
-                  <td><span className={"badge " + txStatusBadge(latest.status)}>{latest.status}</span></td>
+                  <td><span className={"badge " + txStatusBadge(latest.status)}>{txStatusLabel(latest.status)}</span></td>
                 </tr>,
                 isOpen && (
                   <tr key={id + "-detail"}>
@@ -87,11 +88,11 @@ export default function RevisionHistoryScreen({ tx }) {
                             <div>
                               <div style={{ fontSize: 12.5, fontWeight: 600 }}>
                                 v{v.version || 1} — {peso(v.amount)}
-                                <span className={"badge " + txStatusBadge(v.status)} style={{ marginLeft: 8 }}>{v.status}</span>
+                                <span className={"badge " + txStatusBadge(v.status)} style={{ marginLeft: 8 }}>{txStatusLabel(v.status)}</span>
                               </div>
                               <div style={{ fontSize: 11.5, color: "var(--text-dim)", marginTop: 3 }}>
-                                {i === 0 ? "Originally submitted" : diff(chain[i - 1], v)}
-                                {v.reviewComment ? ` · Reviewer: "${v.reviewComment}"` : ""}
+                                {i === 0 ? "First recorded" : diff(chain[i - 1], v)}
+                                {v.reviewComment && !v.autoApproved ? ` · Note: "${v.reviewComment}"` : ""}
                               </div>
                             </div>
                           </div>

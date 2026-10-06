@@ -34,37 +34,37 @@ test.describe("Functional", () => {
     await expect(page.locator("table")).toContainText("₱1,299.00");
   });
 
-  test("FT-03 (FR-003) a user can submit an income/expense entry for review", async ({ page }) => {
+  test("FT-03 (FR-003) a user can record an income/expense entry", async ({ page }) => {
     await signIn(page, "user");
     await gotoScreen(page, "Log Income/Expense");
 
     await page.locator("select").first().selectOption("Expense");
     await page.locator('input[type=number]').fill("777");
     await page.locator('input[placeholder*="Groceries"]').fill("Functional test entry");
-    await page.getByRole("button", { name: "Submit for Review" }).click();
+    await page.getByRole("button", { name: "Save Entry" }).click();
 
-    await expect(page.locator(".toast")).toContainText("submitted for review");
+    await expect(page.locator(".toast")).toContainText("recorded");
 
-    await gotoScreen(page, "Review & Approval");
-    await expect(page.locator("table")).toContainText("Functional test entry");
-    await expect(page.locator("table")).toContainText("Pending Review");
+    // It counts straight away: there is no approval step.
+    await gotoScreen(page, "My Entries");
+    const row = page.locator(".entry-row", { hasText: "Functional test entry" });
+    await expect(row).toContainText("Recorded");
+    await expect(row).toContainText("₱777.00");
   });
 
   test("FT-04 (FR-004) the system tracks entry versions", async ({ page }) => {
-    const { user, reviewer } = accounts();
+    const { user } = accounts();
 
     const created = await api("/api/transactions", {
       method: "POST", token: user.token,
       body: { type: "Expense", category: "Food", amount: 500, note: "version tracking v1" },
     });
-    await api(`/api/transactions/${created.data._id}/review`, {
-      method: "POST", token: reviewer.token,
-      body: { action: "revise", comment: "Please correct the amount." },
-    });
-    await api(`/api/transactions/${created.data._id}/resubmit`, {
-      method: "POST", token: user.token,
+    const v2 = await api(`/api/transactions/${created.data._id}`, {
+      method: "PUT", token: user.token,
       body: { amount: 650, note: "version tracking v2" },
     });
+    expect(v2.data.version).toBe(2);
+    expect(v2.data.parentId).toBe(created.data._id);
 
     await signIn(page, "user");
     await gotoScreen(page, "Revision History");
@@ -76,55 +76,54 @@ test.describe("Functional", () => {
     const timeline = page.locator(".timeline");
     await expect(timeline).toContainText("v1");
     await expect(timeline).toContainText("v2");
-    await expect(timeline).toContainText("Superseded");
+    await expect(timeline).toContainText("Earlier version");
     await expect(timeline).toContainText("₱500.00 → ₱650.00");
   });
 
-  test("FT-05 (FR-005) a reviewer can approve, reject, or request revision", async ({ page }) => {
+  test("FT-05 (FR-005) a user can correct and delete their own entries", async ({ page }) => {
     const { user } = accounts();
     await api("/api/transactions", {
       method: "POST", token: user.token,
-      body: { type: "Expense", category: "Transport", amount: 333, note: "approve me" },
+      body: { type: "Expense", category: "Transport", amount: 333, note: "correct me" },
     });
 
-    await signIn(page, "reviewer");
-    await gotoScreen(page, "Review & Approval");
+    await signIn(page, "user");
+    await gotoScreen(page, "My Entries");
 
-    const queue = page.locator(".card", { hasText: "Pending Review (" });
-    const row = queue.locator("tr", { hasText: "approve me" });
-    await expect(row).toBeVisible();
+    const row = page.locator(".entry-row", { hasText: "correct me" });
+    await row.getByRole("button", { name: "Edit" }).click();
+    await page.locator(".modal input[type=number]").fill("350");
+    await page.getByRole("button", { name: "Save Changes" }).click();
+    await expect(page.locator(".toast")).toContainText("Entry updated");
 
-    // All three review outcomes are offered.
-    await expect(row.getByRole("button", { name: "Approve" })).toBeVisible();
-    await expect(row.getByRole("button", { name: "Revise" })).toBeVisible();
-    await expect(row.getByRole("button", { name: "Reject" })).toBeVisible();
+    const corrected = page.locator(".entry-row", { hasText: "correct me" });
+    await expect(corrected).toContainText("₱350.00");
+    await expect(corrected).toContainText("v2");
 
-    await row.getByRole("button", { name: "Approve" }).click();
-    await page.locator(".modal input").fill("Checked against the receipt.");
-    await page.getByRole("button", { name: "Confirm" }).click();
-
-    await expect(page.locator(".toast")).toContainText("Review recorded");
-    await expect(page.locator(".card", { hasText: "All Submissions" }).locator("tr", { hasText: "approve me" }))
-      .toContainText("Approved");
+    await corrected.getByRole("button", { name: "Delete" }).click();
+    await page.getByRole("button", { name: "Delete Entry" }).click();
+    await expect(page.locator(".toast")).toContainText("Entry deleted");
+    await expect(page.locator(".entry-row", { hasText: "correct me" })).toHaveCount(0);
   });
 
-  test("FT-06 (FR-006) comments and feedback are stored per entry", async ({ page }) => {
-    const { user, reviewer } = accounts();
+  test("FT-06 (FR-006) notes are stored per entry", async ({ page }) => {
+    const { user } = accounts();
     const created = await api("/api/transactions", {
       method: "POST", token: user.token,
       body: { type: "Expense", category: "Food", amount: 210, note: "comment carrier" },
     });
-    await api(`/api/transactions/${created.data._id}/review`, {
-      method: "POST", token: reviewer.token,
-      body: { action: "reject", comment: "Duplicate of an earlier entry." },
+    const note = await api("/api/comments", {
+      method: "POST", token: user.token,
+      body: { text: "Shared with my sister, she owes half.", transactionId: created.data._id },
     });
+    expect(note.status).toBe(201);
 
     await signIn(page, "user");
     await gotoScreen(page, "Notes / Feedback");
 
-    await page.locator(".tab", { hasText: "Review Feedback" }).click();
-    await expect(page.locator(".card").last()).toContainText("Duplicate of an earlier entry.");
-    // The comment names the entry it belongs to rather than floating loose.
+    await page.locator(".tab", { hasText: "On Entries" }).click();
+    await expect(page.locator(".card").last()).toContainText("Shared with my sister, she owes half.");
+    // The note names the entry it belongs to rather than floating loose.
     await expect(page.locator(".card").last()).toContainText("₱210.00");
   });
 
@@ -153,7 +152,7 @@ test.describe("Functional", () => {
       ["Budgets", "/budgets"],
       ["Bill Reminders", "/bills"],
       ["Revision History", "/revisions"],
-      ["Review & Approval", "/review"],
+      ["My Entries", "/entries"],
       ["Notes / Feedback", "/notes"],
       ["Payment History", "/payments"],
       ["Notification Log", "/notifications"],

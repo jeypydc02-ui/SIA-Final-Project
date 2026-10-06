@@ -1,17 +1,14 @@
 const Comment = require("../models/Comment");
 const Transaction = require("../models/Transaction");
 const { isNonEmptyString } = require("../utils/validate");
+const { publish } = require("../services/events");
 
-// Two kinds of comment live in this collection, and they have different
-// audiences (NFR-002):
-//   - a personal note (no transactionId) is private to its author, always;
-//   - review feedback on an entry is visible to that entry's submitter and to
-//     the reviewers who run the queue.
+// Two kinds of comment live in this collection, both private to the person
+// whose money they are about (NFR-002), whatever their role:
+//   - a personal note (no transactionId), visible to its author;
+//   - a note on an entry, visible to that entry's owner.
 async function visibilityFilter(user) {
   const ownNotes = { authorId: user.id, transactionId: null };
-  if (user.role !== "User") {
-    return { $or: [ownNotes, { transactionId: { $ne: null } }] };
-  }
   const ownTx = await Transaction.find({ submittedBy: user.id }).select("_id");
   return { $or: [ownNotes, { transactionId: { $in: ownTx.map((t) => t._id) } }] };
 }
@@ -40,7 +37,7 @@ async function create(req, res) {
   if (transactionId) {
     const tx = await Transaction.findById(transactionId);
     if (!tx) return res.status(404).json({ error: "Transaction not found." });
-    if (req.user.role === "User" && String(tx.submittedBy) !== req.user.id) {
+    if (String(tx.submittedBy) !== req.user.id) {
       return res.status(403).json({ error: "You can only comment on your own entries." });
     }
   }
@@ -51,6 +48,7 @@ async function create(req, res) {
     text: text.trim(),
     transactionId: transactionId || null,
   });
+  publish(req.user.id, "comments");
   res.status(201).json(comment);
 }
 
@@ -61,7 +59,8 @@ async function remove(req, res) {
     return res.status(403).json({ error: "You can only delete your own comments." });
   }
   await comment.deleteOne();
+  publish(req.user.id, "comments");
   res.json({ ok: true });
 }
 
-module.exports = { list, create, remove };
+module.exports = { list, create, remove, visibilityFilter };

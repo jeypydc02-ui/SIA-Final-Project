@@ -13,13 +13,13 @@ export const NAV = [
   { group: "Bills & Payments", items: [
     { path: "/bills", label: "Bill Reminders", icon: "receipt" },
     { path: "/revisions", label: "Revision History", icon: "history" },
-    { path: "/review", label: "Review & Approval", icon: "check" },
+    { path: "/entries", label: "My Entries", icon: "wallet" },
     { path: "/notes", label: "Notes / Feedback", icon: "message" },
     { path: "/payments", label: "Payment History", icon: "card" },
   ]},
   { group: "System", items: [
     { path: "/notifications", label: "Notification Log", icon: "bell" },
-    { path: "/audit", label: "Audit Log", icon: "shield", roles: ["Admin", "Reviewer"] },
+    { path: "/audit", label: "Audit Log", icon: "shield", roles: ["Admin"] },
     { path: "/reports", label: "Reports", icon: "chart" },
     { path: "/users", label: "User & Role Mgmt", icon: "users", roles: ["Admin"] },
     { path: "/settings", label: "Settings", icon: "gear" },
