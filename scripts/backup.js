@@ -9,6 +9,7 @@ const Budget = require("../apps/server/src/models/Budget");
 const Notification = require("../apps/server/src/models/Notification");
 const Comment = require("../apps/server/src/models/Comment");
 const AuditLog = require("../apps/server/src/models/AuditLog");
+const Receipt = require("../apps/server/src/models/Receipt");
 
 // Database backup (spec section 10.3).
 //
@@ -28,6 +29,7 @@ const COLLECTIONS = {
   notifications: Notification,
   comments: Comment,
   auditLogs: AuditLog,
+  receipts: Receipt,
 };
 
 function outputPath() {
@@ -47,7 +49,12 @@ async function backup() {
   for (const [name, Model] of Object.entries(COLLECTIONS)) {
     // .lean() gives plain objects; ObjectIds and Dates serialise to strings
     // that restore.js converts back on the way in.
-    data[name] = await Model.find().lean();
+    // Uploaded receipt files are left out of normal reads (select: false);
+    // a backup must include them, written as base64 text.
+    const rows = await (Model === Receipt ? Model.find().select("+data") : Model.find()).lean();
+    data[name] = Model === Receipt
+      ? rows.map((r) => ({ ...r, data: r.data ? Buffer.from(r.data.buffer || r.data).toString("base64") : undefined }))
+      : rows;
     counts[name] = data[name].length;
   }
 

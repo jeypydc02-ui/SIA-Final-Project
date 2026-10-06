@@ -15,6 +15,8 @@ const auditLogRoutes = require("./src/routes/auditLog");
 const userRoutes = require("./src/routes/users");
 const commentRoutes = require("./src/routes/comments");
 const eventRoutes = require("./src/routes/events");
+const receiptRoutes = require("./src/routes/receipts");
+const { failureLog } = require("./src/middleware/failureLog");
 const { wrap } = require("./src/middleware/asyncHandler");
 const { requireAuth } = require("./src/middleware/auth");
 const syncController = wrap(require("./src/controllers/syncController"));
@@ -44,9 +46,14 @@ async function main() {
   // The live-update stream is excluded: compression buffers output, and an
   // event stream must reach the browser the moment each message is written.
   app.use(compression({ filter: (req, res) => req.path !== "/api/events" && compression.filter(req, res) }));
-  // A cap on body size: nothing this API accepts is anywhere near 100kb, and
-  // an unbounded parser is a free denial-of-service.
+  // A cap on body size: an unbounded parser is a free denial-of-service.
+  // Receipt uploads are the one exception — a 2 MB file is about 2.7 MB once
+  // base64-encoded — and get their own, larger ceiling; everything else
+  // stays at 100kb. (The second parser skips a body already read.)
+  app.use("/api/receipts", express.json({ limit: "3mb" }));
   app.use(express.json({ limit: "100kb" }));
+  // Refused or failed changes are written to the audit log as Failed lines.
+  app.use("/api", failureLog);
 
   // Daily bill reminders from inside the API (see reminderScheduler.js), for
   // hosting with no separate worker. REMINDERS_IN_API=0 turns it off.
@@ -78,6 +85,7 @@ async function main() {
   app.use("/api/users", userRoutes);
   app.use("/api/comments", commentRoutes);
   app.use("/api/events", eventRoutes);
+  app.use("/api/receipts", receiptRoutes);
   app.get("/api/sync", requireAuth, syncController.sync);
 
   // An unknown API address answers in JSON like every other API error, rather

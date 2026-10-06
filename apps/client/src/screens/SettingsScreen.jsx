@@ -5,7 +5,8 @@ import InstallCard from "../components/InstallCard.jsx";
 
 const ROLE_ACCESS = {
   Admin: "Manage accounts and roles, reset passwords, and read the system audit log — plus everything a User can do with your own money.",
-  User: "Record and track your own bills, entries, budgets and notes. Nobody else can see them.",
+  Reviewer: "Check the receipts other people attach to their entries — verify, reject or ask for a revision — plus everything a User can do with your own money.",
+  User: "Record and track your own bills, entries, budgets and notes. Attach receipts for a Reviewer to check.",
 };
 
 export default function SettingsScreen({ session, updateProfile, changePassword, theme, setTheme }) {

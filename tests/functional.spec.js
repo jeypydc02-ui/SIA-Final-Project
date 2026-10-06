@@ -1,4 +1,5 @@
 const { test, expect } = require("@playwright/test");
+const { PNG } = require("./receipt-helpers");
 const { api, accounts, signIn, gotoScreen } = require("./helpers");
 
 // Functional test cases (spec section 16: minimum 8).
@@ -227,8 +228,47 @@ test.describe("Functional", () => {
     const table = page.locator("table");
     await expect(table).toContainText("Login");
     await expect(table).toContainText("System Admin");
-    // Every row carries a timestamp, the actor, and the action.
+    // Every row carries a timestamp, the actor, the action, whether it
+    // worked, the detail, and the record it concerned.
     const firstRow = page.locator("tbody tr").first();
-    await expect(firstRow.locator("td")).toHaveCount(4);
+    await expect(firstRow.locator("td")).toHaveCount(6);
+    await expect(page.locator("thead")).toContainText("Status");
+    // Failed actions can be shown on their own.
+    await page.locator(".tab", { hasText: "Failed" }).click();
+    await expect(page.locator("tbody tr").first()).toContainText("Failed");
+  });
+
+  test("FT-11 (FR-003) a receipt photo can be attached while recording an entry", async ({ page }) => {
+    await signIn(page, "user", "/submit");
+    await page.locator("input[type=number]").first().fill("315");
+    await page.getByText("Attach a receipt").click();
+    await page.locator("#log-receipt-file").setInputFiles({ name: "pharmacy.png", mimeType: "image/png", buffer: PNG });
+    await expect(page.locator(".file-drop")).toContainText("pharmacy.jpg");
+    await page.getByRole("button", { name: "Save Entry" }).click();
+    await expect(page.locator(".toast")).toContainText("receipt sent for review");
+
+    await page.goto("/entries");
+    const row = page.locator(".entry-row", { hasText: "315" }).first();
+    await expect(row.locator(".receipt-chip")).toHaveText("Receipt v1 · For review");
+    // Opening it shows the photo itself.
+    await row.locator(".receipt-chip").click();
+    await expect(page.locator(".receipt-modal img.receipt-img")).toBeVisible();
+  });
+
+  test("FT-12 (FR-005) a Reviewer can verify, reject or send back a receipt from the review page", async ({ page }) => {
+    const { user } = accounts();
+    const { entryWithReceipt } = require("./receipt-helpers");
+    await entryWithReceipt(user.token, { amount: 818, note: "review page probe" });
+    await signIn(page, "reviewer", "/review");
+    const card = page.locator(".review-card", { hasText: "818" }).first();
+    await expect(card).toContainText("John Paul Dela Cruz");
+    await card.getByRole("button", { name: "Review receipt" }).click();
+    const dialog = page.locator(".review-modal");
+    await expect(dialog.locator("img.receipt-img")).toBeVisible();
+    await expect(dialog).toContainText("₱818.00");
+    await dialog.getByRole("button", { name: "Verify" }).click();
+    await expect(page.locator(".toast")).toContainText("Receipt verified");
+    await page.locator(".tab", { hasText: "Decided by you" }).click();
+    await expect(page.locator(".review-card", { hasText: "818" }).first()).toContainText("Verified");
   });
 });

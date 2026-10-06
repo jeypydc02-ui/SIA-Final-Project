@@ -5,13 +5,14 @@ const Budget = require("../models/Budget");
 const Notification = require("../models/Notification");
 const Comment = require("../models/Comment");
 const Transaction = require("../models/Transaction");
+const Receipt = require("../models/Receipt");
 const { refreshUserSessions, destroyUserSessions } = require("../services/sessions");
 const { hashPassword } = require("../services/passwords");
 const { logAction } = require("../services/audit");
 const { notify } = require("../services/notifications");
 const { publish } = require("../services/events");
 
-const ROLES = ["Admin", "User"];
+const ROLES = ["Admin", "Reviewer", "User"];
 
 async function list(req, res) {
   const users = await User.find().select("-passwordHash").sort({ role: 1, name: 1 });
@@ -109,9 +110,10 @@ async function remove(req, res) {
     Notification.deleteMany({ user: user._id }),
     Comment.deleteMany({ authorId: user._id }),
     Transaction.deleteMany({ submittedBy: user._id }),
+    Receipt.deleteMany({ owner: user._id }),
   ]);
 
-  await logAction(req.user.name, "Account Deleted", `${user.name} (${user.email}) removed, with their bills, budgets, entries and notes.`);
+  await logAction(req.user.name, "Account Deleted", `${user.name} (${user.email}) removed, with their bills, budgets, entries, receipts and notes.`, { ref: user._id });
   res.json({ ok: true });
 }
 

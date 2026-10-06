@@ -4,7 +4,7 @@ import ThemeToggle from "./ThemeToggle.jsx";
 import Icon from "./Icon.jsx";
 import { initials } from "../lib/utils.js";
 
-export default function Sidebar({ session, logout, theme, setTheme, notifs = [], open = false, onNavigate }) {
+export default function Sidebar({ session, logout, theme, setTheme, notifs = [], reviewWaiting = 0, open = false, onNavigate }) {
   const unread = notifs.filter((n) => !n.read).length;
 
   // Only the screens this role can open; groups left empty are dropped.
@@ -35,6 +35,7 @@ export default function Sidebar({ session, logout, theme, setTheme, notifs = [],
               <span className="nav-ico"><Icon name={it.icon} size={18} /></span>
               {it.label}
               {it.path === "/notifications" && unread > 0 && <span className="nav-badge">{unread}</span>}
+              {it.path === "/review" && reviewWaiting > 0 && <span className="nav-badge warn">{reviewWaiting}</span>}
             </NavLink>
           ))}
         </div>

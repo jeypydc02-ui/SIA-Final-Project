@@ -14,6 +14,7 @@ export const NAV = [
     { path: "/bills", label: "Bill Reminders", icon: "receipt" },
     { path: "/revisions", label: "Revision History", icon: "history" },
     { path: "/entries", label: "My Entries", icon: "wallet" },
+    { path: "/review", label: "Receipt Review", icon: "check", roles: ["Reviewer"] },
     { path: "/notes", label: "Notes / Feedback", icon: "message" },
     { path: "/payments", label: "Payment History", icon: "card" },
   ]},

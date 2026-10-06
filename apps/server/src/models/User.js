@@ -8,7 +8,7 @@ const UserSchema = new Schema({
   name: { type: String, required: true },
   email: { type: String, required: true, unique: true, lowercase: true, trim: true, maxlength: [160, "Email cannot be longer than 160 characters."] },
   passwordHash: { type: String, required: true },
-  role: { type: String, enum: ["Admin", "User"], required: true },
+  role: { type: String, enum: ["Admin", "Reviewer", "User"], required: true },
   // True after an Admin resets the password: the temporary one must be
   // replaced before the account can be used.
   mustChangePassword: { type: Boolean, default: false },

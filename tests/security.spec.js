@@ -1,4 +1,5 @@
 const { test, expect } = require("@playwright/test");
+const { entryWithReceipt } = require("./receipt-helpers");
 const { api, accounts, signIn, registerUser } = require("./helpers");
 
 // Security / access-control test cases (spec section 16: minimum 3),
@@ -74,9 +75,9 @@ test.describe("Security and access control", () => {
       method: "PUT", token: user.token, body: { role: "Admin" },
     })).status).toBe(403);
 
-    // Only Admin and User exist; the retired Reviewer role cannot be given.
+    // Only Admin, Reviewer and User exist; anything else is refused.
     expect((await api(`/api/users/${other.user.id}/role`, {
-      method: "PUT", token: admin.token, body: { role: "Reviewer" },
+      method: "PUT", token: admin.token, body: { role: "Superuser" },
     })).status).toBe(400);
 
     // Registration never grants elevated rights, whatever the caller asks for.
@@ -97,5 +98,30 @@ test.describe("Security and access control", () => {
     await signIn(page, "user");
     await expect(page.locator(".nav-item", { hasText: "User & Role Mgmt" })).toHaveCount(0);
     await expect(page.locator(".nav-item", { hasText: "Audit Log" })).toHaveCount(0);
+  });
+
+  test("ST-04 (NFR-002, section 8.2) receipts are seen only by their owner and Reviewers, and nobody reviews their own", async () => {
+    const { user, other, admin, reviewer } = accounts();
+    const { receipt } = await entryWithReceipt(user.token);
+    expect(receipt.status).toBe(201);
+    const id = receipt.data._id;
+
+    // The file: owner and Reviewer yes; another User and the Admin no.
+    expect((await fetch(`http://localhost:4000/api/receipts/${id}/file`, { headers: { Authorization: "Bearer " + user.token } })).status).toBe(200);
+    expect((await fetch(`http://localhost:4000/api/receipts/${id}/file`, { headers: { Authorization: "Bearer " + reviewer.token } })).status).toBe(200);
+    expect((await api(`/api/receipts/${id}/file`, { token: other.token })).status).toBe(403);
+    expect((await api(`/api/receipts/${id}/file`, { token: admin.token })).status).toBe(403);
+
+    // Deciding: only a Reviewer — not the owner, not another User, not the Admin.
+    for (const who of [user, other, admin]) {
+      expect((await api(`/api/receipts/${id}/review`, { method: "POST", token: who.token, body: { action: "verify" } })).status).toBe(403);
+      expect((await api("/api/receipts/review", { token: who.token })).status).toBe(403);
+    }
+    // A Reviewer's own receipt cannot be reviewed by that Reviewer.
+    const own = await entryWithReceipt(reviewer.token);
+    expect((await api(`/api/receipts/${own.receipt.data._id}/review`, { method: "POST", token: reviewer.token, body: { action: "verify" } })).status).toBe(403);
+    // Nobody attaches a receipt to someone else's entry.
+    const theirs = await api("/api/transactions", { method: "POST", token: other.token, body: { type: "Expense", category: "Food", amount: 5 } });
+    expect((await api("/api/receipts", { method: "POST", token: user.token, body: { kind: "link", url: "https://drive.google.com/x", transactionId: theirs.data._id } })).status).toBe(403);
   });
 });

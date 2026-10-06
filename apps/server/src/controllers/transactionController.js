@@ -1,7 +1,9 @@
 const Transaction = require("../models/Transaction");
+const Receipt = require("../models/Receipt");
 const { logAction } = require("../services/audit");
 const { checkBudget } = require("../services/budgetAlerts");
-const { publish } = require("../services/events");
+const { publish, publishToRole } = require("../services/events");
+const { notifyRole } = require("../services/notifications");
 const { todayISO } = require("../utils/dates");
 const { isNonEmptyString, isString, parseAmount } = require("../utils/validate");
 const { categoriesFor } = require("../utils/categories");
@@ -74,7 +76,7 @@ async function create(req, res) {
     status: COUNTED,
     submittedBy: req.user.id,
   });
-  await logAction(req.user.name, `${type} Recorded`, `${category}: ${tx.amount} on ${tx.date}.`);
+  await logAction(req.user.name, `${type} Recorded`, `${category}: ${tx.amount} on ${tx.date}.`, { ref: tx._id });
   await checkBudget(tx);
   publish(req.user.id, "transactions");
   res.status(201).json(tx);
@@ -176,7 +178,27 @@ async function update(req, res) {
     throw err;
   }
 
-  await logAction(req.user.name, "Transaction Edited", `${revised.category} ${revised.amount} — v${revised.version} replaces v${claimed.version || 1}.`);
+  // The receipts follow the entry to its new version. If the figures a
+  // receipt proves have changed, a verified receipt no longer proves them, so
+  // it goes back to the Reviewers.
+  await Receipt.updateMany({ entryId: claimed._id }, { $set: { entryId: revised._id } });
+  const figuresChanged = ["type", "category", "amount", "date"].some((f) => String(claimed[f]) !== String(revised[f]));
+  let reopened = null;
+  if (figuresChanged) {
+    reopened = await Receipt.findOneAndUpdate(
+      { entryId: revised._id, latest: true, status: "Verified" },
+      { $set: { status: "For Review", reviewNote: "", reviewedBy: null, reviewerName: "", reviewedAt: null } },
+      { new: true }
+    );
+  }
+
+  await logAction(req.user.name, "Transaction Edited", `${revised.category} ${revised.amount} — v${revised.version} replaces v${claimed.version || 1}.` +
+    (reopened ? ` Its verified receipt v${reopened.version} went back for review.` : ""), { ref: revised._id });
+  if (reopened) {
+    await notifyRole("Reviewer", "receipt", `${req.user.name} changed an entry with a verified receipt — receipt v${reopened.version} needs checking again.`, req.user.id);
+    publishToRole("Reviewer", "receipts");
+  }
+  publish(req.user.id, "receipts");
   await checkBudget(revised);
   publish(req.user.id, "transactions");
   res.json(revised);
@@ -196,7 +218,11 @@ async function remove(req, res) {
   if (!removed) {
     return res.status(409).json({ error: "This entry was changed a moment ago. Reload and try again." });
   }
-  await logAction(req.user.name, "Transaction Deleted", `${removed.type} ${removed.category} ${removed.amount} (v${removed.version || 1}) deleted.`);
+  // A receipt still waiting is no longer worth a Reviewer's time.
+  const withdrawn = await Receipt.updateMany({ entryId: removed._id, latest: true, status: "For Review" }, { $set: { status: "Withdrawn" } });
+  if (withdrawn.modifiedCount) publishToRole("Reviewer", "receipts");
+  await logAction(req.user.name, "Transaction Deleted", `${removed.type} ${removed.category} ${removed.amount} (v${removed.version || 1}) deleted.` +
+    (withdrawn.modifiedCount ? " Its receipt waiting for review was withdrawn." : ""), { ref: removed._id });
   publish(req.user.id, "transactions");
   res.json({ ok: true });
 }

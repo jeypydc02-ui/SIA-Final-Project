@@ -32,7 +32,7 @@ async function login(req, res) {
   }
   const { ok, needsRehash } = await verifyPassword(password, user.passwordHash);
   if (!ok) {
-    await logAction(user.name, "Failed Login", "Incorrect password.");
+    await logAction(user.name, "Failed Login", "Incorrect password.", { status: "Failed", ref: user._id });
     return res.status(401).json({ error: "Invalid email or password." });
   }
   if (needsRehash) {
@@ -134,7 +134,7 @@ async function changePassword(req, res) {
 
   const { ok } = await verifyPassword(currentPassword, user.passwordHash);
   if (!ok) {
-    await logAction(user.name, "Failed Password Change", "Current password did not match.");
+    await logAction(user.name, "Failed Password Change", "Current password did not match.", { status: "Failed", ref: user._id });
     return res.status(401).json({ error: "Your current password is incorrect." });
   }
   user.passwordHash = await hashPassword(newPassword);

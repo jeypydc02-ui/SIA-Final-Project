@@ -33,7 +33,7 @@ export default function AdminConsole({ users, auditLog, onNavigate }) {
     return () => { live = false; };
   }, []);
 
-  const roles = ["Admin", "User"].map((r) => ({ role: r, n: users.filter((u) => u.role === r).length }));
+  const roles = ["Admin", "Reviewer", "User"].map((r) => ({ role: r, n: users.filter((u) => u.role === r).length }));
   const weekAgo = Date.now() - 7 * 86400000;
   const newThisWeek = users.filter((u) => createdAt(u._id).getTime() >= weekAgo).length;
   const newest = [...users].sort((a, b) => createdAt(b._id) - createdAt(a._id)).slice(0, 5);
@@ -48,8 +48,9 @@ export default function AdminConsole({ users, auditLog, onNavigate }) {
   const activity = [
     { label: "Income & expenses", n: week.filter((l) => isEntry(l.action)).length, tone: "ok" },
     { label: "Bills & payments", n: week.filter((l) => /Bill|Payment/.test(l.action)).length, tone: "neutral" },
+    { label: "Receipts & reviews", n: week.filter((l) => /^Receipt/.test(l.action)).length, tone: "warn" },
     { label: "Sign-ins", n: week.filter((l) => l.action === "Login").length, tone: "neutral" },
-    { label: "Failed sign-ins", n: week.filter((l) => l.action === "Failed Login").length, tone: "danger" },
+    { label: "Failed actions", n: week.filter((l) => l.status === "Failed").length, tone: "danger" },
   ];
   const activityMax = Math.max(1, ...activity.map((p) => p.n));
   const failed = auditLog.filter((l) => l.action === "Failed Login");

@@ -323,12 +323,12 @@ test.describe("Pre-launch audit regressions", () => {
     expect(chain.data.map((t) => t.status)).toEqual(["Superseded", "Superseded", "Approved"]);
   });
 
-  test("RT-12 the old review address leads to My Entries", async ({ page }) => {
+  test("RT-12 the review page is the Reviewer's alone", async ({ page }) => {
     await signIn(page, "user");
+    await expect(page.locator(".nav-item", { hasText: "Receipt Review" })).toHaveCount(0);
     await page.goto("/review");
-    await expect(page).toHaveURL(/\/entries$/);
-    await expect(page.locator(".pagehead h2")).toHaveText("My Entries");
-    await expect(page.locator(".nav-item", { hasText: "Review" })).toHaveCount(0);
+    await expect(page.locator(".content")).toContainText("Restricted");
+    await expect(page.locator(".review-card")).toHaveCount(0);
   });
 
   test("RT-20 one request brings everything a screen needs, and only your own", async () => {
@@ -441,8 +441,9 @@ test.describe("Pre-launch audit regressions", () => {
         type: "Expense", category: "Food", amount: 77, date: todayISO(), note: "left pending by the old workflow",
         status: "Pending Review", version: 1, submittedBy: new mongoose.Types.ObjectId(user.user.id), createdAt: new Date(),
       });
+      // A Reviewer now reviews receipts, so the migration must leave one alone.
       const reviewer = await User.collection.insertOne({
-        firstName: "Old", lastName: "Reviewer", name: "Old Reviewer", email: `oldreviewer${Date.now()}@example.test`,
+        firstName: "Kept", lastName: "Reviewer", name: "Kept Reviewer", email: `keptreviewer${Date.now()}@example.test`,
         passwordHash: "x", role: "Reviewer",
       });
       const Notification = require("../apps/server/src/models/Notification");
@@ -454,10 +455,11 @@ test.describe("Pre-launch audit regressions", () => {
       expect((await Transaction.collection.findOne({ _id: pending.insertedId })).status).toBe("Approved");
       // An alert asking someone to review a queue that no longer exists is removed.
       expect(await Notification.collection.findOne({ _id: queueAlert.insertedId })).toBeNull();
-      expect((await User.collection.findOne({ _id: reviewer.insertedId })).role).toBe("User");
+      expect((await User.collection.findOne({ _id: reviewer.insertedId })).role).toBe("Reviewer");
       // Running it again changes nothing.
       await runMigrations(() => {});
-      expect(await User.collection.countDocuments({ role: "Reviewer" })).toBe(0);
+      expect((await Transaction.collection.findOne({ _id: pending.insertedId })).status).toBe("Approved");
+      await User.collection.deleteOne({ _id: reviewer.insertedId });
     } finally {
       await mongoose.disconnect();
     }

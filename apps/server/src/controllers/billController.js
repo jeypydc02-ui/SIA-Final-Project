@@ -34,7 +34,7 @@ async function create(req, res) {
     name, category, amount: parseAmount(amount), due, paid: false, createdBy: req.user.id,
     repeat, repeatDay: repeat === "monthly" && isRealDate(due) ? dayOf(due) : null,
   });
-  await logAction(req.user.name, "Bill Created", `${bill.name} added, due ${bill.due}, amount ${bill.amount}.`);
+  await logAction(req.user.name, "Bill Created", `${bill.name} added, due ${bill.due}, amount ${bill.amount}.`, { ref: bill._id });
   await notify("bill", `Bill "${bill.name}" added — due ${bill.due}. The reminder service will alert you as the date approaches.`, req.user.id);
   publish(req.user.id, "bills");
   res.status(201).json(bill);
@@ -132,7 +132,8 @@ async function pay(req, res) {
     req.user.name,
     "Payment Recorded",
     `${claimed.name} (${claimed._id}) marked Paid, amount ${amount}. Triggered: expense log entry + notification` +
-      (nextBill ? ` + next monthly bill due ${nextBill.due}.` : ".")
+      (nextBill ? ` + next monthly bill due ${nextBill.due}.` : ".") + ` Expense entry ${tx._id}.`,
+    { ref: claimed._id }
   );
   // The payment is an approved expense, so it may have pushed a budget over.
   await checkBudget(tx);
@@ -189,7 +190,7 @@ async function update(req, res) {
     return res.status(400).json({ error: "A paid bill can no longer be edited." });
   }
 
-  await logAction(req.user.name, "Bill Updated", `${updated.name} (${updated._id}) edited.`);
+  await logAction(req.user.name, "Bill Updated", `${updated.name} (${updated._id}) edited.`, { ref: updated._id });
   publish(req.user.id, "bills");
   res.json(updated);
 }
@@ -208,7 +209,7 @@ async function remove(req, res) {
   if (!removed.deletedCount) {
     return res.status(400).json({ error: "A paid bill is part of the payment record and cannot be deleted." });
   }
-  await logAction(req.user.name, "Bill Deleted", `${bill.name} (${bill._id}) removed.`);
+  await logAction(req.user.name, "Bill Deleted", `${bill.name} (${bill._id}) removed.`, { ref: bill._id });
   publish(req.user.id, "bills");
   res.json({ ok: true });
 }

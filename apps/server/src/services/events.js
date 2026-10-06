@@ -22,8 +22,14 @@ function publish(userId, topic) {
   bus.emit("change", { userId: String(userId), topic });
 }
 
+// Every signed-in account with this role (the Admins for the audit log, the
+// Reviewers for the receipt queue).
+function publishToRole(role, topic) {
+  bus.emit("change", { role, topic });
+}
+
 function publishToAdmins(topic) {
-  bus.emit("change", { role: "Admin", topic });
+  publishToRole("Admin", topic);
 }
 
 function subscribe(listener) {
@@ -31,4 +37,4 @@ function subscribe(listener) {
   return () => bus.off("change", listener);
 }
 
-module.exports = { publish, publishToAdmins, subscribe };
+module.exports = { publish, publishToRole, publishToAdmins, subscribe };

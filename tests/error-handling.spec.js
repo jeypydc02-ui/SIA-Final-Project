@@ -1,4 +1,5 @@
 const { test, expect } = require("@playwright/test");
+const { PNG, pngBody, entryWithReceipt } = require("./receipt-helpers");
 const { api, accounts, signIn, gotoScreen } = require("./helpers");
 
 // Error-handling test cases (spec section 16: minimum 5), covering what
@@ -93,5 +94,56 @@ test.describe("Error handling", () => {
     expect(editOld.data.error).toContain("can no longer be changed");
     expect((await api(`/api/transactions/${v2.data._id}`, { method: "DELETE", token: user.token })).status).toBe(200);
     expect((await api(`/api/transactions/${v2.data._id}`, { method: "DELETE", token: user.token })).status).toBe(400);
+  });
+
+  test("ET-06 invalid uploads are refused with a reason, and nothing is saved", async () => {
+    const { user } = accounts();
+    const entry = (await api("/api/transactions", { method: "POST", token: user.token, body: { type: "Expense", category: "Food", amount: 75 } })).data;
+    const bad = [
+      [{ kind: "file", mimeType: "application/x-msdownload", data: PNG.toString("base64") }, /photo .* or a PDF/],
+      [{ kind: "file", mimeType: "image/png", data: Buffer.from("MZ this is a program").toString("base64") }, /not really a photo/],
+      [{ kind: "file", mimeType: "application/pdf", data: PNG.toString("base64") }, /not really a PDF/],
+      [{ kind: "file", mimeType: "image/png", data: Buffer.concat([PNG, Buffer.alloc(2.1 * 1024 * 1024)]).toString("base64") }, /larger than 2 MB/],
+      [{ kind: "file", mimeType: "image/png", data: "" }, /Choose a file/],
+      [{ kind: "link", url: "http://drive.google.com/insecure" }, /https/],
+      [{ kind: "link", url: "javascript:alert(1)" }, /https/],
+      [{ kind: "link", url: "not a link" }, /not a valid web address/],
+      [{ kind: "carrier-pigeon" }, /file or a link/],
+    ];
+    for (const [body, message] of bad) {
+      const res = await api("/api/receipts", { method: "POST", token: user.token, body: { ...body, transactionId: entry._id } });
+      expect(res.status, JSON.stringify(body).slice(0, 60)).toBe(400);
+      expect(res.data.error).toMatch(message);
+    }
+    const mine = await api("/api/receipts", { token: user.token });
+    expect(mine.data.some((r) => String(r.entryId) === entry._id)).toBe(false);
+
+    // A deleted entry cannot be given a receipt.
+    await api(`/api/transactions/${entry._id}`, { method: "DELETE", token: user.token });
+    const late = await api("/api/receipts", { method: "POST", token: user.token, body: { ...pngBody(), transactionId: entry._id } });
+    expect(late.status).toBe(400);
+  });
+
+  test("ET-07 a failed review is refused cleanly and written to the log as Failed", async () => {
+    const { user, admin, reviewer } = accounts();
+    const { receipt } = await entryWithReceipt(user.token);
+    const id = receipt.data._id;
+    // A note is required to send back or reject.
+    const noNote = await api(`/api/receipts/${id}/review`, { method: "POST", token: reviewer.token, body: { action: "reject" } });
+    expect(noNote.status).toBe(400);
+    expect((await api(`/api/receipts/${id}/review`, { method: "POST", token: reviewer.token, body: { action: "approve-ish" } })).status).toBe(400);
+    // Decided once; a second decision is refused.
+    expect((await api(`/api/receipts/${id}/review`, { method: "POST", token: reviewer.token, body: { action: "verify" } })).status).toBe(200);
+    const again = await api(`/api/receipts/${id}/review`, { method: "POST", token: reviewer.token, body: { action: "reject", note: "late" } });
+    expect(again.status).toBe(409);
+    // A verified receipt is final.
+    const replace = await api("/api/receipts", { method: "POST", token: user.token, body: { ...receipt.data, ...pngBody(), transactionId: receipt.data.entryId } });
+    expect(replace.status).toBe(409);
+    // The refusals are in the integration log with status, reason and record id.
+    const failed = await api("/api/audit-log?status=Failed", { token: admin.token });
+    const line = failed.data.find((l) => l.ref === id && /409/.test(l.detail));
+    expect(line).toBeTruthy();
+    expect(line.status).toBe("Failed");
+    expect(line.detail).toMatch(/already decided/);
   });
 });

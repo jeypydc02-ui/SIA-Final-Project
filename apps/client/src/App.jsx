@@ -27,6 +27,7 @@ import BudgetsScreen from "./screens/BudgetsScreen.jsx";
 import BillsScreen from "./screens/BillsScreen.jsx";
 import RevisionHistoryScreen from "./screens/RevisionHistoryScreen.jsx";
 import EntriesScreen from "./screens/EntriesScreen.jsx";
+import ReviewScreen from "./screens/ReviewScreen.jsx";
 import NotesScreen from "./screens/NotesScreen.jsx";
 import PaymentHistoryScreen from "./screens/PaymentHistoryScreen.jsx";
 import NotificationsScreen from "./screens/NotificationsScreen.jsx";
@@ -61,6 +62,10 @@ function FinTrackStark() {
   const [notifs, setNotifs] = useState([]);
   const [auditLog, setAuditLog] = useState([]);
   const [comments, setComments] = useState([]);
+  // Receipts the signed-in person attached to their entries, and — for a
+  // Reviewer — the receipts waiting for review plus the ones they decided.
+  const [receipts, setReceipts] = useState([]);
+  const [reviewQueue, setReviewQueue] = useState([]);
   const [toast, setToast] = useState(null);
   const [loadError, setLoadError] = useState("");
   // False until the first data load after signing in arrives. Until then the
@@ -169,6 +174,7 @@ function FinTrackStark() {
         setBills(data.bills); setTx(data.transactions); setBudgets(data.budgets);
         setNotifs(data.notifications); setComments(data.comments);
         setAuditLog(data.auditLog); setUsers(data.users);
+        setReceipts(data.receipts || []); setReviewQueue(data.reviewQueue || []);
         // A role or name changed elsewhere (by an Admin, or on another device).
         setSession((s) => (s ? { ...s, ...data.me } : s));
         announceNew(data.notifications);
@@ -291,6 +297,7 @@ function FinTrackStark() {
     setSession(null);
     setSessionEnded(false);
     setBills([]); setTx([]); setBudgets([]); setNotifs([]); setAuditLog([]); setUsers([]); setComments([]);
+    setReceipts([]); setReviewQueue([]);
     setDataReady(false);
     setLoadError("");
     seenNotifs.current = null;
@@ -321,9 +328,40 @@ function FinTrackStark() {
       await perform(() => api("/api/bills/" + bill._id, { method: "DELETE" }), "Bill deleted.");
     }, "Delete Bill");
   }
-  const addTx = (t) => perform(
-    () => api("/api/transactions", { method: "POST", body: t }),
-    `${t.type} of ${peso(t.amount)} recorded.`
+  // Records the entry, then attaches its receipt if one was chosen. The entry
+  // is saved first and on its own: if only the receipt fails, the entry still
+  // stands (so the form is cleared and nothing is saved twice) and the person
+  // is told to attach the receipt again from My Entries.
+  async function addTx(t, receipt) {
+    lastOwnAction.current = Date.now();
+    let entry;
+    try {
+      entry = await api("/api/transactions", { method: "POST", body: t });
+    } catch (err) {
+      fireError(err);
+      return false;
+    }
+    if (receipt) {
+      try {
+        await api("/api/receipts", { method: "POST", body: { ...receipt, transactionId: entry._id } });
+        fireToast(`${t.type} of ${peso(t.amount)} recorded — receipt sent for review.`);
+      } catch (err) {
+        fireToast(`⚠ ${t.type} recorded, but the receipt was not attached: ${err.message} Attach it from My Entries.`);
+      }
+    } else {
+      fireToast(`${t.type} of ${peso(t.amount)} recorded.`);
+    }
+    refreshAll();
+    return true;
+  }
+  // ---- Receipts (Asset submission + Review and Approval) ----
+  const submitReceipt = (entryId, receipt) => perform(
+    () => api("/api/receipts", { method: "POST", body: { ...receipt, transactionId: entryId } }),
+    "Receipt sent for review."
+  );
+  const reviewReceipt = (id, action, note) => perform(
+    () => api("/api/receipts/" + id + "/review", { method: "POST", body: { action, note } }),
+    { verify: "Receipt verified.", revision: "Sent back for revision.", reject: "Receipt rejected." }[action]
   );
   const editTx = (id, patch) => perform(
     () => api("/api/transactions/" + id, { method: "PUT", body: patch }),
@@ -483,26 +521,28 @@ function FinTrackStark() {
         <Route
           element={
             <RequireAuth session={session}>
-              <Shell session={session} logout={requestLogout} theme={theme} setTheme={setTheme} notifs={notifs} loadError={loadError} dataReady={dataReady} onRetry={refreshAll} />
+              <Shell session={session} logout={requestLogout} theme={theme} setTheme={setTheme} notifs={notifs} loadError={loadError} dataReady={dataReady} onRetry={refreshAll}
+                reviewWaiting={reviewQueue.filter((r) => r.status === "For Review" && r.latest).length} />
             </RequireAuth>
           }
         >
-          <Route path="/dashboard" element={<DashboardScreen session={session} bills={bills} tx={tx} budgets={budgets} notifs={notifs} users={users} auditLog={auditLog} onNavigate={navigate} />} />
+          <Route path="/dashboard" element={<DashboardScreen session={session} bills={bills} tx={tx} budgets={budgets} notifs={notifs} users={users} auditLog={auditLog} reviewQueue={reviewQueue} onNavigate={navigate} />} />
           <Route path="/categories" element={<CategoryList bills={bills} onOpen={(name) => navigate("/categories/" + encodeURIComponent(name))} />} />
           <Route path="/categories/:name" element={<CategoryDetailRoute bills={bills} />} />
           <Route path="/submit" element={<LogEntryScreen addTx={addTx} />} />
           <Route path="/budgets" element={<BudgetsScreen budgets={budgets} tx={tx} addBudget={addBudget} editBudget={editBudget} deleteBudget={deleteBudget} />} />
           <Route path="/bills" element={<BillsScreen bills={bills} addBill={addBill} markPaid={markPaid} editBill={editBill} deleteBill={deleteBill} />} />
           <Route path="/revisions" element={<RevisionHistoryScreen tx={tx} />} />
-          <Route path="/entries" element={<EntriesScreen tx={tx} editTx={editTx} deleteTx={deleteTx} onNavigate={navigate} />} />
-          {/* Old address of the former review screen, kept for bookmarks. */}
-          <Route path="/review" element={<Navigate to="/entries" replace />} />
+          <Route path="/entries" element={<EntriesScreen tx={tx} editTx={editTx} deleteTx={deleteTx} receipts={receipts} submitReceipt={submitReceipt} onNavigate={navigate} />} />
           <Route path="/notes" element={<NotesScreen comments={comments} addNote={addNote} editNote={editNote} deleteNote={deleteNote} tx={tx} me={session?.id} />} />
           <Route path="/payments" element={<PaymentHistoryScreen bills={bills} />} />
           <Route path="/notifications" element={<NotificationsScreen notifs={notifs} markRead={markNotifRead} markAllRead={markAllNotifsRead} onNavigate={navigate} />} />
           <Route path="/reports" element={<ReportsScreen tx={tx} bills={bills} budgets={budgets} />} />
           <Route path="/settings" element={<SettingsScreen session={session} updateProfile={updateProfile} changePassword={changePassword} theme={theme} setTheme={setTheme} />} />
 
+          <Route element={<RequireRole session={session} path="/review" />}>
+            <Route path="/review" element={<ReviewScreen reviewQueue={reviewQueue} reviewReceipt={reviewReceipt} />} />
+          </Route>
           <Route element={<RequireRole session={session} path="/audit" />}>
             <Route path="/audit" element={<AuditLogScreen auditLog={auditLog} />} />
           </Route>

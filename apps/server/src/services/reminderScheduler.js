@@ -1,5 +1,6 @@
 const { runReminderSweep } = require("./reminderSweep");
 const { todayISO } = require("../utils/dates");
+const { logFailure } = require("./audit");
 
 // Runs the bill reminder sweep from inside the API, once per Philippine day.
 //
@@ -29,6 +30,7 @@ function ensureTodaysSweep() {
     .catch((err) => {
       lastFailureAt = Date.now();
       console.error("[reminder] in-API sweep failed:", err.message);
+      logFailure("Reminder Service", "Reminder Sweep", `${today}: sweep failed — ${err.message}. Retrying in 5 minutes.`);
     })
     .finally(() => { running = null; });
   return running;

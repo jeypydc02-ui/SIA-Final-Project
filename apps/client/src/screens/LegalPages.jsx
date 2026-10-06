@@ -30,20 +30,22 @@ export function PrivacyPage() {
       <ul>
         <li><strong>Account details:</strong> your first and last name, email address, and your password in hashed form. Your actual password is never stored.</li>
         <li><strong>Financial records you enter:</strong> bills, payments you mark as made, income and expense entries, budgets, and personal notes.</li>
+        <li><strong>Receipts you attach:</strong> a photo or PDF you upload is stored in the system's database; for a link (Google Drive, OneDrive, Dropbox) only the link is stored, and the file stays where you keep it.</li>
         <li><strong>Activity records:</strong> an audit log of important actions (sign-ins, failed sign-ins, payments, entries, edits and deletions) with your name and the time, and the notifications addressed to you.</li>
       </ul>
 
       <h2>Why we use it</h2>
       <p>
         Only to run the service: to sign you in, show you your own records, send you bill reminders inside the app,
-        keep the history of your income and expense entries, and keep an audit trail that protects the integrity of the records.
+        keep the history of your income and expense entries, have the receipts you attach checked, and keep an audit trail that protects the integrity of the records.
         We do not sell your data, show advertising, or share it with third parties.
       </p>
 
       <h2>Who can see it</h2>
       <ul>
         <li><strong>You</strong> see your own bills, budgets, entries, notes and notifications.</li>
-        <li><strong>Administrators</strong> see the list of accounts (name, email and role) and the audit log of actions. They do not see your bills, budgets, entries or notes.</li>
+        <li><strong>Reviewers</strong> see a receipt you attach, with your name and the one entry it is for (type, category, amount, date and note), so they can check it. They do not see the rest of your wallet, and cannot review their own receipts.</li>
+        <li><strong>Administrators</strong> see the list of accounts (name, email and role) and the audit log of actions. They do not see your bills, budgets, entries, receipts or notes.</li>
       </ul>
 
       <h2>Storage on your device</h2>
@@ -55,7 +57,7 @@ export function PrivacyPage() {
       <h2>How long we keep it</h2>
       <p>
         Your records are kept while your account exists. If an Administrator deletes your account, your bills, budgets,
-        income and expense entries, notes and notifications are deleted with it. The audit log of actions is kept as
+        income and expense entries, receipts, notes and notifications are deleted with it. The audit log of actions is kept as
         the system's record.
       </p>
 

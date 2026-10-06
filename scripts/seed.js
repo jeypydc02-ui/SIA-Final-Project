@@ -8,6 +8,8 @@ const Notification = require("../apps/server/src/models/Notification");
 const AuditLog = require("../apps/server/src/models/AuditLog");
 const Comment = require("../apps/server/src/models/Comment");
 const Session = require("../apps/server/src/models/Session");
+const Receipt = require("../apps/server/src/models/Receipt");
+const { samplePng } = require("./sample-receipt");
 const { todayISO: phToday, addDaysISO } = require("../apps/server/src/utils/dates");
 
 // `npm run seed -- --reset` wipes the collections first. Used when the schema
@@ -37,14 +39,14 @@ async function seed() {
     await Promise.all([
       User.deleteMany({}), Bill.deleteMany({}), Transaction.deleteMany({}),
       Budget.deleteMany({}), Notification.deleteMany({}), AuditLog.deleteMany({}),
-      Comment.deleteMany({}), Session.deleteMany({}),
+      Comment.deleteMany({}), Session.deleteMany({}), Receipt.deleteMany({}),
     ]);
     // Indexes are rebuilt from the current schemas, so a changed unique
     // constraint does not survive from the previous shape of the data.
     await Promise.all([
       User.syncIndexes(), Bill.syncIndexes(), Transaction.syncIndexes(),
       Budget.syncIndexes(), Notification.syncIndexes(), Comment.syncIndexes(),
-      Session.syncIndexes(),
+      Session.syncIndexes(), Receipt.syncIndexes(),
     ]);
     console.log("[seed] --reset: all collections cleared and indexes rebuilt.");
   }
@@ -56,10 +58,11 @@ async function seed() {
     return;
   }
 
-  const [userHash, user2Hash, adminHash] = await Promise.all([
+  const [userHash, user2Hash, adminHash, reviewerHash] = await Promise.all([
     bcrypt.hash("demo123", 10),
     bcrypt.hash("demo456", 10),
     bcrypt.hash("admin123", 10),
+    bcrypt.hash("review123", 10),
   ]);
 
   const jp = await User.create({
@@ -88,6 +91,15 @@ async function seed() {
     passwordHash: adminHash,
     role: "Admin",
   });
+  // Checks the receipts people attach (Review and Approval, spec section 5).
+  const reviewer = await User.create({
+    firstName: "Rhea",
+    lastName: "Santos",
+    name: "Rhea Santos",
+    email: "reviewer@fintrackstark.app",
+    passwordHash: reviewerHash,
+    role: "Reviewer",
+  });
 
   // Budgets are per-user, so the demo User gets their own set.
   await Budget.insertMany([
@@ -109,7 +121,7 @@ async function seed() {
 
   // Entries count the moment they are recorded ("Approved" is the stored
   // status for a current, counted entry).
-  await Transaction.insertMany([
+  const entries = await Transaction.insertMany([
     { type: "Income", category: "Salary", amount: 32000, date: addDays(-20), note: "Monthly salary", status: "Approved", submittedBy: jp._id },
     { type: "Expense", category: "Food", amount: 2100, date: addDays(-18), note: "Groceries", status: "Approved", submittedBy: jp._id },
     { type: "Expense", category: "Transport", amount: 850, date: addDays(-15), note: "Grab + fare", status: "Approved", submittedBy: jp._id },
@@ -128,7 +140,7 @@ async function seed() {
     status: "Superseded", version: 1,
     submittedBy: jp._id,
   });
-  await Transaction.create({
+  const correctedEntry = await Transaction.create({
     type: "Expense", category: "Transport", amount: 1650, date: addDays(-8),
     note: "Airport transfer (corrected from receipt)",
     status: "Approved", version: 2, parentId: originalEntry._id,
@@ -154,6 +166,33 @@ async function seed() {
     ].join("\n"),
   });
 
+  // Receipts in every state the review screen shows. Links point nowhere
+  // real: sample data only (spec section 21.8).
+  const [, groceries, , , netflix, market] = entries;
+  const hoursAgo = (h) => new Date(Date.now() - h * 3600000);
+  const reviewed = (note, h) => ({ reviewedBy: reviewer._id, reviewerName: reviewer.name, reviewedAt: hoursAgo(h), reviewNote: note });
+  const base = { owner: jp._id, ownerName: jp.name };
+  await Receipt.create([
+    { ...base, entryId: groceries._id, kind: "link", url: "https://drive.google.com/file/d/sample-groceries-receipt/view", provider: "Google Drive",
+      status: "Verified", submittedAt: hoursAgo(400), ...reviewed("Matches the amount and date.", 390) },
+    { ...base, entryId: netflix._id, kind: "link", url: "https://onedrive.live.com/sample/netflix-invoice", provider: "OneDrive",
+      status: "Verified", submittedAt: hoursAgo(140), ...reviewed("", 130) },
+    { ...base, entryId: market._id, kind: "file", fileName: "market-receipt.png", mimeType: "image/png",
+      data: samplePng(), status: "For Review", submittedAt: hoursAgo(2) },
+  ]);
+  const blurry = await Receipt.create({
+    ...base, entryId: correctedEntry._id, kind: "link", url: "https://www.dropbox.com/s/sample/airport-blurry.jpg", provider: "Dropbox",
+    status: "Needs Revision", latest: false, submittedAt: hoursAgo(180), ...reviewed("The photo is blurry — the total cannot be read.", 170),
+  });
+  await Receipt.create({
+    ...base, entryId: correctedEntry._id, kind: "link", url: "https://www.dropbox.com/s/sample/airport-receipt.jpg", provider: "Dropbox",
+    version: 2, parentId: blurry._id, status: "For Review", submittedAt: hoursAgo(20),
+  });
+  await Comment.create({
+    transactionId: correctedEntry._id, author: reviewer.name, authorId: reviewer._id,
+    title: "Receipt v1 needs revision", text: "The photo is blurry — the total cannot be read.", ts: hoursAgo(170),
+  });
+
   // Bill reminders are deliberately NOT seeded: the reminder service raises
   // those itself on its first sweep, which is what makes them real.
   await Notification.insertMany([
@@ -165,6 +204,7 @@ async function seed() {
   console.log("[seed] done. Demo accounts:");
   console.log("  User   -> jp@fintrackstark.app / demo123");
   console.log("  User   -> arvy@fintrackstark.app / demo456");
+  console.log("  Reviewer -> reviewer@fintrackstark.app / review123");
   console.log("  Admin  -> admin@fintrackstark.app / admin123");
 
   await mongoose.disconnect();

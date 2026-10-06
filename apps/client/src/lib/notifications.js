@@ -7,6 +7,10 @@ const KINDS = {
   payment: { title: "Payment recorded", icon: "card", path: "/payments", tone: "ok" },
   budget: { title: "Budget alert", icon: "pie", path: "/budgets", tone: "warn" },
   role: { title: "Account", icon: "shield", path: "/settings" },
+  receipt: { title: "Receipt to review", icon: "receipt", path: "/review", tone: "warn" },
+  "receipt-verified": { title: "Receipt verified", icon: "check", path: "/entries", tone: "ok" },
+  "receipt-revision": { title: "Receipt needs revision", icon: "receipt", path: "/entries", tone: "warn" },
+  "receipt-rejected": { title: "Receipt rejected", icon: "receipt", path: "/entries", tone: "danger" },
   // Left over from the retired review step, so old messages still read well.
   approved: { title: "Entry recorded", icon: "check", path: "/entries", tone: "ok" },
   rejected: { title: "Entry", icon: "check", path: "/entries" },
