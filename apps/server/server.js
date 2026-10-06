@@ -16,6 +16,7 @@ const userRoutes = require("./src/routes/users");
 const commentRoutes = require("./src/routes/comments");
 const eventRoutes = require("./src/routes/events");
 const receiptRoutes = require("./src/routes/receipts");
+const settingsRoutes = require("./src/routes/settings");
 const { failureLog } = require("./src/middleware/failureLog");
 const { wrap } = require("./src/middleware/asyncHandler");
 const { requireAuth } = require("./src/middleware/auth");
@@ -86,6 +87,7 @@ async function main() {
   app.use("/api/comments", commentRoutes);
   app.use("/api/events", eventRoutes);
   app.use("/api/receipts", receiptRoutes);
+  app.use("/api/settings", settingsRoutes);
   app.get("/api/sync", requireAuth, syncController.sync);
 
   // An unknown API address answers in JSON like every other API error, rather

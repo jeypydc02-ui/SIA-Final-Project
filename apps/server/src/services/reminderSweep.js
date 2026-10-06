@@ -2,6 +2,7 @@ const Bill = require("../models/Bill");
 const Notification = require("../models/Notification");
 const AuditLog = require("../models/AuditLog");
 const { publish, publishToAdmins } = require("./events");
+const { getSettings } = require("./settings");
 // Philippine calendar dates, shared with the rest of the API.
 const { todayISO, addDaysISO, daysBetweenISO } = require("../utils/dates");
 
@@ -44,7 +45,10 @@ function describe(bill, today) {
  * pattern (spec section 8), with the reminder service owning the
  * `lastRemindedOn` field and the API owning everything else on a bill.
  */
-async function runReminderSweep({ leadDays = 3, today = todayISO(), log = console.log } = {}) {
+async function runReminderSweep({ leadDays, today = todayISO(), log = console.log } = {}) {
+  // The lead time is a system setting the Admin can change; both the API and
+  // the stand-alone worker read it from the shared database.
+  if (leadDays === undefined) leadDays = (await getSettings()).reminderLeadDays;
   const horizonISO = addDaysISO(today, leadDays);
 
   const due = await Bill.find({

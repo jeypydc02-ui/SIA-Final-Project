@@ -11,6 +11,7 @@ const Comment = require("../apps/server/src/models/Comment");
 const AuditLog = require("../apps/server/src/models/AuditLog");
 const Session = require("../apps/server/src/models/Session");
 const Receipt = require("../apps/server/src/models/Receipt");
+const Setting = require("../apps/server/src/models/Setting");
 
 // Database recovery (spec section 10.4).
 //
@@ -34,6 +35,7 @@ const COLLECTIONS = {
   comments: Comment,
   auditLogs: AuditLog,
   receipts: Receipt,
+  settings: Setting,
 };
 
 const SUPPORTED_SCHEMA = 1;

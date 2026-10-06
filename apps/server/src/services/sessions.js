@@ -1,11 +1,14 @@
 const crypto = require("crypto");
 const Session = require("../models/Session");
+const { getSettings } = require("./settings");
 
 // Persisted session store (see models/Session.js for why it is not in memory).
 // The public shape of a session is unchanged: { id, name, email, role }.
 
-// Eight hours is longer than any working day on the app but short enough that
-// a token left behind on a shared lab machine stops working the same day.
+// Eight hours by default: longer than any working day on the app but short
+// enough that a token left behind on a shared lab machine stops working the
+// same day. The Admin can change it (system settings); it applies to new
+// sign-ins, never cutting short a session already open.
 const SESSION_TTL_MS = 8 * 60 * 60 * 1000;
 
 function hashToken(token) {
@@ -23,7 +26,7 @@ async function createSession(user) {
     email: user.email,
     role: user.role,
     mustChangePassword: !!user.mustChangePassword,
-    expiresAt: new Date(Date.now() + SESSION_TTL_MS),
+    expiresAt: new Date(Date.now() + (await getSettings()).sessionHours * 60 * 60 * 1000),
   });
   return token;
 }

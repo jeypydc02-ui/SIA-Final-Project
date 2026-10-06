@@ -31,6 +31,7 @@ export const NAV = [
     { path: "/audit", label: "Audit Log", icon: "shield", roles: ADMIN },
     { path: "/reports", label: "Reports", icon: "chart", roles: MEMBER },
     { path: "/users", label: "User & Role Mgmt", icon: "users", roles: ADMIN },
+    { path: "/system", label: "System Settings", icon: "server", roles: ADMIN },
     { path: "/settings", label: "Settings", icon: "gear" },
   ]},
 ];

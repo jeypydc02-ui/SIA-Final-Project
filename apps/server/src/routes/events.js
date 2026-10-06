@@ -43,7 +43,7 @@ router.get("/", requireAuth, (req, res) => {
     if (forMe) res.write(`event: change\ndata: ${JSON.stringify({ topic: change.topic })}\n\n`);
   });
   // Each heartbeat re-checks the session: after a logout, a password change
-  // or the 8-hour expiry the stream closes, and a role change takes effect.
+  // or the session expiry the stream closes, and a role change takes effect.
   const heartbeat = setInterval(async () => {
     try {
       const current = await getSession(req.token);

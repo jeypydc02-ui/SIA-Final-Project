@@ -36,7 +36,7 @@ const ROLES = [
 ];
 
 const FACTS = [
-  { value: "8 hrs", label: "before a sign-in expires, so a forgotten session on a shared computer does not stay open" },
+  { value: "8 hrs", label: "before a sign-in expires by default (the Admin can shorten it), so a forgotten session on a shared computer does not stay open" },
   { value: "0", label: "financial records stored on your device by the app — your data always comes fresh from the server" },
   { value: "3", label: "roles with separate access: people only ever see their own bills, budgets and notes" },
   { value: "v1 → v2", label: "every edit to an entry keeps the earlier version, and every change is written to the audit log" },
@@ -48,7 +48,7 @@ const FAQ = [
   { q: "How do bill reminders work?", a: "Once a day, the reminder service checks every unpaid bill and sends an alert to your Inbox when one is due within three days or already overdue. Monthly bills schedule next month's bill when you pay them." },
   { q: "What is a receipt review?", a: "When you record an expense or income you can attach its receipt — a photo, a PDF, or a Google Drive, OneDrive or Dropbox link. An Admin checks it against the entry and verifies it, rejects it, or asks for a clearer copy. Your entry counts in your balance either way." },
   { q: "Can I fix a wrong entry?", a: "Yes. Edit it from My Entries and the corrected version counts from then on, while the earlier one stays in Revision History. Deleting an entry stops it counting but keeps it in the history." },
-  { q: "Is my financial data safe?", a: "Passwords are hashed, sessions expire after eight hours, and other users cannot see your bills, budgets or notes. Read the Privacy Policy for the details." },
+  { q: "Is my financial data safe?", a: "Passwords are hashed, sessions expire (after eight hours by default), and other users cannot see your bills, budgets or notes. Read the Privacy Policy for the details." },
   { q: "Can I install it on my phone?", a: "Yes. On Android or Chrome, choose Install app. On iPhone, open it in Safari and tap Share, then Add to Home Screen. It opens like an app and still opens without a connection." },
 ];
 

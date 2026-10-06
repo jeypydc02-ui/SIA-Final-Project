@@ -12,7 +12,6 @@ const { logFailure } = require("./audit");
 // Where the separate worker does run, both are safe together: the sweep
 // claims each bill atomically, so no alert is ever sent twice.
 
-const LEAD_DAYS = Number(process.env.REMINDER_LEAD_DAYS) || 3;
 const RETRY_AFTER_MS = 5 * 60 * 1000;          // after a failed sweep
 const CHECK_EVERY_MS = 15 * 60 * 1000;         // while the API stays awake
 
@@ -25,7 +24,8 @@ function ensureTodaysSweep() {
   if (lastSweepDay === today || running) return running;
   if (Date.now() - lastFailureAt < RETRY_AFTER_MS) return null;
 
-  running = runReminderSweep({ leadDays: LEAD_DAYS, today })
+  // The lead time comes from the Admin's system settings.
+  running = runReminderSweep({ today })
     .then(() => { lastSweepDay = today; })
     .catch((err) => {
       lastFailureAt = Date.now();

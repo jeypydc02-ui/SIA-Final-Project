@@ -42,14 +42,14 @@ SIA/
 ```
 
 How a request flows: `screens/*` call `lib/api.js` → `routes/*` → `controllers/*` → `models/*` (MongoDB).
-Bill reminders: once a day, every unpaid bill due within three days (or overdue) raises an alert in its owner's Inbox. The sweep (`apps/server/src/services/reminderSweep.js`) is run by the stand-alone worker in `services/reminder` on a schedule, and by the API itself on the first request of each day, for hosting where only one process runs. The worker never calls the API; both share the database, and each bill is claimed atomically so an alert is never sent twice.
+Bill reminders: once a day, every unpaid bill due within the reminder lead time (3 days by default, a system setting) or overdue raises an alert in its owner's Inbox. The sweep (`apps/server/src/services/reminderSweep.js`) is run by the stand-alone worker in `services/reminder` on a schedule, and by the API itself on the first request of each day, for hosting where only one process runs. The worker never calls the API; both share the database, and each bill is claimed atomically so an alert is never sent twice.
 
 ## Roles
 
 | Role | Dashboard | Can do |
 |---|---|---|
 | User | Home: wallet, spending by category, bills, budgets, recent entries | own bills, budgets, income/expense entries, receipts, notes |
-| Admin | Admin Console: receipts waiting for review, system status, accounts, weekly activity, security | review receipts (verify, reject, request revision), manage accounts, roles, password resets and the audit log. **No wallet of their own** — finance endpoints refuse an Admin |
+| Admin | Admin Console: receipts waiting for review, system status, accounts, weekly activity, security | review receipts (verify, reject, request revision), manage accounts, roles, password resets, system settings and the audit log. **No wallet of their own** — finance endpoints refuse an Admin |
 
 Income and expense entries count the moment they are recorded. Editing one saves a new version (v1 → v2) and keeps the earlier one in Revision History; deleting one keeps it in the history as "Deleted".
 
@@ -58,6 +58,10 @@ Income and expense entries count the moment they are recorded. Editing one saves
 An entry can carry a receipt: an uploaded photo/PDF (up to 2 MB, stored in MongoDB, type checked by its first bytes) or an https link to Google Drive, OneDrive or Dropbox. Attaching one sets it to **For Review** and notifies every Admin. An Admin verifies it, rejects it, or requests a revision (a note is required for both); the owner is notified and the note is kept on the entry. After a rejection or a revision request the owner attaches **v2**, and the earlier version stays in the history. A verified receipt is final — unless the entry's type, category, amount or date is edited later, which sends it back for review. Only the owner and the Admin can open the file; other Users never can. Because an Admin keeps no wallet, the person who judges evidence never submits any.
 
 API: `POST /api/receipts`, `GET /api/receipts`, `GET /api/receipts/:id/file`, `GET /api/receipts/review` (Admin), `POST /api/receipts/:id/review` (Admin).
+
+## System settings
+
+The Admin manages three system-wide settings from **System Settings** (`/system`, `GET`/`PUT /api/settings`): the bill reminder lead time (1–14 days, default 3), the budget warning level (50–95%, default 80) and the session length (1–24 hours, default 8, for new sign-ins). They are stored in the shared database, so the separate reminder worker uses the same lead time as the API, and every change is written to the audit log as "Settings Changed".
 
 ## Audit and integration log
 

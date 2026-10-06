@@ -62,7 +62,7 @@ export default function AdminConsole({ users, auditLog, reviewQueue = [], onNavi
 
   const ACTIONS = [
     { label: "Manage users", hint: "Roles, deletions", icon: "users", to: "/users" },
-    { label: "Reset a password", hint: "For a locked-out user", icon: "shield", to: "/users" },
+    { label: "System settings", hint: "Reminders, budgets, sessions", icon: "server", to: "/system" },
     { label: "Audit log", hint: "Every recorded action", icon: "history", to: "/audit" },
     { label: "Receipt Review", hint: "Verify, reject, send back", icon: "check", to: "/review" },
   ];

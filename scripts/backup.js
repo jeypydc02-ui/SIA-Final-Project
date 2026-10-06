@@ -10,6 +10,7 @@ const Notification = require("../apps/server/src/models/Notification");
 const Comment = require("../apps/server/src/models/Comment");
 const AuditLog = require("../apps/server/src/models/AuditLog");
 const Receipt = require("../apps/server/src/models/Receipt");
+const Setting = require("../apps/server/src/models/Setting");
 
 // Database backup (spec section 10.3).
 //
@@ -30,6 +31,7 @@ const COLLECTIONS = {
   comments: Comment,
   auditLogs: AuditLog,
   receipts: Receipt,
+  settings: Setting,
 };
 
 function outputPath() {

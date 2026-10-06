@@ -2,6 +2,7 @@ const Budget = require("../models/Budget");
 const Transaction = require("../models/Transaction");
 const { notify } = require("./notifications");
 const { todayISO } = require("../utils/dates");
+const { getSettings } = require("./settings");
 
 // Warns a user when an approved expense pushes a category past 80% or 100% of
 // its monthly budget. Called whenever an expense becomes Approved: a
@@ -9,9 +10,11 @@ const { todayISO } = require("../utils/dates");
 //
 // Only the threshold this expense actually crossed is reported, so a user is
 // told once at 80% and once when they go over, not after every purchase.
-const THRESHOLDS = [
+// The warning level (80% by default) is a system setting the Admin manages;
+// going over (100%) always warns.
+const thresholds = (warnPercent) => [
   { at: 1.0, message: (b, spent) => `You are over your ${b.category} budget for this month: ₱${fmt(spent)} spent of ₱${fmt(b.limit)} (over by ₱${fmt(spent - b.limit)}).` },
-  { at: 0.8, message: (b, spent) => `You have used ${Math.round((spent / b.limit) * 100)}% of your ${b.category} budget this month: ₱${fmt(spent)} of ₱${fmt(b.limit)}.` },
+  { at: warnPercent / 100, message: (b, spent) => `You have used ${Math.round((spent / b.limit) * 100)}% of your ${b.category} budget this month: ₱${fmt(spent)} of ₱${fmt(b.limit)}.` },
 ];
 
 function fmt(n) {
@@ -39,7 +42,8 @@ async function checkBudget(tx) {
   const spent = monthEntries.reduce((s, t) => s + t.amount, 0);
   const before = spent - tx.amount;
 
-  const crossed = THRESHOLDS.find((t) => before < t.at * budget.limit && spent >= t.at * budget.limit);
+  const { budgetWarningPercent } = await getSettings();
+  const crossed = thresholds(budgetWarningPercent).find((t) => before < t.at * budget.limit && spent >= t.at * budget.limit);
   if (crossed) await notify("budget", crossed.message(budget, spent), tx.submittedBy);
 }
 

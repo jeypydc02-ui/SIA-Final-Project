@@ -11,7 +11,7 @@ A checklist for putting the system on a real server. Everything here is required
 | `PORT` | Whatever the host assigns | Defaults to 4000. |
 | `TRUST_PROXY` | `1` **only** if a reverse proxy or platform load balancer sits in front (nginx, Render, Railway, Heroku and similar). Leave it unset if clients connect to Node directly. | The login rate limiter counts per client address. Trusting `X-Forwarded-For` with no proxy in front lets anyone fake a new address on every request. |
 | `APP_TIMEZONE` | Optional. Defaults to `Asia/Manila`. | Decides what "today" means for due dates, payments and reminders. |
-| `REMINDER_CRON`, `REMINDER_LEAD_DAYS` | Optional. Default `0 8 * * *` and `3`. | When the separate reminder worker runs, and how far ahead reminders look. |
+| `REMINDER_CRON`, `REMINDER_LEAD_DAYS` | Optional. Default `0 8 * * *` and `3`. | When the separate reminder worker runs, and the default reminder lead time. Once an Admin sets the lead time in System Settings, that value is used instead. |
 | `REMINDERS_IN_API` | Optional. Leave unset. | The API runs the daily bill-reminder sweep itself (on start-up and on the first request of each day). Set to `0` only if a separate reminder worker runs instead. Running both is safe: no alert is ever sent twice. |
 
 Do **not** set `RATE_LIMIT_LOGIN_MAX` or `RATE_LIMIT_REGISTER_MAX` in production. They exist so the test suite can log in many times.

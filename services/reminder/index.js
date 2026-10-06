@@ -17,13 +17,14 @@ const { runReminderSweep } = require("../../apps/server/src/services/reminderSwe
 const ONCE = process.argv.includes("--once");
 // 08:00 every day, local time. Override with REMINDER_CRON.
 const SCHEDULE = process.env.REMINDER_CRON || "0 8 * * *";
-const LEAD_DAYS = Number(process.env.REMINDER_LEAD_DAYS) || 3;
+// The lead time (how many days ahead to remind) is a system setting the
+// Admin manages; the sweep reads it from the shared database each time.
 
 async function main() {
   await connectDB();
 
   if (ONCE) {
-    await runReminderSweep({ leadDays: LEAD_DAYS });
+    await runReminderSweep();
     await mongoose.disconnect();
     return;
   }
@@ -35,18 +36,18 @@ async function main() {
 
   // Sweep once at startup so a machine that was switched off overnight still
   // catches up, and so a demo does not have to wait until 08:00.
-  await runReminderSweep({ leadDays: LEAD_DAYS });
+  await runReminderSweep();
 
   cron.schedule(SCHEDULE, async () => {
     try {
-      await runReminderSweep({ leadDays: LEAD_DAYS });
+      await runReminderSweep();
     } catch (err) {
       // A failed sweep must not take the worker down; the next tick retries.
       console.error("[reminder] sweep failed:", err.message);
     }
   });
 
-  console.log(`[reminder] service running — schedule "${SCHEDULE}", ${LEAD_DAYS} day lead time.`);
+  console.log(`[reminder] service running — schedule "${SCHEDULE}"; lead time from the Admin's system settings.`);
 
   const shutdown = async (signal) => {
     console.log(`[reminder] ${signal} received, shutting down.`);

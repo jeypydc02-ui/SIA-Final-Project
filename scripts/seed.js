@@ -9,6 +9,7 @@ const AuditLog = require("../apps/server/src/models/AuditLog");
 const Comment = require("../apps/server/src/models/Comment");
 const Session = require("../apps/server/src/models/Session");
 const Receipt = require("../apps/server/src/models/Receipt");
+const Setting = require("../apps/server/src/models/Setting");
 const { samplePng } = require("./sample-receipt");
 const { todayISO: phToday, addDaysISO } = require("../apps/server/src/utils/dates");
 
@@ -39,7 +40,7 @@ async function seed() {
     await Promise.all([
       User.deleteMany({}), Bill.deleteMany({}), Transaction.deleteMany({}),
       Budget.deleteMany({}), Notification.deleteMany({}), AuditLog.deleteMany({}),
-      Comment.deleteMany({}), Session.deleteMany({}), Receipt.deleteMany({}),
+      Comment.deleteMany({}), Session.deleteMany({}), Receipt.deleteMany({}), Setting.deleteMany({}),
     ]);
     // Indexes are rebuilt from the current schemas, so a changed unique
     // constraint does not survive from the previous shape of the data.
