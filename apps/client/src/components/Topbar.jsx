@@ -24,7 +24,7 @@ export default function Topbar({ onAdd }) {
         <span className="topbar-date">
           {new Date().toLocaleDateString("en-PH", { weekday: "long", month: "long", day: "numeric", year: "numeric" })}
         </span>
-        <button type="button" className="btn small" onClick={onAdd}>+ Add</button>
+        {onAdd && <button type="button" className="btn small" onClick={onAdd}>+ Add</button>}
       </div>
     </div>
   );

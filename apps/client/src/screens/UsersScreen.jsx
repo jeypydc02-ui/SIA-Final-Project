@@ -1,10 +1,9 @@
 import { useState } from "react";
 
-const ROLES = ["Admin", "Reviewer", "User"];
+const ROLES = ["Admin", "User"];
 
 const RBAC = [
-  { role: "Admin", access: "Full access: manage users and roles, view all audit logs, all reports, system settings." },
-  { role: "Reviewer", access: "Checks the receipts people attach: verifies, rejects or asks for a revision. Sees only the receipt and the entry it proves — never a whole wallet. Cannot review their own receipts. Has their own wallet like any User." },
+  { role: "Admin", access: "Administers the system: manages users and roles, resets passwords, reads the audit log, and reviews the receipts Users attach (verify, reject, request revision). Sees a receipt and the one entry it proves — never a whole wallet. Keeps no wallet of their own." },
   { role: "User", access: "Records own bills, payments, income and expenses; sees only their own wallet, reports, history, budgets and notes." },
 ];
 

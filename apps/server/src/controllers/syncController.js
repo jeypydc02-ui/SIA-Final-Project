@@ -23,19 +23,20 @@ const { visibilityFilter } = require("./commentController");
 async function sync(req, res) {
   const me = req.user;
   const isAdmin = me.role === "Admin";
-  const isReviewer = me.role === "Reviewer";
+  // Users have a wallet; an Admin has the system lists and the review queue.
+  const wallet = (query) => (isAdmin ? Promise.resolve([]) : query);
 
   const [user, bills, transactions, budgets, notifications, comments, auditLog, users, receipts, queue] = await Promise.all([
     User.findById(me.id).select("-passwordHash").lean(),
-    Bill.find({ createdBy: me.id }).sort({ due: 1 }).lean(),
-    Transaction.find({ submittedBy: me.id }).sort({ createdAt: -1 }).lean(),
-    Budget.find({ user: me.id }).sort({ category: 1 }).lean(),
+    wallet(Bill.find({ createdBy: me.id }).sort({ due: 1 }).lean()),
+    wallet(Transaction.find({ submittedBy: me.id }).sort({ createdAt: -1 }).lean()),
+    wallet(Budget.find({ user: me.id }).sort({ category: 1 }).lean()),
     Notification.find({ user: me.id }).sort({ ts: -1 }).limit(100).lean(),
-    visibilityFilter(me).then((f) => Comment.find(f).sort({ ts: -1 }).limit(200).lean()),
+    wallet(visibilityFilter(me).then((f) => Comment.find(f).sort({ ts: -1 }).limit(200).lean())),
     isAdmin ? AuditLog.find().sort({ ts: -1 }).limit(300).lean() : null,
     isAdmin ? User.find().select("-passwordHash").sort({ role: 1, name: 1 }).lean() : null,
-    Receipt.find({ owner: me.id }).sort({ submittedAt: -1 }).lean(),
-    isReviewer ? reviewQueue(me) : null,
+    wallet(Receipt.find({ owner: me.id }).sort({ submittedAt: -1 }).lean()),
+    isAdmin ? reviewQueue(me) : null,
   ]);
 
   if (!user) return res.status(401).json({ error: "Account no longer exists.", sessionEnded: true });
@@ -49,7 +50,7 @@ async function sync(req, res) {
     auditLog: auditLog || [],
     users: users || [],
     receipts: receipts.map(publicReceipt),
-    // Reviewer only: receipts waiting for a decision, and ones they decided.
+    // Admin only: receipts waiting for a decision, and ones they decided.
     reviewQueue: queue || [],
   });
 }

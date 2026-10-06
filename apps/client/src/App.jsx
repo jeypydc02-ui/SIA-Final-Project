@@ -62,8 +62,8 @@ function FinTrackStark() {
   const [notifs, setNotifs] = useState([]);
   const [auditLog, setAuditLog] = useState([]);
   const [comments, setComments] = useState([]);
-  // Receipts the signed-in person attached to their entries, and — for a
-  // Reviewer — the receipts waiting for review plus the ones they decided.
+  // Receipts the signed-in User attached to their entries, and — for an
+  // Admin — the receipts waiting for review plus the ones they decided.
   const [receipts, setReceipts] = useState([]);
   const [reviewQueue, setReviewQueue] = useState([]);
   const [toast, setToast] = useState(null);
@@ -527,6 +527,8 @@ function FinTrackStark() {
           }
         >
           <Route path="/dashboard" element={<DashboardScreen session={session} bills={bills} tx={tx} budgets={budgets} notifs={notifs} users={users} auditLog={auditLog} reviewQueue={reviewQueue} onNavigate={navigate} />} />
+          {/* A User's own money. An Admin has no wallet (separation of duties). */}
+          <Route element={<RequireRole session={session} roles={["User"]} />}>
           <Route path="/categories" element={<CategoryList bills={bills} onOpen={(name) => navigate("/categories/" + encodeURIComponent(name))} />} />
           <Route path="/categories/:name" element={<CategoryDetailRoute bills={bills} />} />
           <Route path="/submit" element={<LogEntryScreen addTx={addTx} />} />
@@ -536,8 +538,9 @@ function FinTrackStark() {
           <Route path="/entries" element={<EntriesScreen tx={tx} editTx={editTx} deleteTx={deleteTx} receipts={receipts} submitReceipt={submitReceipt} onNavigate={navigate} />} />
           <Route path="/notes" element={<NotesScreen comments={comments} addNote={addNote} editNote={editNote} deleteNote={deleteNote} tx={tx} me={session?.id} />} />
           <Route path="/payments" element={<PaymentHistoryScreen bills={bills} />} />
-          <Route path="/notifications" element={<NotificationsScreen notifs={notifs} markRead={markNotifRead} markAllRead={markAllNotifsRead} onNavigate={navigate} />} />
           <Route path="/reports" element={<ReportsScreen tx={tx} bills={bills} budgets={budgets} />} />
+          </Route>
+          <Route path="/notifications" element={<NotificationsScreen notifs={notifs} markRead={markNotifRead} markAllRead={markAllNotifsRead} onNavigate={navigate} />} />
           <Route path="/settings" element={<SettingsScreen session={session} updateProfile={updateProfile} changePassword={changePassword} theme={theme} setTheme={setTheme} />} />
 
           <Route element={<RequireRole session={session} path="/review" />}>

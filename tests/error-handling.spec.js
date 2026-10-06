@@ -125,16 +125,16 @@ test.describe("Error handling", () => {
   });
 
   test("ET-07 a failed review is refused cleanly and written to the log as Failed", async () => {
-    const { user, admin, reviewer } = accounts();
+    const { user, admin } = accounts();
     const { receipt } = await entryWithReceipt(user.token);
     const id = receipt.data._id;
     // A note is required to send back or reject.
-    const noNote = await api(`/api/receipts/${id}/review`, { method: "POST", token: reviewer.token, body: { action: "reject" } });
+    const noNote = await api(`/api/receipts/${id}/review`, { method: "POST", token: admin.token, body: { action: "reject" } });
     expect(noNote.status).toBe(400);
-    expect((await api(`/api/receipts/${id}/review`, { method: "POST", token: reviewer.token, body: { action: "approve-ish" } })).status).toBe(400);
+    expect((await api(`/api/receipts/${id}/review`, { method: "POST", token: admin.token, body: { action: "approve-ish" } })).status).toBe(400);
     // Decided once; a second decision is refused.
-    expect((await api(`/api/receipts/${id}/review`, { method: "POST", token: reviewer.token, body: { action: "verify" } })).status).toBe(200);
-    const again = await api(`/api/receipts/${id}/review`, { method: "POST", token: reviewer.token, body: { action: "reject", note: "late" } });
+    expect((await api(`/api/receipts/${id}/review`, { method: "POST", token: admin.token, body: { action: "verify" } })).status).toBe(200);
+    const again = await api(`/api/receipts/${id}/review`, { method: "POST", token: admin.token, body: { action: "reject", note: "late" } });
     expect(again.status).toBe(409);
     // A verified receipt is final.
     const replace = await api("/api/receipts", { method: "POST", token: user.token, body: { ...receipt.data, ...pngBody(), transactionId: receipt.data.entryId } });

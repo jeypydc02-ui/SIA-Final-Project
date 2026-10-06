@@ -60,7 +60,7 @@ export default function ReceiptDialog({ entry, receipts, submitReceipt, onClose 
             <div className="field">
               {!latest ? "Attach a receipt" : latest.status === "For Review" ? `Replace with version ${latest.version + 1}` : `Send version ${latest.version + 1}`}
             </div>
-            {!latest && <div className="hint" style={{ marginTop: 0, marginBottom: 8 }}>A Reviewer checks it against this entry. The entry already counts in your balance either way.</div>}
+            {!latest && <div className="hint" style={{ marginTop: 0, marginBottom: 8 }}>An Admin checks it against this entry. The entry already counts in your balance either way.</div>}
             <ReceiptPicker value={draft} onChange={(v) => { setDraft(v); setErr(""); }} idPrefix={"receipt-" + entry._id} />
             {err && <div className="form-msg error">{err}</div>}
             <div className="actions">

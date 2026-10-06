@@ -54,7 +54,7 @@ export default function LogEntryScreen({ addTx }) {
           <EntryFields value={form} onChange={(v) => { setForm(v); setErr(""); }} />
           <label className="check-row">
             <input type="checkbox" checked={withReceipt} onChange={(e) => { setWithReceipt(e.target.checked); setErr(""); }} />
-            Attach a receipt <span className="hint" style={{ margin: 0 }}>(optional — a Reviewer checks it)</span>
+            Attach a receipt <span className="hint" style={{ margin: 0 }}>(optional — an Admin checks it)</span>
           </label>
           {withReceipt && <ReceiptPicker key={pickerKey} value={receipt} onChange={(v) => { setReceipt(v); setErr(""); }} idPrefix="log-receipt" />}
           {err && <div className="form-msg error">{err}</div>}

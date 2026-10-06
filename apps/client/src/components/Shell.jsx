@@ -31,11 +31,12 @@ export default function Shell({ session, logout, theme, setTheme, notifs, loadEr
       {menuOpen && <div className="side-backdrop" onClick={() => setMenuOpen(false)} />}
       <BottomNav
         unread={unread} menuOpen={menuOpen}
+        role={session.role} reviewWaiting={reviewWaiting}
         onAdd={() => setAdding(true)} onMore={() => setMenuOpen((open) => !open)}
       />
       {adding && <QuickAdd onPick={(to) => { setAdding(false); navigate(to); }} onClose={() => setAdding(false)} />}
       <div className="main">
-        <Topbar onAdd={() => setAdding(true)} />
+        <Topbar onAdd={session.role === "User" ? () => setAdding(true) : null} />
         <div className="content">
           {loadError && (
             <div className="card load-error" role="alert">

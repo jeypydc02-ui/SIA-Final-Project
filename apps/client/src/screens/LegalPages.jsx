@@ -44,8 +44,7 @@ export function PrivacyPage() {
       <h2>Who can see it</h2>
       <ul>
         <li><strong>You</strong> see your own bills, budgets, entries, notes and notifications.</li>
-        <li><strong>Reviewers</strong> see a receipt you attach, with your name and the one entry it is for (type, category, amount, date and note), so they can check it. They do not see the rest of your wallet, and cannot review their own receipts.</li>
-        <li><strong>Administrators</strong> see the list of accounts (name, email and role) and the audit log of actions. They do not see your bills, budgets, entries, receipts or notes.</li>
+        <li><strong>Administrators</strong> see the list of accounts (name, email and role) and the audit log of actions. To review a receipt you attach, they also see that receipt, your name and the one entry it is for (type, category, amount, date and note). They do not see the rest of your bills, budgets, entries or notes, and they keep no wallet of their own.</li>
       </ul>
 
       <h2>Storage on your device</h2>

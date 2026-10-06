@@ -1,28 +1,36 @@
 // Every screen has a URL. The sidebar, the page titles, and the router all
 // read from this one list, so a screen cannot exist in the menu without an
 // address you can bookmark, share, or reload.
+//
+// Two roles: a User keeps their own wallet; an Admin runs the system and
+// reviews the receipts Users attach, with no wallet of their own.
+const MEMBER = ["User"];
+const ADMIN = ["Admin"];
+
 export const NAV = [
   { group: "Overview", items: [
     { path: "/dashboard", label: "Dashboard", icon: "home" },
   ]},
   { group: "Finance Records", items: [
-    { path: "/categories", label: "Bill Categories", icon: "grid" },
-    { path: "/submit", label: "Log Income/Expense", icon: "edit" },
-    { path: "/budgets", label: "Budgets", icon: "pie" },
+    { path: "/categories", label: "Bill Categories", icon: "grid", roles: MEMBER },
+    { path: "/submit", label: "Log Income/Expense", icon: "edit", roles: MEMBER },
+    { path: "/budgets", label: "Budgets", icon: "pie", roles: MEMBER },
   ]},
   { group: "Bills & Payments", items: [
-    { path: "/bills", label: "Bill Reminders", icon: "receipt" },
-    { path: "/revisions", label: "Revision History", icon: "history" },
-    { path: "/entries", label: "My Entries", icon: "wallet" },
-    { path: "/review", label: "Receipt Review", icon: "check", roles: ["Reviewer"] },
-    { path: "/notes", label: "Notes / Feedback", icon: "message" },
-    { path: "/payments", label: "Payment History", icon: "card" },
+    { path: "/bills", label: "Bill Reminders", icon: "receipt", roles: MEMBER },
+    { path: "/revisions", label: "Revision History", icon: "history", roles: MEMBER },
+    { path: "/entries", label: "My Entries", icon: "wallet", roles: MEMBER },
+    { path: "/notes", label: "Notes / Feedback", icon: "message", roles: MEMBER },
+    { path: "/payments", label: "Payment History", icon: "card", roles: MEMBER },
+  ]},
+  { group: "Review", items: [
+    { path: "/review", label: "Receipt Review", icon: "check", roles: ADMIN },
   ]},
   { group: "System", items: [
     { path: "/notifications", label: "Notification Log", icon: "bell" },
-    { path: "/audit", label: "Audit Log", icon: "shield", roles: ["Admin"] },
-    { path: "/reports", label: "Reports", icon: "chart" },
-    { path: "/users", label: "User & Role Mgmt", icon: "users", roles: ["Admin"] },
+    { path: "/audit", label: "Audit Log", icon: "shield", roles: ADMIN },
+    { path: "/reports", label: "Reports", icon: "chart", roles: MEMBER },
+    { path: "/users", label: "User & Role Mgmt", icon: "users", roles: ADMIN },
     { path: "/settings", label: "Settings", icon: "gear" },
   ]},
 ];
@@ -41,3 +49,5 @@ export const TITLES = {
 export const PATH_ROLES = Object.fromEntries(
   NAV_ITEMS.filter((i) => i.roles).map((i) => [i.path, i.roles])
 );
+
+export const isMember = (session) => !!session && session.role === "User";

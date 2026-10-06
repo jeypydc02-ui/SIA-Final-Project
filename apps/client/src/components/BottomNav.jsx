@@ -18,7 +18,22 @@ function Tab({ to, icon, label, badge }) {
   );
 }
 
-export default function BottomNav({ unread, onAdd, onMore, menuOpen }) {
+export default function BottomNav({ unread, onAdd, onMore, menuOpen, role = "User", reviewWaiting = 0 }) {
+  // An Admin keeps no wallet, so there is nothing to add; their everyday
+  // places are the console, the review queue and the inbox.
+  if (role === "Admin") {
+    return (
+      <nav className="bottom-nav admin" aria-label="Main">
+        <Tab to="/dashboard" icon="home" label="Console" />
+        <Tab to="/review" icon="check" label="Review" badge={reviewWaiting} />
+        <Tab to="/notifications" icon="bell" label="Inbox" badge={unread} />
+        <button type="button" className={"bn-tab" + (menuOpen ? " active" : "")} onClick={onMore} aria-label="Open the full menu">
+          <span className="bn-icon"><Icon name="menu" size={22} /></span>
+          <span className="bn-label">More</span>
+        </button>
+      </nav>
+    );
+  }
   return (
     <nav className="bottom-nav" aria-label="Main">
       <Tab to="/dashboard" icon="home" label="Home" />

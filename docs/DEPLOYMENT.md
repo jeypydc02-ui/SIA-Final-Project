@@ -33,7 +33,7 @@ npm start                          # API + built frontend on one port
 npm run reminder                   # optional: the stand-alone reminder worker, if the host allows a second process
 ```
 
-Everyone else signs up through the app as a User. An Admin can make another account a Reviewer (to check receipts) or an Admin from User & Role Management. The receipt review queue needs at least one Reviewer.
+Everyone else signs up through the app as a User. An Admin can make another account an Admin from User & Role Management. Admins review the receipts Users attach and keep no wallet of their own, so use a separate User account for your own bills and entries.
 
 ## 4. Forgotten passwords
 

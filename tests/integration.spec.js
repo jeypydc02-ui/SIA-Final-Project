@@ -201,33 +201,33 @@ test.describe("Integration", () => {
   });
 
   test("IT-07 a receipt moves through review: submitted, sent back, resubmitted as v2, verified", async () => {
-    const { user, reviewer, admin } = accounts();
+    const { user, admin } = accounts();
     const inbox = async (who) => (await api("/api/notifications", { token: who.token })).data;
-    const before = new Set((await inbox(reviewer)).map((n) => n._id));
+    const before = new Set((await inbox(admin)).map((n) => n._id));
 
-    // 1. Submitting sets it For Review automatically and alerts the Reviewers.
+    // 1. Submitting sets it For Review automatically and alerts the Admins.
     const { entry, receipt } = await entryWithReceipt(user.token, { amount: 1560, note: "IT-07 groceries" });
     expect(receipt.data.status).toBe("For Review");
     expect(receipt.data.version).toBe(1);
-    const alert = (await inbox(reviewer)).find((n) => !before.has(n._id) && n.type === "receipt");
+    const alert = (await inbox(admin)).find((n) => !before.has(n._id) && n.type === "receipt");
     expect(alert.message).toContain("₱1,560.00");
 
     // 2. Sent back: the owner is told why, and the reason is a note on the entry.
-    const back = await api(`/api/receipts/${receipt.data._id}/review`, { method: "POST", token: reviewer.token, body: { action: "revision", note: "Total is cut off in the photo" } });
+    const back = await api(`/api/receipts/${receipt.data._id}/review`, { method: "POST", token: admin.token, body: { action: "revision", note: "Total is cut off in the photo" } });
     expect(back.data.status).toBe("Needs Revision");
     expect((await inbox(user)).some((n) => n.type === "receipt-revision" && n.message.includes("Total is cut off"))).toBe(true);
     const notes = await api(`/api/comments?transactionId=${entry._id}`, { token: user.token });
-    expect(notes.data.some((c) => c.text === "Total is cut off in the photo" && c.author === "Rhea Santos")).toBe(true);
+    expect(notes.data.some((c) => c.text === "Total is cut off in the photo" && c.author === "System Admin")).toBe(true);
 
     // 3. The owner sends v2; v1 stays in the history with its decision.
     const v2 = await api("/api/receipts", { method: "POST", token: user.token, body: { ...pngBody({ fileName: "retake.png" }), transactionId: entry._id } });
     expect(v2.data.version).toBe(2);
     expect(v2.data.parentId).toBe(receipt.data._id);
-    const queue = await api("/api/receipts/review", { token: reviewer.token });
+    const queue = await api("/api/receipts/review", { token: admin.token });
     expect(queue.data.filter((r) => String(r.entryId) === entry._id && r.status === "For Review").map((r) => r.version)).toEqual([2]);
 
     // 4. Verified: final, the owner is notified, and every step is in the audit log.
-    await api(`/api/receipts/${v2.data._id}/review`, { method: "POST", token: reviewer.token, body: { action: "verify" } });
+    await api(`/api/receipts/${v2.data._id}/review`, { method: "POST", token: admin.token, body: { action: "verify" } });
     const mine = (await api("/api/receipts", { token: user.token })).data.filter((r) => String(r.entryId) === entry._id);
     expect(mine.map((r) => `v${r.version} ${r.status}`).sort()).toEqual(["v1 Needs Revision", "v2 Verified"]);
     expect((await inbox(user)).some((n) => n.type === "receipt-verified")).toBe(true);
@@ -238,9 +238,9 @@ test.describe("Integration", () => {
   });
 
   test("IT-08 changing the figures of an entry sends its verified receipt back for review", async () => {
-    const { user, reviewer } = accounts();
+    const { user, admin } = accounts();
     const { entry, receipt } = await entryWithReceipt(user.token, { amount: 990, note: "IT-08" });
-    await api(`/api/receipts/${receipt.data._id}/review`, { method: "POST", token: reviewer.token, body: { action: "verify" } });
+    await api(`/api/receipts/${receipt.data._id}/review`, { method: "POST", token: admin.token, body: { action: "verify" } });
     // A note-only edit leaves it verified …
     const v2 = await api(`/api/transactions/${entry._id}`, { method: "PUT", token: user.token, body: { note: "IT-08 renamed" } });
     let r = (await api("/api/receipts", { token: user.token })).data.find((x) => x._id === receipt.data._id);

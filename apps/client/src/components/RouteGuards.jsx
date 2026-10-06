@@ -10,14 +10,16 @@ export function RequireAuth({ session, children }) {
 // Server-side RBAC is the real control (every route checks the token's role);
 // this stops a restricted URL from rendering an empty screen if it is typed in
 // or arrives as a stale bookmark.
-export function RequireRole({ session, path }) {
-  const allowed = PATH_ROLES[path];
+export function RequireRole({ session, path, roles }) {
+  const allowed = roles || PATH_ROLES[path];
   if (allowed && !allowed.includes(session.role)) {
     return (
       <div className="card">
         <div className="empty">
           <div className="big">—</div>
-          Restricted — this page is for {allowed.join(" and ")} accounts. You are signed in as {session.role}.
+          {session.role === "Admin" && allowed.includes("User")
+            ? "Admin accounts administer the system and review receipts; they do not keep a wallet of their own."
+            : `Restricted — this page is for ${allowed.join(" and ")} accounts. You are signed in as ${session.role}.`}
         </div>
       </div>
     );

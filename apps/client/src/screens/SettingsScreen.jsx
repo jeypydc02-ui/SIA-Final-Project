@@ -4,9 +4,8 @@ import ThemeToggle from "../components/ThemeToggle.jsx";
 import InstallCard from "../components/InstallCard.jsx";
 
 const ROLE_ACCESS = {
-  Admin: "Manage accounts and roles, reset passwords, and read the system audit log — plus everything a User can do with your own money.",
-  Reviewer: "Check the receipts other people attach to their entries — verify, reject or ask for a revision — plus everything a User can do with your own money.",
-  User: "Record and track your own bills, entries, budgets and notes. Attach receipts for a Reviewer to check.",
+  Admin: "Manage accounts and roles, reset passwords, read the system audit log, and review the receipts Users attach. Admin accounts keep no wallet of their own.",
+  User: "Record and track your own bills, entries, budgets and notes. Attach receipts for an Admin to check.",
 };
 
 export default function SettingsScreen({ session, updateProfile, changePassword, theme, setTheme }) {

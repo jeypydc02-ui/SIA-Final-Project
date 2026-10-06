@@ -5,7 +5,7 @@ import CategoryIcon from "../components/CategoryIcon.jsx";
 import Icon from "../components/Icon.jsx";
 import { ReceiptPreview, ReceiptStatusChip } from "../components/ReceiptView.jsx";
 
-// Review and Approval page (spec section 14, screen 7). A Reviewer checks the
+// Review and Approval page (spec section 14, screen 7). An Admin checks the
 // receipt someone attached against the entry it is meant to prove, and
 // verifies it, sends it back for a clearer copy, or rejects it. Oldest first:
 // the receipt that has waited longest is decided next.
@@ -130,7 +130,7 @@ export default function ReviewScreen({ reviewQueue, reviewReceipt }) {
   const decided = reviewQueue.filter((r) => r.status !== "For Review" && r.reviewedAt)
     .sort((a, b) => new Date(b.reviewedAt) - new Date(a.reviewedAt));
   const rows = tab === "waiting" ? waiting : decided;
-  // The open dialog follows live updates (another Reviewer may decide it).
+  // The open dialog follows live updates (another Admin may decide it).
   const current = reviewing && (reviewQueue.find((r) => r._id === reviewing._id) || reviewing);
 
   return (

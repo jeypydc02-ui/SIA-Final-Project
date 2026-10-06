@@ -1,14 +1,18 @@
 const express = require("express");
 const { wrap } = require("../middleware/asyncHandler");
-const { requireAuth } = require("../middleware/auth");
+const { requireAuth, requireRole } = require("../middleware/auth");
 const transactionController = wrap(require("../controllers/transactionController"));
 
 const router = express.Router();
 
-router.get("/", requireAuth, transactionController.list);
-router.post("/", requireAuth, transactionController.create);
-router.get("/:id/versions", requireAuth, transactionController.versions);
-router.put("/:id", requireAuth, transactionController.update);
-router.delete("/:id", requireAuth, transactionController.remove);
+// Personal finance is for Users. An Admin administers the system and reviews
+// receipts, but has no wallet of their own (separation of duties, §8.2).
+const member = [requireAuth, requireRole("User")];
+
+router.get("/", ...member, transactionController.list);
+router.post("/", ...member, transactionController.create);
+router.get("/:id/versions", ...member, transactionController.versions);
+router.put("/:id", ...member, transactionController.update);
+router.delete("/:id", ...member, transactionController.remove);
 
 module.exports = router;

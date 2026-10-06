@@ -80,18 +80,23 @@ test.describe("Pre-launch audit regressions", () => {
     expect(pw.status).toBe(400);
   });
 
-  test("RT-05 an Admin sees only their own money", async () => {
+  test("RT-05 an Admin keeps no wallet: finance records are for Users", async () => {
     const { user, admin } = accounts();
-    const userBills = await api("/api/bills", { token: user.token });
-    expect(userBills.data.length).toBeGreaterThan(0);
-
-    const bills = await api("/api/bills", { token: admin.token });
-    expect(bills.data.every((b) => b.createdBy === admin.user.id)).toBe(true);
-    const own = await api("/api/transactions", { token: admin.token });
-    expect(own.data.every((t) => t.submittedBy === admin.user.id)).toBe(true);
-    // The old all-users queue is gone: asking for it returns only their own.
-    const queue = await api("/api/transactions?scope=review", { token: admin.token });
-    expect(queue.data.every((t) => t.submittedBy === admin.user.id)).toBe(true);
+    expect((await api("/api/bills", { token: user.token })).status).toBe(200);
+    // Every personal-finance endpoint refuses an Admin, reading or writing.
+    for (const [method, path, body] of [
+      ["GET", "/api/bills"], ["POST", "/api/bills", { name: "x", category: "Utilities", amount: 5, due: "2026-12-01" }],
+      ["GET", "/api/transactions"], ["POST", "/api/transactions", { type: "Expense", category: "Food", amount: 5 }],
+      ["GET", "/api/budgets"], ["POST", "/api/budgets", { category: "Food", limit: 5 }],
+      ["GET", "/api/comments"], ["POST", "/api/comments", { text: "x" }],
+      ["GET", "/api/receipts"], ["POST", "/api/receipts", { kind: "link", url: "https://drive.google.com/x", transactionId: "000000000000000000000000" }],
+    ]) {
+      expect((await api(path, { method, token: admin.token, body })).status, `${method} ${path}`).toBe(403);
+    }
+    // The one-request load gives an Admin the system lists, not a wallet.
+    const sync = (await api("/api/sync", { token: admin.token })).data;
+    for (const key of ["bills", "transactions", "budgets", "comments", "receipts"]) expect(sync[key], key).toEqual([]);
+    expect(sync.users.length).toBeGreaterThan(0);
   });
 
   test("RT-06 an Admin password reset forces a new password", async () => {
@@ -192,10 +197,15 @@ test.describe("Pre-launch audit regressions", () => {
     await expect(page.locator(".kpi", { hasText: "Accounts" })).toBeVisible();
     await expect(page.locator(".panel", { hasText: "Activity feed" })).toBeVisible();
     await expect(page.locator(".wallet")).toHaveCount(0);
-    // Their own money is one tab away, not mixed into the console.
-    await page.locator(".segmented button", { hasText: "My Wallet" }).click();
-    await expect(page).toHaveURL(/view=wallet/);
-    await expect(page.locator(".wallet")).toContainText("Balance");
+    // The console leads with the receipts waiting for the Admin's review, and
+    // there is no wallet at all: no tab, no finance screens in the menu.
+    await expect(page.locator(".kpi", { hasText: "Receipts to review" })).toBeVisible();
+    await expect(page.locator(".panel", { hasText: "Receipts waiting for review" })).toBeVisible();
+    await expect(page.locator(".segmented")).toHaveCount(0);
+    await expect(page.locator(".nav-item", { hasText: "Receipt Review" })).toBeVisible();
+    await expect(page.locator(".nav-item", { hasText: "Bill Reminders" })).toHaveCount(0);
+    await page.goto("/bills");
+    await expect(page.locator(".content")).toContainText("keep a wallet of their own");
 
     const userPage = await page.context().newPage();
     const { user } = accounts();
@@ -323,7 +333,7 @@ test.describe("Pre-launch audit regressions", () => {
     expect(chain.data.map((t) => t.status)).toEqual(["Superseded", "Superseded", "Approved"]);
   });
 
-  test("RT-12 the review page is the Reviewer's alone", async ({ page }) => {
+  test("RT-12 the review page is the Admin's alone", async ({ page }) => {
     await signIn(page, "user");
     await expect(page.locator(".nav-item", { hasText: "Receipt Review" })).toHaveCount(0);
     await page.goto("/review");
@@ -441,9 +451,10 @@ test.describe("Pre-launch audit regressions", () => {
         type: "Expense", category: "Food", amount: 77, date: todayISO(), note: "left pending by the old workflow",
         status: "Pending Review", version: 1, submittedBy: new mongoose.Types.ObjectId(user.user.id), createdAt: new Date(),
       });
-      // A Reviewer now reviews receipts, so the migration must leave one alone.
+      // The Reviewer role was folded into Admin: an old Reviewer becomes a User
+      // (not an Admin, so nobody gains account-management rights by accident).
       const reviewer = await User.collection.insertOne({
-        firstName: "Kept", lastName: "Reviewer", name: "Kept Reviewer", email: `keptreviewer${Date.now()}@example.test`,
+        firstName: "Old", lastName: "Reviewer", name: "Old Reviewer", email: `oldreviewer${Date.now()}@example.test`,
         passwordHash: "x", role: "Reviewer",
       });
       const Notification = require("../apps/server/src/models/Notification");
@@ -455,7 +466,7 @@ test.describe("Pre-launch audit regressions", () => {
       expect((await Transaction.collection.findOne({ _id: pending.insertedId })).status).toBe("Approved");
       // An alert asking someone to review a queue that no longer exists is removed.
       expect(await Notification.collection.findOne({ _id: queueAlert.insertedId })).toBeNull();
-      expect((await User.collection.findOne({ _id: reviewer.insertedId })).role).toBe("Reviewer");
+      expect((await User.collection.findOne({ _id: reviewer.insertedId })).role).toBe("User");
       // Running it again changes nothing.
       await runMigrations(() => {});
       expect((await Transaction.collection.findOne({ _id: pending.insertedId })).status).toBe("Approved");

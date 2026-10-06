@@ -1191,3 +1191,10 @@ input, select{border-radius:10px !important;}
   .receipt-modal, .review-modal{width:calc(100vw - 32px);}
 }
 div.field{font-size:12px; font-weight:600; color:var(--text-dim); margin-bottom:6px;}
+
+/* Admin Console: receipts waiting, and the KPI that opens the queue */
+.kpi-link{font:inherit; text-align:left; cursor:pointer; color:inherit;}
+.kpi-link:hover{border-color:var(--accent-tint-border);}
+.kpi.attention{border-color:var(--warn);} .kpi.attention .kpi-value{color:var(--warn);}
+.review-panel{margin-bottom:14px;}
+.bottom-nav.admin{grid-template-columns:repeat(4, 1fr);}

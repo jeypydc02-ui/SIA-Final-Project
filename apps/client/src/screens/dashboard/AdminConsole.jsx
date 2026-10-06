@@ -2,11 +2,12 @@ import { useEffect, useState } from "react";
 import { api } from "../../lib/api.js";
 import { todayISO, phDateOf, initials } from "../../lib/utils.js";
 import Icon from "../../components/Icon.jsx";
+import { ReceiptCard, ago } from "../ReviewScreen.jsx";
 
-// An administrator runs the system, so their dashboard is a console: is it up,
-// who is using it, what is happening in it, is anyone trying passwords.
-// Personal money lives under "My Wallet", not here. Everything is counted from
-// the audit log and the account list, so no one's figures are exposed here.
+// An administrator runs the system and reviews receipts, so their dashboard is
+// a console: is it up, which receipts are waiting, who is using it, what is
+// happening in it, is anyone trying passwords. The Admin keeps no wallet.
+// Activity is counted from the audit log and the account list.
 
 // A MongoDB id starts with its creation time in seconds, so account age needs
 // no extra field.
@@ -25,7 +26,7 @@ function timeOf(ts) {
   return new Date(ts).toLocaleString("en-PH", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit", timeZone: "Asia/Manila" });
 }
 
-export default function AdminConsole({ users, auditLog, onNavigate }) {
+export default function AdminConsole({ users, auditLog, reviewQueue = [], onNavigate }) {
   const [health, setHealth] = useState(null);
   useEffect(() => {
     let live = true;
@@ -33,7 +34,8 @@ export default function AdminConsole({ users, auditLog, onNavigate }) {
     return () => { live = false; };
   }, []);
 
-  const roles = ["Admin", "Reviewer", "User"].map((r) => ({ role: r, n: users.filter((u) => u.role === r).length }));
+  const waiting = reviewQueue.filter((r) => r.status === "For Review" && r.latest);
+  const roles = ["Admin", "User"].map((r) => ({ role: r, n: users.filter((u) => u.role === r).length }));
   const weekAgo = Date.now() - 7 * 86400000;
   const newThisWeek = users.filter((u) => createdAt(u._id).getTime() >= weekAgo).length;
   const newest = [...users].sort((a, b) => createdAt(b._id) - createdAt(a._id)).slice(0, 5);
@@ -41,7 +43,6 @@ export default function AdminConsole({ users, auditLog, onNavigate }) {
   const today = todayISO();
   const todays = auditLog.filter((l) => phDateOf(l.ts) === today);
   const isEntry = (a) => / Recorded$/.test(a) || a === "Transaction Edited" || a === "Transaction Deleted";
-  const entriesToday = todays.filter((l) => isEntry(l.action)).length;
 
   // What people did over the last seven days, by kind of action.
   const week = auditLog.filter((l) => new Date(l.ts).getTime() >= weekAgo);
@@ -63,7 +64,7 @@ export default function AdminConsole({ users, auditLog, onNavigate }) {
     { label: "Manage users", hint: "Roles, deletions", icon: "users", to: "/users" },
     { label: "Reset a password", hint: "For a locked-out user", icon: "shield", to: "/users" },
     { label: "Audit log", hint: "Every recorded action", icon: "history", to: "/audit" },
-    { label: "Reports", hint: "Your own figures", icon: "chart", to: "/reports" },
+    { label: "Receipt Review", hint: "Verify, reject, send back", icon: "check", to: "/review" },
   ];
 
   return (
@@ -88,11 +89,11 @@ export default function AdminConsole({ users, auditLog, onNavigate }) {
           <div className="kpi-value">{users.length}</div>
           <div className="kpi-foot">{newThisWeek} new this week</div>
         </div>
-        <div className="kpi">
-          <div className="kpi-label">Entries today</div>
-          <div className="kpi-value">{entriesToday}</div>
-          <div className="kpi-foot">income & expenses recorded or changed</div>
-        </div>
+        <button type="button" className={"kpi kpi-link" + (waiting.length ? " attention" : "")} onClick={() => onNavigate("/review")}>
+          <div className="kpi-label">Receipts to review</div>
+          <div className="kpi-value">{waiting.length}</div>
+          <div className="kpi-foot">{waiting.length ? `oldest ${ago(waiting[0].submittedAt)}` : "Nothing waiting"}</div>
+        </button>
         <div className="kpi">
           <div className="kpi-label">Activity today</div>
           <div className="kpi-value">{todays.length}</div>
@@ -104,6 +105,16 @@ export default function AdminConsole({ users, auditLog, onNavigate }) {
           <div className="kpi-foot">{failedToday >= 5 ? "Check the audit log" : "Nothing unusual"}</div>
         </div>
       </div>
+
+      <section className="panel review-panel">
+        <div className="panel-head"><h3>Receipts waiting for review</h3><button className="linkbtn" onClick={() => onNavigate("/review")}>Open Receipt Review</button></div>
+        {waiting.length ? (
+          <div className="review-cards">
+            {waiting.slice(0, 3).map((r) => <ReceiptCard key={r._id} r={r} onReview={() => onNavigate("/review")} />)}
+          </div>
+        ) : <div className="empty small">No receipts waiting. New ones appear here as soon as a User submits them.</div>}
+        {waiting.length > 3 && <button type="button" className="linkbtn" style={{ marginTop: 10 }} onClick={() => onNavigate("/review")}>{waiting.length - 3} more →</button>}
+      </section>
 
       <div className="console-grid">
         <section className="panel">

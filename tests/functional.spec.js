@@ -255,11 +255,11 @@ test.describe("Functional", () => {
     await expect(page.locator(".receipt-modal img.receipt-img")).toBeVisible();
   });
 
-  test("FT-12 (FR-005) a Reviewer can verify, reject or send back a receipt from the review page", async ({ page }) => {
+  test("FT-12 (FR-005) the Admin can verify, reject or send back a receipt from the review page", async ({ page }) => {
     const { user } = accounts();
     const { entryWithReceipt } = require("./receipt-helpers");
     await entryWithReceipt(user.token, { amount: 818, note: "review page probe" });
-    await signIn(page, "reviewer", "/review");
+    await signIn(page, "admin", "/review");
     const card = page.locator(".review-card", { hasText: "818" }).first();
     await expect(card).toContainText("John Paul Dela Cruz");
     await card.getByRole("button", { name: "Review receipt" }).click();

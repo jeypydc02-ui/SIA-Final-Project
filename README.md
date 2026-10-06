@@ -17,7 +17,7 @@ SIA/
 │   │       ├── components/     shared UI: Shell, Sidebar, Topbar, BottomNav,
 │   │       │                   QuickAdd, dialogs, route guards, error boundary
 │   │       ├── screens/        one file per page, named <Page>Screen.jsx
-│   │       │   └── dashboard/  UserHome, ReviewerDesk, AdminConsole
+│   │       │   └── dashboard/  UserHome, AdminConsole
 │   │       └── lib/            api.js, nav.js (menu), utils.js (dates, money),
 │   │                           categories.js, pwa.js (install + service worker)
 │   │
@@ -49,16 +49,15 @@ Bill reminders: once a day, every unpaid bill due within three days (or overdue)
 | Role | Dashboard | Can do |
 |---|---|---|
 | User | Home: wallet, spending by category, bills, budgets, recent entries | own bills, budgets, income/expense entries, receipts, notes |
-| Reviewer | Review Desk: receipts waiting, decisions (+ My Wallet tab) | everything a User can for their own money, plus verify, reject or send back other people's receipts |
-| Admin | Admin Console: system status, accounts, weekly activity, security (+ My Wallet tab) | everything a User can for their own money, plus manage accounts, roles, password resets and the audit log |
+| Admin | Admin Console: receipts waiting for review, system status, accounts, weekly activity, security | review receipts (verify, reject, request revision), manage accounts, roles, password resets and the audit log. **No wallet of their own** — finance endpoints refuse an Admin |
 
 Income and expense entries count the moment they are recorded. Editing one saves a new version (v1 → v2) and keeps the earlier one in Revision History; deleting one keeps it in the history as "Deleted".
 
 ## Receipt review
 
-An entry can carry a receipt: an uploaded photo/PDF (up to 2 MB, stored in MongoDB, type checked by its first bytes) or an https link to Google Drive, OneDrive or Dropbox. Attaching one sets it to **For Review** and notifies every Reviewer. A Reviewer verifies it, rejects it, or requests a revision (a note is required for both); the owner is notified and the note is kept on the entry. After a rejection or a revision request the owner attaches **v2**, and the earlier version stays in the history. A verified receipt is final — unless the entry's type, category, amount or date is edited later, which sends it back for review. Nobody reviews their own receipt, and only the owner and Reviewers can open the file (not the Admin).
+An entry can carry a receipt: an uploaded photo/PDF (up to 2 MB, stored in MongoDB, type checked by its first bytes) or an https link to Google Drive, OneDrive or Dropbox. Attaching one sets it to **For Review** and notifies every Admin. An Admin verifies it, rejects it, or requests a revision (a note is required for both); the owner is notified and the note is kept on the entry. After a rejection or a revision request the owner attaches **v2**, and the earlier version stays in the history. A verified receipt is final — unless the entry's type, category, amount or date is edited later, which sends it back for review. Only the owner and the Admin can open the file; other Users never can. Because an Admin keeps no wallet, the person who judges evidence never submits any.
 
-API: `POST /api/receipts`, `GET /api/receipts`, `GET /api/receipts/:id/file`, `GET /api/receipts/review` (Reviewer), `POST /api/receipts/:id/review` (Reviewer).
+API: `POST /api/receipts`, `GET /api/receipts`, `GET /api/receipts/:id/file`, `GET /api/receipts/review` (Admin), `POST /api/receipts/:id/review` (Admin).
 
 ## Audit and integration log
 
@@ -78,7 +77,7 @@ Requirements: Node.js 20+ and MongoDB running on `127.0.0.1:27017`.
 
 ```sh
 npm install
-npm run seed          # demo data (local only): jp@ / demo123, arvy@ / demo456, reviewer@ / review123, admin@ / admin123
+npm run seed          # demo data (local only): jp@ / demo123, arvy@ / demo456, admin@ / admin123
 npm run dev           # API :4000, web :5173, reminder worker
 ```
 
@@ -88,7 +87,6 @@ Open http://localhost:5173. Demo accounts (local database only, never on the liv
 |---|---|---|
 | User | jp@fintrackstark.app | demo123 |
 | User | arvy@fintrackstark.app | demo456 |
-| Reviewer | reviewer@fintrackstark.app | review123 |
 | Admin | admin@fintrackstark.app | admin123 |
 
 ## Other commands

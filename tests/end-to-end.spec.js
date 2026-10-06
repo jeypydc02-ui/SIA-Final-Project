@@ -105,11 +105,11 @@ test("E2E-01 a new account records, corrects and reports an expense", async ({ b
 
 // Spec section 9.5: one complete workflow from submission to final approval.
 // Two browsers, as two people: the member submits an expense with a receipt
-// photo; the Reviewer sends it back; the member retakes it as v2; the
-// Reviewer verifies it. Each side sees the other's action without reloading.
+// photo; the Admin sends it back; the member retakes it as v2; the Admin
+// verifies it. Each side sees the other's action without reloading.
 test("E2E-02 a receipt goes from submission to final approval", async ({ browser }) => {
   test.setTimeout(60000);
-  const { user, reviewer } = accounts();
+  const { user, admin } = accounts();
   const plant = async (token, path) => {
     const ctx = await browser.newContext();
     const page = await ctx.newPage();
@@ -119,7 +119,7 @@ test("E2E-02 a receipt goes from submission to final approval", async ({ browser
     return page;
   };
   const member = await plant(user.token, "/submit");
-  const desk = await plant(reviewer.token, "/review");
+  const desk = await plant(admin.token, "/review");
 
   // 1. Submission, with a receipt photo.
   await member.locator("input[type=number]").first().fill("2345");
@@ -128,7 +128,7 @@ test("E2E-02 a receipt goes from submission to final approval", async ({ browser
   await member.getByRole("button", { name: "Save Entry" }).click();
   await expect(member.locator(".toast")).toContainText("receipt sent for review");
 
-  // 2. It reaches the Reviewer live; they ask for a clearer copy.
+  // 2. It reaches the Admin live; they ask for a clearer copy.
   const card = desk.locator(".review-card", { hasText: "₱2,345.00" });
   await expect(card).toBeVisible();
   await card.getByRole("button", { name: "Review receipt" }).click();

@@ -11,8 +11,8 @@ const { isString, isNonEmptyString } = require("../utils/validate");
 //   1. The owner of an entry attaches a receipt or proof of payment: an
 //      uploaded image/PDF, or a link to a file in Google Drive, OneDrive or
 //      Dropbox. The receipt is set to "For Review" automatically, and every
-//      Reviewer is notified (workflow automation + notification).
-//   2. A Reviewer verifies it, rejects it, or asks for a revision (a clearer
+//      Admin is notified (workflow automation + notification).
+//   2. An Admin verifies it, rejects it, or asks for a revision (a clearer
 //      photo, the right document). The owner is notified, the decision is a
 //      note on the entry, and it is written to the audit log.
 //   3. After "Needs Revision" or "Rejected" the owner attaches a new version
@@ -154,22 +154,22 @@ async function create(req, res) {
   const what = fields.kind === "file" ? `${fields.fileName} (${Math.ceil(fields.size / 1024)} KB)` : `${fields.provider} link`;
   await logAction(req.user.name, previous ? "Receipt Resubmitted" : "Receipt Submitted",
     `v${receipt.version} for ${describe(entry)}: ${what}. Status set to For Review.`, { ref: receipt._id });
-  await notifyRole("Reviewer", "receipt",
+  await notifyRole("Admin", "receipt",
     `${req.user.name} submitted ${previous ? `receipt v${receipt.version}` : "a receipt"} for an ${describe(entry)}.`, req.user.id);
   publish(req.user.id, "receipts");
-  publishToRole("Reviewer", "receipts");
+  publishToRole("Admin", "receipts");
   res.status(201).json(publicReceipt(receipt));
 }
 
-// GET /api/receipts/:id/file — the uploaded file, for its owner and for
-// Reviewers. Nobody else, Admin included: a receipt can show an address, an
+// GET /api/receipts/:id/file — the uploaded file, for its owner and for the
+// Admin who reviews it. Other users never: a receipt can show an address, an
 // account number or what someone bought (NFR-002, section 8.3).
 async function file(req, res) {
   const receipt = await Receipt.findById(req.params.id).select("+data");
   if (!receipt) return res.status(404).json({ error: "Receipt not found." });
   const isOwner = String(receipt.owner) === req.user.id;
-  if (!isOwner && req.user.role !== "Reviewer") {
-    return res.status(403).json({ error: "Only the owner and Reviewers can open a receipt." });
+  if (!isOwner && req.user.role !== "Admin") {
+    return res.status(403).json({ error: "Only the owner and an Admin can open a receipt." });
   }
   if (receipt.kind !== "file" || !receipt.data) {
     return res.status(400).json({ error: "This receipt is a link, not an uploaded file." });
@@ -198,12 +198,13 @@ async function review(req, res) {
   const receipt = await Receipt.findById(req.params.id);
   if (!receipt) return res.status(404).json({ error: "Receipt not found." });
   // Separation of duties (section 8.2): nobody verifies their own evidence.
+  // (An Admin has no entries of their own, so this guards a role change.)
   if (String(receipt.owner) === req.user.id) {
     return res.status(403).json({ error: "You cannot review your own receipt." });
   }
 
   // Decided once: the update only matches a receipt still waiting, so two
-  // Reviewers acting at the same moment cannot both decide it.
+  // Admins acting at the same moment cannot both decide it.
   const decided = await Receipt.findOneAndUpdate(
     { _id: receipt._id, latest: true, status: "For Review" },
     { $set: { status: decision.status, reviewedBy: req.user.id, reviewerName: req.user.name, reviewedAt: new Date(), reviewNote: text } },
@@ -229,12 +230,12 @@ async function review(req, res) {
 
   publish(decided.owner, "receipts");
   publish(decided.owner, "comments");
-  publishToRole("Reviewer", "receipts");
+  publishToRole("Admin", "receipts");
   res.json(publicReceipt(decided));
 }
 
 // Receipts for the review screen: every one waiting, and the ones this
-// Reviewer decided recently — each with the entry it is evidence for.
+// Admin decided recently — each with the entry it is evidence for.
 async function reviewQueue(reviewer) {
   const [waiting, decided] = await Promise.all([
     Receipt.find({ latest: true, status: "For Review", owner: { $ne: reviewer.id } }).sort({ submittedAt: 1 }).limit(200).lean(),

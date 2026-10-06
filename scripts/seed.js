@@ -58,11 +58,10 @@ async function seed() {
     return;
   }
 
-  const [userHash, user2Hash, adminHash, reviewerHash] = await Promise.all([
+  const [userHash, user2Hash, adminHash] = await Promise.all([
     bcrypt.hash("demo123", 10),
     bcrypt.hash("demo456", 10),
     bcrypt.hash("admin123", 10),
-    bcrypt.hash("review123", 10),
   ]);
 
   const jp = await User.create({
@@ -83,22 +82,15 @@ async function seed() {
     passwordHash: user2Hash,
     role: "User",
   });
-  await User.create({
+  // Administers the system and reviews the receipts people attach (Review
+  // and Approval, spec section 5). Has no wallet of their own.
+  const reviewer = await User.create({
     firstName: "System",
     lastName: "Admin",
     name: "System Admin",
     email: "admin@fintrackstark.app",
     passwordHash: adminHash,
     role: "Admin",
-  });
-  // Checks the receipts people attach (Review and Approval, spec section 5).
-  const reviewer = await User.create({
-    firstName: "Rhea",
-    lastName: "Santos",
-    name: "Rhea Santos",
-    email: "reviewer@fintrackstark.app",
-    passwordHash: reviewerHash,
-    role: "Reviewer",
   });
 
   // Budgets are per-user, so the demo User gets their own set.
@@ -204,7 +196,6 @@ async function seed() {
   console.log("[seed] done. Demo accounts:");
   console.log("  User   -> jp@fintrackstark.app / demo123");
   console.log("  User   -> arvy@fintrackstark.app / demo456");
-  console.log("  Reviewer -> reviewer@fintrackstark.app / review123");
   console.log("  Admin  -> admin@fintrackstark.app / admin123");
 
   await mongoose.disconnect();

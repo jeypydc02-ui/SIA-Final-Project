@@ -12,7 +12,7 @@ const { logAction } = require("../services/audit");
 const { notify } = require("../services/notifications");
 const { publish } = require("../services/events");
 
-const ROLES = ["Admin", "Reviewer", "User"];
+const ROLES = ["Admin", "User"];
 
 async function list(req, res) {
   const users = await User.find().select("-passwordHash").sort({ role: 1, name: 1 });

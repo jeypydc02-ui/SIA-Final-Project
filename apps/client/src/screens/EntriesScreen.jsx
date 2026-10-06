@@ -53,7 +53,7 @@ export default function EntriesScreen({ tx, editTx, deleteTx, receipts = [], sub
       <div className="pagehead">
         <div>
           <h2>My Entries</h2>
-          <div className="desc">Every income and expense you have recorded. Changes are kept as versions in Revision History; attach a receipt to have it checked by a Reviewer.</div>
+          <div className="desc">Every income and expense you have recorded. Changes are kept as versions in Revision History; attach a receipt to have it checked by an Admin.</div>
         </div>
         <button className="btn" onClick={() => onNavigate("/submit")}>+ Log Income/Expense</button>
       </div>

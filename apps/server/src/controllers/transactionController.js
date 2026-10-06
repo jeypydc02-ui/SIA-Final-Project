@@ -180,7 +180,7 @@ async function update(req, res) {
 
   // The receipts follow the entry to its new version. If the figures a
   // receipt proves have changed, a verified receipt no longer proves them, so
-  // it goes back to the Reviewers.
+  // it goes back to the Admin for review.
   await Receipt.updateMany({ entryId: claimed._id }, { $set: { entryId: revised._id } });
   const figuresChanged = ["type", "category", "amount", "date"].some((f) => String(claimed[f]) !== String(revised[f]));
   let reopened = null;
@@ -195,8 +195,8 @@ async function update(req, res) {
   await logAction(req.user.name, "Transaction Edited", `${revised.category} ${revised.amount} — v${revised.version} replaces v${claimed.version || 1}.` +
     (reopened ? ` Its verified receipt v${reopened.version} went back for review.` : ""), { ref: revised._id });
   if (reopened) {
-    await notifyRole("Reviewer", "receipt", `${req.user.name} changed an entry with a verified receipt — receipt v${reopened.version} needs checking again.`, req.user.id);
-    publishToRole("Reviewer", "receipts");
+    await notifyRole("Admin", "receipt", `${req.user.name} changed an entry with a verified receipt — receipt v${reopened.version} needs checking again.`, req.user.id);
+    publishToRole("Admin", "receipts");
   }
   publish(req.user.id, "receipts");
   await checkBudget(revised);
@@ -218,9 +218,9 @@ async function remove(req, res) {
   if (!removed) {
     return res.status(409).json({ error: "This entry was changed a moment ago. Reload and try again." });
   }
-  // A receipt still waiting is no longer worth a Reviewer's time.
+  // A receipt still waiting is no longer worth reviewing.
   const withdrawn = await Receipt.updateMany({ entryId: removed._id, latest: true, status: "For Review" }, { $set: { status: "Withdrawn" } });
-  if (withdrawn.modifiedCount) publishToRole("Reviewer", "receipts");
+  if (withdrawn.modifiedCount) publishToRole("Admin", "receipts");
   await logAction(req.user.name, "Transaction Deleted", `${removed.type} ${removed.category} ${removed.amount} (v${removed.version || 1}) deleted.` +
     (withdrawn.modifiedCount ? " Its receipt waiting for review was withdrawn." : ""), { ref: removed._id });
   publish(req.user.id, "transactions");
