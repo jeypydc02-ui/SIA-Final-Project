@@ -30,21 +30,21 @@ export function PrivacyPage() {
       <ul>
         <li><strong>Account details:</strong> your first and last name, email address, and your password in hashed form. Your actual password is never stored.</li>
         <li><strong>Financial records you enter:</strong> bills, payments you mark as made, income and expense entries, budgets, and personal notes.</li>
-        <li><strong>Receipts you attach:</strong> a photo or PDF you upload is stored in the system's database; for a link (Google Drive, OneDrive, Dropbox) only the link is stored, and the file stays where you keep it.</li>
-        <li><strong>Activity records:</strong> an audit log of important actions (sign-ins, failed sign-ins, payments, entries, edits and deletions) with your name and the time, and the notifications addressed to you.</li>
+        <li><strong>Activity records:</strong> a log of important actions with your name and the time. What you do with your own records (entries, bills, payments, budgets, profile and password changes) appears only on your own My Activity page. Security events (sign-ups, sign-ins and sign-outs, failed sign-ins, password resets, account changes) go to the administrators' security log. We also keep the notifications addressed to you.</li>
+        <li><strong>E-mail codes and links:</strong> when you sign up we e-mail you a 6-digit code, and when you forget your password we e-mail you a reset link. Only a scrambled (hashed) form of each code and link is stored; a code expires after 10 minutes and a link after 30 minutes, and the details of an unfinished sign-up are deleted when its code expires.</li>
       </ul>
 
       <h2>Why we use it</h2>
       <p>
         Only to run the service: to sign you in, show you your own records, send you bill reminders inside the app,
-        keep the history of your income and expense entries, have the receipts you attach checked, and keep an audit trail that protects the integrity of the records.
-        We do not sell your data, show advertising, or share it with third parties.
+        keep the history of your income and expense entries, confirm that your e-mail address is yours, let you reset a forgotten password, and keep an audit trail that protects the integrity of the records.
+        We do not sell your data, show advertising, or share it with third parties, apart from the e-mail service that delivers the codes and links (it receives only your name, e-mail address and the message).
       </p>
 
       <h2>Who can see it</h2>
       <ul>
-        <li><strong>You</strong> see your own bills, budgets, entries, notes and notifications.</li>
-        <li><strong>Administrators</strong> see the list of accounts (name, email and role) and the audit log of actions. To review a receipt you attach, they also see that receipt, your name and the one entry it is for (type, category, amount, date and note). They do not see the rest of your bills, budgets, entries or notes, and they keep no wallet of their own.</li>
+        <li><strong>You</strong> see your own bills, budgets, entries, notes, notifications and activity.</li>
+        <li><strong>Administrators</strong> see the list of accounts (name, email, role and whether the account is active) and the security log (sign-ups, sign-ins, failed sign-ins, password resets and account changes). They do not see your bills, budgets, entries, notes or activity, and they keep no wallet of their own.</li>
       </ul>
 
       <h2>Storage on your device</h2>
@@ -56,7 +56,7 @@ export function PrivacyPage() {
       <h2>How long we keep it</h2>
       <p>
         Your records are kept while your account exists. If an Administrator deletes your account, your bills, budgets,
-        income and expense entries, receipts, notes and notifications are deleted with it. The audit log of actions is kept as
+        income and expense entries, notes and notifications are deleted with it. A deactivated account keeps its records but cannot sign in until it is reactivated. The audit log of actions is kept as
         the system's record.
       </p>
 
@@ -79,7 +79,7 @@ export function TermsPage() {
       <ul>
         <li>Give your real name and an email address you control.</li>
         <li>Keep your password to yourself. You are responsible for what is done with your account.</li>
-        <li>If you forget your password, an administrator can issue a temporary one, which you must replace at your next sign-in.</li>
+        <li>If you forget your password, reset it yourself with "Forgot your password?" on the sign-in page. The link is sent to your account's e-mail address.</li>
       </ul>
 
       <h2>Your records</h2>
@@ -92,7 +92,7 @@ export function TermsPage() {
       <h2>Acceptable use</h2>
       <p>
         Do not try to access other people's records, get around the access controls, or disrupt the service.
-        Accounts that do may be suspended or deleted by an administrator.
+        Accounts that do may be deactivated or deleted by an administrator.
       </p>
 
       <h2>No warranty</h2>

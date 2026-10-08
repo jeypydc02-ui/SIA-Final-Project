@@ -9,9 +9,9 @@ const UserSchema = new Schema({
   email: { type: String, required: true, unique: true, lowercase: true, trim: true, maxlength: [160, "Email cannot be longer than 160 characters."] },
   passwordHash: { type: String, required: true },
   role: { type: String, enum: ["Admin", "User"], required: true },
-  // True after an Admin resets the password: the temporary one must be
-  // replaced before the account can be used.
-  mustChangePassword: { type: Boolean, default: false },
+  // False when an Admin deactivates the account: it cannot sign in, and its
+  // data is kept until it is reactivated or deleted.
+  active: { type: Boolean, default: true },
 });
 
 module.exports = model("User", UserSchema);

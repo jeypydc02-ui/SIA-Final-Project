@@ -47,7 +47,7 @@ router.get("/", requireAuth, (req, res) => {
   const heartbeat = setInterval(async () => {
     try {
       const current = await getSession(req.token);
-      if (!current || current.mustChangePassword) return res.end();
+      if (!current) return res.end();
       me = current;
       res.write(": ping\n\n");
     } catch (e) {

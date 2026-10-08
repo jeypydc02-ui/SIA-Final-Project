@@ -22,8 +22,7 @@ function publish(userId, topic) {
   bus.emit("change", { userId: String(userId), topic });
 }
 
-// Every signed-in account with this role (the Admins for the audit log, the
-// Reviewers for the receipt queue).
+// Every signed-in account with this role (the Admins, for the security log).
 function publishToRole(role, topic) {
   bus.emit("change", { role, topic });
 }

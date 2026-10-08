@@ -37,7 +37,7 @@ async function update(req, res) {
 
   if (changed.length) {
     const detail = changed.map((k) => `${LIMITS[k].label}: ${before[k]} → ${changes[k]} ${LIMITS[k].unit}`).join("; ");
-    await logAction(req.user.name, "Settings Changed", detail + ".", { ref: "system" });
+    await logAction(req.user, "Settings Changed", detail + ".", { ref: "system" });
     publishToAdmins("settings");
   }
   res.json({ settings: await getSettings() });

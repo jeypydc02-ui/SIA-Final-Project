@@ -48,16 +48,18 @@ Bill reminders: once a day, every unpaid bill due within the reminder lead time 
 
 | Role | Dashboard | Can do |
 |---|---|---|
-| User | Home: wallet, spending by category, bills, budgets, recent entries | own bills, budgets, income/expense entries, receipts, notes |
-| Admin | Admin Console: receipts waiting for review, system status, accounts, weekly activity, security | review receipts (verify, reject, request revision), manage accounts, roles, password resets, system settings and the audit log. **No wallet of their own** — finance endpoints refuse an Admin |
+| User | Home: wallet, spending by category, bills, budgets, recent entries | own bills, budgets, income/expense entries, notes, and their own **My Activity** history |
+| Admin | Admin Console: system status, accounts, deactivated accounts, security events this week, failed logins | manage accounts and roles, deactivate/reactivate accounts, system settings, and the security log. **No wallet of their own** — finance endpoints refuse an Admin, and the Admin never sees anyone's money or activity |
 
 Income and expense entries count the moment they are recorded. Editing one saves a new version (v1 → v2) and keeps the earlier one in Revision History; deleting one keeps it in the history as "Deleted".
 
-## Receipt review
+## Accounts: e-mail code, forgotten passwords, deactivation
 
-An entry can carry a receipt: an uploaded photo/PDF (up to 2 MB, stored in MongoDB, type checked by its first bytes) or an https link to Google Drive, OneDrive or Dropbox. Attaching one sets it to **For Review** and notifies every Admin. An Admin verifies it, rejects it, or requests a revision (a note is required for both); the owner is notified and the note is kept on the entry. After a rejection or a revision request the owner attaches **v2**, and the earlier version stays in the history. A verified receipt is final — unless the entry's type, category, amount or date is edited later, which sends it back for review. Only the owner and the Admin can open the file; other Users never can. Because an Admin keeps no wallet, the person who judges evidence never submits any.
+- **Sign-up with an e-mail code.** `POST /api/auth/register` checks the details and e-mails a 6-digit code; nothing is created yet. `POST /api/auth/register/verify` with the right code creates the account and signs it in. A code lasts 10 minutes and allows 5 tries; `POST /api/auth/register/resend` sends a new one at most once a minute. Only a SHA-256 hash of the code is stored, and an unfinished sign-up is deleted when its code expires.
+- **Forgot password.** `POST /api/auth/forgot` e-mails a link to `/reset-password?token=…` (same answer whether or not the address has an account). `POST /api/auth/reset` sets the new password; the link works once, lasts 30 minutes, and signs the account out everywhere. Admins no longer issue temporary passwords.
+- **Deactivate / reactivate.** `PUT /api/users/:id/status { active }` (Admin). A deactivated account keeps its data but cannot sign in or reset its password, and its open sessions end at once. Nobody can deactivate themselves or the last active Admin.
 
-API: `POST /api/receipts`, `GET /api/receipts`, `GET /api/receipts/:id/file`, `GET /api/receipts/review` (Admin), `POST /api/receipts/:id/review` (Admin).
+E-mail is sent through Gmail (an App Password) or the Brevo HTTPS API — see [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md). With neither configured in development, codes and links are printed in the API's terminal.
 
 ## System settings
 
@@ -65,7 +67,12 @@ The Admin manages three system-wide settings from **System Settings** (`/system`
 
 ## Audit and integration log
 
-Every important action is written to the audit log with a timestamp, the person, the action, a status (Success or Failed), a detail and the id of the record it concerned. Refused or failed changes — a second payment of a paid bill, an invalid upload, a review of a receipt already decided, a reminder sweep that could not run — are logged as **Failed** with the error message, and the Audit Log screen can show them on their own.
+Every important action is written to the audit log with a timestamp, the person, the action, a status (Success or Failed), a detail and the id of the record it concerned. Each line has a scope, so the log has two audiences:
+
+- **My Activity** (`/activity`, `GET /api/activity`, Users): what that person did with their own money and account — entries recorded, edited or deleted, bills added, edited or paid, budgets, profile and password changes, and their own refused actions.
+- **Audit Log** (`/audit`, `GET /api/audit-log`, Admin): security and system events only — sign-ups, sign-ins and sign-outs, failed logins, password resets, role changes, deactivation, deletions, settings, refused permissions.
+
+Password changes and resets appear in both. Refused or failed changes are logged as **Failed** with the error message, and either screen can show them.
 
 ## Live updates
 

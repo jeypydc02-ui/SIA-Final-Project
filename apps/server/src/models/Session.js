@@ -11,9 +11,6 @@ const SessionSchema = new Schema({
   name: { type: String, required: true },
   email: { type: String, required: true },
   role: { type: String, required: true },
-  // Copied from the user at login: a session opened with an Admin-issued
-  // temporary password can do nothing but replace it.
-  mustChangePassword: { type: Boolean, default: false },
   // MongoDB's TTL monitor deletes the row once this moment passes, so expired
   // sessions clean themselves up.
   expiresAt: { type: Date, required: true, index: { expires: 0 } },

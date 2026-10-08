@@ -3,8 +3,6 @@ import { peso, fmtDate, txStatusLabel } from "../lib/utils.js";
 import { fitCategory } from "../lib/categories.js";
 import CategoryIcon from "../components/CategoryIcon.jsx";
 import EntryFields, { entryProblem } from "../components/EntryFields.jsx";
-import ReceiptDialog from "../components/ReceiptDialog.jsx";
-import { receiptStatus } from "../lib/receipts.js";
 
 // Every income and expense the person has recorded. Entries count the moment
 // they are saved; editing one keeps the old figures as an earlier version
@@ -15,19 +13,11 @@ const FILTERS = [["all", "All"], ["Income", "Income"], ["Expense", "Expenses"]];
 const SHOWN = ["Approved", "Needs Revision", "Rejected", "Pending Review"];
 const EDITABLE = ["Approved", "Needs Revision"];
 
-export default function EntriesScreen({ tx, editTx, deleteTx, receipts = [], submitReceipt, onNavigate }) {
+export default function EntriesScreen({ tx, editTx, deleteTx, onNavigate }) {
   const [filter, setFilter] = useState("all");
   const [draft, setDraft] = useState(null); // {entry, value}
   const [formErr, setFormErr] = useState("");
   const [busy, setBusy] = useState(false);
-  const [receiptFor, setReceiptFor] = useState(null); // the entry whose receipt is open
-
-  // The latest receipt version per entry.
-  const latestReceipt = new Map();
-  receipts.forEach((r) => {
-    const key = String(r.entryId);
-    if (!latestReceipt.has(key) || latestReceipt.get(key).version < r.version) latestReceipt.set(key, r);
-  });
 
   const current = tx.filter((t) => SHOWN.includes(t.status));
   const rows = current.filter((t) => filter === "all" || t.type === filter);
@@ -53,7 +43,7 @@ export default function EntriesScreen({ tx, editTx, deleteTx, receipts = [], sub
       <div className="pagehead">
         <div>
           <h2>My Entries</h2>
-          <div className="desc">Every income and expense you have recorded. Changes are kept as versions in Revision History; attach a receipt to have it checked by an Admin.</div>
+          <div className="desc">Every income and expense you have recorded. Changes are kept as versions in Revision History.</div>
         </div>
         <button className="btn" onClick={() => onNavigate("/submit")}>+ Log Income/Expense</button>
       </div>
@@ -69,8 +59,6 @@ export default function EntriesScreen({ tx, editTx, deleteTx, receipts = [], sub
       <section className="panel">
         {rows.map((t) => {
           const editable = EDITABLE.includes(t.status) && !t.autoApproved;
-          const receipt = latestReceipt.get(String(t._id));
-          const canAttach = EDITABLE.includes(t.status);
           return (
             <div key={t._id} className="row static entry-row">
               <CategoryIcon category={t.category} />
@@ -88,13 +76,6 @@ export default function EntriesScreen({ tx, editTx, deleteTx, receipts = [], sub
                 {(t.type === "Income" ? "+" : "−") + peso(t.amount)}
               </span>
               <span className="entry-actions">
-                {receipt ? (
-                  <button type="button" className={"receipt-chip " + receiptStatus(receipt.status).tone} onClick={() => setReceiptFor(t)}>
-                    Receipt v{receipt.version} · {receiptStatus(receipt.status).label}
-                  </button>
-                ) : canAttach && (
-                  <button type="button" className="btn small ghost" onClick={() => setReceiptFor(t)}>Attach receipt</button>
-                )}
                 {editable && (
                   <>
                     <button className="btn small ghost" onClick={() => openEdit(t)}>Edit</button>
@@ -111,13 +92,6 @@ export default function EntriesScreen({ tx, editTx, deleteTx, receipts = [], sub
           </div>
         )}
       </section>
-
-      {receiptFor && (
-        <ReceiptDialog
-          entry={tx.find((t) => t._id === receiptFor._id) || receiptFor}
-          receipts={receipts} submitReceipt={submitReceipt} onClose={() => setReceiptFor(null)}
-        />
-      )}
 
       {draft && (
         <div className="modal-overlay" onClick={() => !busy && setDraft(null)}>

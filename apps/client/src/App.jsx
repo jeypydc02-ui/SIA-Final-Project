@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { BrowserRouter, Routes, Route, Navigate, useNavigate } from "react-router-dom";
-import { api, SESSION_ENDED, PASSWORD_CHANGE_REQUIRED } from "./lib/api.js";
+import { api, SESSION_ENDED } from "./lib/api.js";
 import { connectLive } from "./lib/live.js";
 import { peso } from "./lib/utils.js";
 
@@ -17,7 +17,7 @@ import { RequireAuth, RequireRole } from "./components/RouteGuards.jsx";
 import LandingPage from "./screens/LandingPage.jsx";
 import LoginScreen from "./screens/LoginScreen.jsx";
 import { TermsPage, PrivacyPage } from "./screens/LegalPages.jsx";
-import ForcePasswordChangeScreen from "./screens/ForcePasswordChangeScreen.jsx";
+import { ForgotPasswordScreen, ResetPasswordScreen } from "./screens/PasswordResetScreens.jsx";
 
 // Signed-in screens, in sidebar order
 import DashboardScreen from "./screens/DashboardScreen.jsx";
@@ -27,11 +27,11 @@ import BudgetsScreen from "./screens/BudgetsScreen.jsx";
 import BillsScreen from "./screens/BillsScreen.jsx";
 import RevisionHistoryScreen from "./screens/RevisionHistoryScreen.jsx";
 import EntriesScreen from "./screens/EntriesScreen.jsx";
-import ReviewScreen from "./screens/ReviewScreen.jsx";
 import SystemSettingsScreen from "./screens/SystemSettingsScreen.jsx";
 import NotesScreen from "./screens/NotesScreen.jsx";
 import PaymentHistoryScreen from "./screens/PaymentHistoryScreen.jsx";
 import NotificationsScreen from "./screens/NotificationsScreen.jsx";
+import ActivityScreen from "./screens/ActivityScreen.jsx";
 import AuditLogScreen from "./screens/AuditLogScreen.jsx";
 import ReportsScreen from "./screens/ReportsScreen.jsx";
 import UsersScreen from "./screens/UsersScreen.jsx";
@@ -51,7 +51,7 @@ export default function App() {
 
 function FinTrackStark() {
   const navigate = useNavigate();
-  const [session, setSession] = useState(null); // {id,name,email,role,token,mustChangePassword}
+  const [session, setSession] = useState(null); // {id,name,email,role,token}
   const [restoring, setRestoring] = useState(true);
   const [restoreError, setRestoreError] = useState("");
   const [sessionEnded, setSessionEnded] = useState(false);
@@ -63,10 +63,8 @@ function FinTrackStark() {
   const [notifs, setNotifs] = useState([]);
   const [auditLog, setAuditLog] = useState([]);
   const [comments, setComments] = useState([]);
-  // Receipts the signed-in User attached to their entries, and — for an
-  // Admin — the receipts waiting for review plus the ones they decided.
-  const [receipts, setReceipts] = useState([]);
-  const [reviewQueue, setReviewQueue] = useState([]);
+  // A User's own activity (My Activity). The Admin's log is auditLog.
+  const [activity, setActivity] = useState([]);
   const [toast, setToast] = useState(null);
   const [loadError, setLoadError] = useState("");
   // False until the first data load after signing in arrives. Until then the
@@ -98,13 +96,8 @@ function FinTrackStark() {
   // so nothing typed into an open form is lost.
   useEffect(() => {
     const onEnded = () => setSessionEnded(true);
-    const onMustChange = () => setSession((s) => (s ? { ...s, mustChangePassword: true } : s));
     window.addEventListener(SESSION_ENDED, onEnded);
-    window.addEventListener(PASSWORD_CHANGE_REQUIRED, onMustChange);
-    return () => {
-      window.removeEventListener(SESSION_ENDED, onEnded);
-      window.removeEventListener(PASSWORD_CHANGE_REQUIRED, onMustChange);
-    };
+    return () => window.removeEventListener(SESSION_ENDED, onEnded);
   }, []);
 
   // Restore the session on a page refresh. The token survives in
@@ -123,7 +116,7 @@ function FinTrackStark() {
         if (cancelled) return;
         const sess = { ...data.user, token };
         setSession(sess);
-        if (!sess.mustChangePassword) await refreshAll();
+        await refreshAll();
       } catch (err) {
         if (cancelled) return;
         // Only a rejection from the server means the session is over. If the
@@ -175,7 +168,7 @@ function FinTrackStark() {
         setBills(data.bills); setTx(data.transactions); setBudgets(data.budgets);
         setNotifs(data.notifications); setComments(data.comments);
         setAuditLog(data.auditLog); setUsers(data.users);
-        setReceipts(data.receipts || []); setReviewQueue(data.reviewQueue || []);
+        setActivity(data.activity || []);
         // A role or name changed elsewhere (by an Admin, or on another device).
         setSession((s) => (s ? { ...s, ...data.me } : s));
         announceNew(data.notifications);
@@ -226,7 +219,7 @@ function FinTrackStark() {
   // the screens reload by themselves. Coming back to the tab or regaining a
   // connection also refreshes, in case anything happened while away.
   useEffect(() => {
-    if (!session || session.mustChangePassword) return undefined;
+    if (!session) return undefined;
     let timer = null;
     const soon = () => { clearTimeout(timer); timer = setTimeout(refreshAll, 150); };
     const stop = connectLive(session.token, { onChange: soon, onReconnect: soon });
@@ -239,7 +232,7 @@ function FinTrackStark() {
       document.removeEventListener("visibilitychange", onVisible);
       window.removeEventListener("online", soon);
     };
-  }, [session && session.token, session && session.mustChangePassword]);
+  }, [session && session.token]);
 
   // Unread count in the browser tab / installed app title, like a chat app.
   useEffect(() => {
@@ -260,18 +253,33 @@ function FinTrackStark() {
       const data = await api("/api/auth/login", { method: "POST", body: { email, password } });
       const sess = startSession(data);
       navigate("/dashboard", { replace: true });
-      if (!sess.mustChangePassword) {
-        refreshAll();
-        fireToast(`Welcome back, ${sess.name.split(" ")[0]}!`);
-      }
+      refreshAll();
+      fireToast(`Welcome back, ${sess.name.split(" ")[0]}!`);
       return null;
     } catch (err) {
       return err.message;
     }
   }
-  async function register(firstName, lastName, email, password) {
+  // Sign-up is two steps: the details first, which e-mails a 6-digit code;
+  // the account only exists once that code is entered.
+  async function registerStart(firstName, lastName, email, password) {
     try {
-      const data = await api("/api/auth/register", { method: "POST", body: { firstName, lastName, email, password } });
+      return await api("/api/auth/register", { method: "POST", body: { firstName, lastName, email, password } });
+    } catch (err) {
+      return { error: err.message };
+    }
+  }
+  async function registerResend(email) {
+    try {
+      await api("/api/auth/register/resend", { method: "POST", body: { email } });
+      return null;
+    } catch (err) {
+      return err.message;
+    }
+  }
+  async function registerVerify(email, code) {
+    try {
+      const data = await api("/api/auth/register/verify", { method: "POST", body: { email, code } });
       const sess = startSession(data);
       navigate("/dashboard", { replace: true });
       refreshAll();
@@ -285,9 +293,9 @@ function FinTrackStark() {
   async function reauthenticate(password) {
     try {
       const data = await api("/api/auth/login", { method: "POST", body: { email: session.email, password } });
-      const sess = startSession(data);
+      startSession(data);
       setSessionEnded(false);
-      if (!sess.mustChangePassword) refreshAll();
+      refreshAll();
       return null;
     } catch (err) {
       return err.message;
@@ -298,7 +306,7 @@ function FinTrackStark() {
     setSession(null);
     setSessionEnded(false);
     setBills([]); setTx([]); setBudgets([]); setNotifs([]); setAuditLog([]); setUsers([]); setComments([]);
-    setReceipts([]); setReviewQueue([]);
+    setActivity([]);
     setDataReady(false);
     setLoadError("");
     seenNotifs.current = null;
@@ -329,40 +337,9 @@ function FinTrackStark() {
       await perform(() => api("/api/bills/" + bill._id, { method: "DELETE" }), "Bill deleted.");
     }, "Delete Bill");
   }
-  // Records the entry, then attaches its receipt if one was chosen. The entry
-  // is saved first and on its own: if only the receipt fails, the entry still
-  // stands (so the form is cleared and nothing is saved twice) and the person
-  // is told to attach the receipt again from My Entries.
-  async function addTx(t, receipt) {
-    lastOwnAction.current = Date.now();
-    let entry;
-    try {
-      entry = await api("/api/transactions", { method: "POST", body: t });
-    } catch (err) {
-      fireError(err);
-      return false;
-    }
-    if (receipt) {
-      try {
-        await api("/api/receipts", { method: "POST", body: { ...receipt, transactionId: entry._id } });
-        fireToast(`${t.type} of ${peso(t.amount)} recorded — receipt sent for review.`);
-      } catch (err) {
-        fireToast(`⚠ ${t.type} recorded, but the receipt was not attached: ${err.message} Attach it from My Entries.`);
-      }
-    } else {
-      fireToast(`${t.type} of ${peso(t.amount)} recorded.`);
-    }
-    refreshAll();
-    return true;
-  }
-  // ---- Receipts (Asset submission + Review and Approval) ----
-  const submitReceipt = (entryId, receipt) => perform(
-    () => api("/api/receipts", { method: "POST", body: { ...receipt, transactionId: entryId } }),
-    "Receipt sent for review."
-  );
-  const reviewReceipt = (id, action, note) => perform(
-    () => api("/api/receipts/" + id + "/review", { method: "POST", body: { action, note } }),
-    { verify: "Receipt verified.", revision: "Sent back for revision.", reject: "Receipt rejected." }[action]
+  const addTx = (t) => perform(
+    () => api("/api/transactions", { method: "POST", body: t }),
+    `${t.type} of ${peso(t.amount)} recorded.`
   );
   const editTx = (id, patch) => perform(
     () => api("/api/transactions/" + id, { method: "PUT", body: patch }),
@@ -412,7 +389,7 @@ function FinTrackStark() {
     try {
       const data = await api("/api/auth/me/password", { method: "PUT", body: { currentPassword, newPassword } });
       // The server invalidates every other session and hands back a fresh token.
-      const sess = startSession(data);
+      startSession(data);
       fireToast("Password changed — other devices were signed out.");
       refreshAll();
       return null;
@@ -430,17 +407,10 @@ function FinTrackStark() {
       await perform(() => api("/api/users/" + user._id, { method: "DELETE" }), "Account deleted.");
     }, "Delete Account");
   }
-  // Resolves to the temporary password, or null if the reset failed.
-  async function resetUserPassword(user) {
-    try {
-      const data = await api("/api/users/" + user._id + "/reset-password", { method: "POST" });
-      refreshAll();
-      return data.temporaryPassword;
-    } catch (err) {
-      fireError(err);
-      return null;
-    }
-  }
+  const setUserActive = (user, active) => perform(
+    () => api("/api/users/" + user._id + "/status", { method: "PUT", body: { active } }),
+    active ? `${user.name} can sign in again.` : `${user.name} was deactivated and signed out.`
+  );
 
   if (restoring) {
     return <div className="boot"><div className="boot-mark">FS</div><div className="boot-text">Restoring your session…</div></div>;
@@ -455,17 +425,6 @@ function FinTrackStark() {
         <div className="boot-text">{restoreError}</div>
         <button className="btn" onClick={() => window.location.reload()}>Try again</button>
       </div>
-    );
-  }
-
-  // An Admin reset this account's password. The temporary one must be replaced
-  // before anything else; the server refuses every other request until then.
-  if (session && session.mustChangePassword) {
-    return (
-      <>
-        <ForcePasswordChangeScreen session={session} changePassword={changePassword} logout={logout} theme={theme} />
-        {toast && <Toast toast={toast} onOpen={() => { setToast(null); navigate("/notifications"); }} />}
-      </>
     );
   }
 
@@ -492,7 +451,9 @@ function FinTrackStark() {
               key="login"
               initialMode="login"
               onLogin={login}
-              onRegister={register}
+              onRegisterStart={registerStart}
+              onRegisterVerify={registerVerify}
+              onRegisterResend={registerResend}
               onSwitchMode={(m) => navigate(m === "login" ? "/login" : "/register")}
               theme={theme}
               setTheme={setTheme}
@@ -507,7 +468,9 @@ function FinTrackStark() {
               key="register"
               initialMode="register"
               onLogin={login}
-              onRegister={register}
+              onRegisterStart={registerStart}
+              onRegisterVerify={registerVerify}
+              onRegisterResend={registerResend}
               onSwitchMode={(m) => navigate(m === "login" ? "/login" : "/register")}
               theme={theme}
               setTheme={setTheme}
@@ -515,6 +478,10 @@ function FinTrackStark() {
             />
           )}
         />
+        <Route path="/forgot-password" element={session ? <Navigate to="/dashboard" replace /> : <ForgotPasswordScreen theme={theme} setTheme={setTheme} />} />
+        {/* Open even when signed in: the link may be opened on a device that
+            is signed in to another account. */}
+        <Route path="/reset-password" element={<ResetPasswordScreen theme={theme} setTheme={setTheme} />} />
         {/* Public whether signed in or not: the sign-up form links to them. */}
         <Route path="/terms" element={<TermsPage />} />
         <Route path="/privacy" element={<PrivacyPage />} />
@@ -522,12 +489,11 @@ function FinTrackStark() {
         <Route
           element={
             <RequireAuth session={session}>
-              <Shell session={session} logout={requestLogout} theme={theme} setTheme={setTheme} notifs={notifs} loadError={loadError} dataReady={dataReady} onRetry={refreshAll}
-                reviewWaiting={reviewQueue.filter((r) => r.status === "For Review" && r.latest).length} />
+              <Shell session={session} logout={requestLogout} theme={theme} setTheme={setTheme} notifs={notifs} loadError={loadError} dataReady={dataReady} onRetry={refreshAll} />
             </RequireAuth>
           }
         >
-          <Route path="/dashboard" element={<DashboardScreen session={session} bills={bills} tx={tx} budgets={budgets} notifs={notifs} users={users} auditLog={auditLog} reviewQueue={reviewQueue} onNavigate={navigate} />} />
+          <Route path="/dashboard" element={<DashboardScreen session={session} bills={bills} tx={tx} budgets={budgets} notifs={notifs} users={users} auditLog={auditLog} onNavigate={navigate} />} />
           {/* A User's own money. An Admin has no wallet (separation of duties). */}
           <Route element={<RequireRole session={session} roles={["User"]} />}>
           <Route path="/categories" element={<CategoryList bills={bills} onOpen={(name) => navigate("/categories/" + encodeURIComponent(name))} />} />
@@ -536,17 +502,15 @@ function FinTrackStark() {
           <Route path="/budgets" element={<BudgetsScreen budgets={budgets} tx={tx} addBudget={addBudget} editBudget={editBudget} deleteBudget={deleteBudget} />} />
           <Route path="/bills" element={<BillsScreen bills={bills} addBill={addBill} markPaid={markPaid} editBill={editBill} deleteBill={deleteBill} />} />
           <Route path="/revisions" element={<RevisionHistoryScreen tx={tx} />} />
-          <Route path="/entries" element={<EntriesScreen tx={tx} editTx={editTx} deleteTx={deleteTx} receipts={receipts} submitReceipt={submitReceipt} onNavigate={navigate} />} />
+          <Route path="/entries" element={<EntriesScreen tx={tx} editTx={editTx} deleteTx={deleteTx} onNavigate={navigate} />} />
           <Route path="/notes" element={<NotesScreen comments={comments} addNote={addNote} editNote={editNote} deleteNote={deleteNote} tx={tx} me={session?.id} />} />
           <Route path="/payments" element={<PaymentHistoryScreen bills={bills} />} />
           <Route path="/reports" element={<ReportsScreen tx={tx} bills={bills} budgets={budgets} />} />
+          <Route path="/activity" element={<ActivityScreen activity={activity} />} />
           </Route>
           <Route path="/notifications" element={<NotificationsScreen notifs={notifs} markRead={markNotifRead} markAllRead={markAllNotifsRead} onNavigate={navigate} />} />
           <Route path="/settings" element={<SettingsScreen session={session} updateProfile={updateProfile} changePassword={changePassword} theme={theme} setTheme={setTheme} />} />
 
-          <Route element={<RequireRole session={session} path="/review" />}>
-            <Route path="/review" element={<ReviewScreen reviewQueue={reviewQueue} reviewReceipt={reviewReceipt} />} />
-          </Route>
           <Route element={<RequireRole session={session} path="/audit" />}>
             <Route path="/audit" element={<AuditLogScreen auditLog={auditLog} />} />
           </Route>
@@ -554,7 +518,7 @@ function FinTrackStark() {
             <Route path="/system" element={<SystemSettingsScreen onSaved={fireToast} />} />
           </Route>
           <Route element={<RequireRole session={session} path="/users" />}>
-            <Route path="/users" element={<UsersScreen users={users} session={session} setUserRole={setUserRole} deleteUser={deleteUser} resetUserPassword={resetUserPassword} />} />
+            <Route path="/users" element={<UsersScreen users={users} session={session} setUserRole={setUserRole} setUserActive={setUserActive} deleteUser={deleteUser} />} />
           </Route>
 
           <Route path="*" element={<NotFoundScreen onHome={() => navigate("/dashboard")} />} />

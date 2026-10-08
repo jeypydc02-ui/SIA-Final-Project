@@ -1,23 +1,23 @@
 const { test, expect } = require("@playwright/test");
-const { api, accounts } = require("./helpers");
-const { PNG } = require("./receipt-helpers");
+const { api, accounts, registerUser, mailTo, codeIn, linkIn, uniqueEmail } = require("./helpers");
 
-// End-to-end scenario (spec section 16: minimum 1).
+// End-to-end scenarios (spec section 16: minimum 1).
 //
 // One continuous journey through the browser, no API shortcuts for the steps
-// a person would perform: register -> set a budget -> record an expense (it
-// counts at once) -> correct it, which keeps the first figure as v1 -> the
-// corrected figure reaches the dashboard, budget and reports -> the whole
-// thing is visible in the audit trail.
+// a person would perform: register (with the e-mailed code) -> set a budget
+// -> record an expense (it counts at once) -> correct it, which keeps the
+// first figure as v1 -> the corrected figure reaches the dashboard, budget
+// and reports -> the person's own steps are on their My Activity page, and
+// only the sign-up reaches the Admin's security log.
 
 test("E2E-01 a new account records, corrects and reports an expense", async ({ browser }) => {
-  const email = `e2e${Date.now()}@example.test`;
+  const email = uniqueEmail("e2e");
   const password = "e2epass123";
 
   const memberContext = await browser.newContext();
   const member = await memberContext.newPage();
 
-  // --- 1. Register from the landing page ---
+  // --- 1. Register from the landing page, confirming the e-mail address ---
   await member.goto("/");
   await member.getByRole("button", { name: "Get Started" }).first().click();
 
@@ -27,6 +27,14 @@ test("E2E-01 a new account records, corrects and reports an expense", async ({ b
   await member.locator('.auth-form input[type=password]').nth(0).fill(password);
   await member.locator('.auth-form input[type=password]').nth(1).fill(password);
   await member.getByRole("button", { name: "Create Account" }).click();
+
+  await expect(member.locator(".auth-title")).toHaveText("Check your e-mail");
+  await expect(member.locator(".auth-subtitle")).toContainText(email);
+  // No account exists until the code is entered.
+  expect((await api("/api/auth/login", { method: "POST", body: { email, password } })).status).toBe(401);
+
+  await member.locator("#otp").fill(codeIn(await mailTo(email)));
+  await member.getByRole("button", { name: "Verify and Create Account" }).click();
 
   await expect(member.locator(".shell")).toBeVisible();
   await expect(member.locator(".side-foot")).toContainText("Ella Santos");
@@ -91,70 +99,71 @@ test("E2E-01 a new account records, corrects and reports an expense", async ({ b
   await expect(member.locator(".shell")).toBeVisible();
   await expect(member.locator(".side-foot")).toContainText("Ella Santos");
 
-  // --- 8. The whole journey is in the audit trail ---
+  // --- 8. The journey is on the person's own My Activity page ---
+  await member.locator(".nav-item", { hasText: "My Activity" }).click();
+  const feed = member.locator(".inbox");
+  await expect(feed).toContainText("Budget Created");
+  await expect(feed).toContainText("Expense Recorded");
+  await expect(feed).toContainText("v2 replaces v1");
+
+  // --- 9. The Admin's log has the sign-up, and none of the money ---
   const { admin } = accounts();
   const audit = await api("/api/audit-log", { token: admin.token });
-  const mine = audit.data.filter((l) => l.user === "Ella Santos");
-  expect(mine.some((l) => l.action === "Account Created")).toBe(true);
-  expect(mine.some((l) => l.action === "Budget Created")).toBe(true);
-  expect(mine.some((l) => l.action === "Expense Recorded")).toBe(true);
-  expect(mine.some((l) => l.action === "Transaction Edited" && l.detail.includes("v2 replaces v1"))).toBe(true);
+  const theirs = audit.data.filter((l) => l.user === "Ella Santos");
+  expect(theirs.some((l) => l.action === "Account Created")).toBe(true);
+  expect(theirs.some((l) => /Budget|Expense|Transaction/.test(l.action))).toBe(false);
 
   await memberContext.close();
 });
 
-// Spec section 9.5: one complete workflow from submission to final approval.
-// Two browsers, as two people: the member submits an expense with a receipt
-// photo; the Admin sends it back; the member retakes it as v2; the Admin
-// verifies it. Each side sees the other's action without reloading.
-test("E2E-02 a receipt goes from submission to final approval", async ({ browser }) => {
-  test.setTimeout(60000);
-  const { user, admin } = accounts();
-  const plant = async (token, path) => {
-    const ctx = await browser.newContext();
-    const page = await ctx.newPage();
-    await page.addInitScript((t) => window.sessionStorage.setItem("fts_token", t), token);
-    await page.goto(path);
-    await page.waitForSelector(".shell");
-    return page;
-  };
-  const member = await plant(user.token, "/submit");
-  const desk = await plant(admin.token, "/review");
+// A forgotten password, start to finish, on two devices: one is still signed
+// in; on the other the person asks for a reset, opens the e-mailed link and
+// chooses a new password. The first device is asked to sign in again at once,
+// the old password stops working, and the link cannot be used twice.
+test("E2E-02 a forgotten password is reset from the e-mailed link", async ({ browser }) => {
+  const person = await registerUser("reset", "oldpass123");
 
-  // 1. Submission, with a receipt photo.
-  await member.locator("input[type=number]").first().fill("2345");
-  await member.getByText("Attach a receipt").click();
-  await member.locator("#log-receipt-file").setInputFiles({ name: "hardware.png", mimeType: "image/png", buffer: PNG });
-  await member.getByRole("button", { name: "Save Entry" }).click();
-  await expect(member.locator(".toast")).toContainText("receipt sent for review");
+  const phoneCtx = await browser.newContext();
+  const phone = await phoneCtx.newPage();
+  await phone.addInitScript((t) => window.sessionStorage.setItem("fts_token", t), person.token);
+  await phone.goto("/dashboard");
+  await expect(phone.locator(".shell")).toBeVisible();
 
-  // 2. It reaches the Admin live; they ask for a clearer copy.
-  const card = desk.locator(".review-card", { hasText: "₱2,345.00" });
-  await expect(card).toBeVisible();
-  await card.getByRole("button", { name: "Review receipt" }).click();
-  await desk.locator("#review-note").fill("Photo is blurry — please retake it");
-  await desk.getByRole("button", { name: "Request revision" }).click();
-  await expect(desk.locator(".toast")).toContainText("Sent back for revision");
+  const laptopCtx = await browser.newContext();
+  const laptop = await laptopCtx.newPage();
+  await laptop.goto("/login");
+  await laptop.getByRole("link", { name: "Forgot your password?" }).click();
+  await expect(laptop).toHaveURL(/\/forgot-password$/);
+  await laptop.locator(".auth-form input[type=email]").fill(person.email);
+  await laptop.getByRole("button", { name: "Send Reset Link" }).click();
+  await expect(laptop.locator(".auth-note").first()).toContainText("a link to set a new password is on its way");
 
-  // 3. The member is told, and attaches v2 from My Entries.
-  await member.goto("/entries");
-  const row = member.locator(".entry-row", { hasText: "2,345" }).first();
-  await expect(row.locator(".receipt-chip")).toHaveText("Receipt v1 · Needs revision");
-  await row.locator(".receipt-chip").click();
-  await expect(member.locator(".receipt-modal")).toContainText("Photo is blurry");
-  await member.locator(".receipt-modal input[type=file]").setInputFiles({ name: "hardware-retake.png", mimeType: "image/png", buffer: PNG });
-  await member.getByRole("button", { name: "Submit for Review" }).click();
-  await expect(row.locator(".receipt-chip")).toHaveText("Receipt v2 · For review");
+  // The link from the e-mail, opened in the browser.
+  const link = linkIn(await mailTo(person.email));
+  await laptop.goto(link.replace(/^https?:\/\/[^/]+/, ""));
+  await laptop.locator(".auth-form input[type=password]").nth(0).fill("newpass456");
+  await laptop.locator(".auth-form input[type=password]").nth(1).fill("newpass456");
+  await laptop.getByRole("button", { name: "Set New Password" }).click();
+  await expect(laptop.locator(".auth-title")).toHaveText("Password changed");
 
-  // 4. Final approval.
-  const v2card = desk.locator(".review-card", { hasText: "₱2,345.00" });
-  await expect(v2card).toContainText("version 2");
-  await v2card.getByRole("button", { name: "Review receipt" }).click();
-  await desk.locator(".review-modal").getByRole("button", { name: "Verify" }).click();
-  await expect(desk.locator(".toast")).toContainText("Receipt verified");
+  // The device that was still signed in asks for the password straight away.
+  await expect(phone.locator("#reauth-title")).toBeVisible();
 
-  // The member sees it verified without reloading, and is notified.
-  await expect(row.locator(".receipt-chip")).toHaveText("Receipt v2 · Verified");
-  const inbox = await api("/api/notifications", { token: user.token });
-  expect(inbox.data.some((n) => n.type === "receipt-verified" && n.message.includes("2,345"))).toBe(true);
+  // Only the new password works now, and the link is spent.
+  const login = (password) => api("/api/auth/login", { method: "POST", body: { email: person.email, password } });
+  expect((await login("oldpass123")).status).toBe(401);
+  expect((await login("newpass456")).status).toBe(200);
+  const token = new URL(link).searchParams.get("token");
+  const again = await api("/api/auth/reset", { method: "POST", body: { token, password: "another789" } });
+  expect(again.status).toBe(400);
+
+  // Signing in through the form with the new password.
+  await laptop.getByRole("button", { name: "Sign In" }).click();
+  await laptop.locator(".auth-form input[type=email]").fill(person.email);
+  await laptop.locator(".auth-form input[type=password]").fill("newpass456");
+  await laptop.locator(".auth-form button[type=submit]").click();
+  await expect(laptop.locator(".shell")).toBeVisible();
+
+  await phoneCtx.close();
+  await laptopCtx.close();
 });

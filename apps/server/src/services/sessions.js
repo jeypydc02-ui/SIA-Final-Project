@@ -25,7 +25,6 @@ async function createSession(user) {
     name: user.name,
     email: user.email,
     role: user.role,
-    mustChangePassword: !!user.mustChangePassword,
     expiresAt: new Date(Date.now() + (await getSettings()).sessionHours * 60 * 60 * 1000),
   });
   return token;
@@ -40,7 +39,7 @@ async function getSession(token) {
     await Session.deleteOne({ _id: s._id });
     return null;
   }
-  return { id: String(s.user), name: s.name, email: s.email, role: s.role, mustChangePassword: !!s.mustChangePassword };
+  return { id: String(s.user), name: s.name, email: s.email, role: s.role };
 }
 
 async function destroySession(token) {

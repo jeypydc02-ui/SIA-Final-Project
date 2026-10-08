@@ -1,6 +1,5 @@
 const { test, expect } = require("@playwright/test");
-const { entryWithReceipt } = require("./receipt-helpers");
-const { api, accounts, signIn, registerUser } = require("./helpers");
+const { api, accounts, signIn, registerUser, mailTo, codeIn, uniqueEmail } = require("./helpers");
 
 // Security / access-control test cases (spec section 16: minimum 3),
 // evidencing section 8.1 (RBAC matrix) and 8.2 (least privilege and
@@ -84,10 +83,15 @@ test.describe("Security and access control", () => {
     })).status).toBe(400);
 
     // Registration never grants elevated rights, whatever the caller asks for.
-    const sneaky = await api("/api/auth/register", {
+    const sneakyEmail = uniqueEmail("sneaky");
+    await api("/api/auth/register", {
       method: "POST",
-      body: { firstName: "Sneaky", lastName: "Signup", email: `sneaky${Date.now()}@example.test`, password: "testpass123", role: "Admin" },
+      body: { firstName: "Sneaky", lastName: "Signup", email: sneakyEmail, password: "testpass123", role: "Admin" },
     });
+    const sneaky = await api("/api/auth/register/verify", {
+      method: "POST", body: { email: sneakyEmail, code: codeIn(await mailTo(sneakyEmail)), role: "Admin" },
+    });
+    expect(sneaky.status).toBe(201);
     expect(sneaky.data.user.role).toBe("User");
 
     // Separation of duties: an Admin cannot change their own role, and the
@@ -103,28 +107,35 @@ test.describe("Security and access control", () => {
     await expect(page.locator(".nav-item", { hasText: "Audit Log" })).toHaveCount(0);
   });
 
-  test("ST-04 (NFR-002, section 8.2) receipts are seen only by their owner and the Admin, and only the Admin decides", async () => {
+  test("ST-04 (NFR-002, section 8.2) activity stays private, and only the Admin can deactivate an account", async () => {
     const { user, other, admin } = accounts();
-    const { receipt } = await entryWithReceipt(user.token);
-    expect(receipt.status).toBe(201);
-    const id = receipt.data._id;
+    const person = await registerUser("st04");
 
-    // The file: the owner and the Admin who reviews it; never another User.
-    expect((await fetch(`http://localhost:4000/api/receipts/${id}/file`, { headers: { Authorization: "Bearer " + user.token } })).status).toBe(200);
-    expect((await fetch(`http://localhost:4000/api/receipts/${id}/file`, { headers: { Authorization: "Bearer " + admin.token } })).status).toBe(200);
-    expect((await api(`/api/receipts/${id}/file`, { token: other.token })).status).toBe(403);
+    // My Activity: each User reads their own lines only; the Admin, who keeps
+    // no wallet, has no such feed, and the Admin's log is Admin-only.
+    await api("/api/budgets", { method: "POST", token: person.token, body: { category: "Health", limit: 404 } });
+    const mine = (await api("/api/activity", { token: person.token })).data;
+    expect(mine.length).toBeGreaterThan(0);
+    expect(mine.every((l) => l.actorId === person.user.id)).toBe(true);
+    const theirs = (await api("/api/activity", { token: user.token })).data;
+    expect(theirs.some((l) => l.actorId === person.user.id)).toBe(false);
+    expect((await api("/api/activity", { token: admin.token })).status).toBe(403);
+    expect((await api("/api/activity")).status).toBe(401);
+    // What a User does with their money never reaches the Admin's log.
+    const log = (await api("/api/audit-log", { token: admin.token })).data;
+    expect(log.some((l) => l.action === "Budget Created")).toBe(false);
+    expect(log.every((l) => l.scope === "system" || l.scope === "both")).toBe(true);
 
-    // Deciding and the queue: the Admin only — not the owner, not another User.
-    for (const who of [user, other]) {
-      expect((await api(`/api/receipts/${id}/review`, { method: "POST", token: who.token, body: { action: "verify" } })).status).toBe(403);
-      expect((await api("/api/receipts/review", { token: who.token })).status).toBe(403);
-    }
-    expect((await api("/api/receipts/review", { token: admin.token })).status).toBe(200);
-    // An Admin keeps no wallet, so cannot submit evidence they would then judge.
-    expect((await api("/api/transactions", { method: "POST", token: admin.token, body: { type: "Expense", category: "Food", amount: 5 } })).status).toBe(403);
-    // Nobody attaches a receipt to someone else's entry.
-    const theirs = await api("/api/transactions", { method: "POST", token: other.token, body: { type: "Expense", category: "Food", amount: 5 } });
-    expect((await api("/api/receipts", { method: "POST", token: user.token, body: { kind: "link", url: "https://drive.google.com/x", transactionId: theirs.data._id } })).status).toBe(403);
+    // Deactivation: Admin only, never yourself, never the last active Admin.
+    const status = (who, id, active) => api(`/api/users/${id}/status`, { method: "PUT", token: who.token, body: { active } });
+    expect((await status(user, other.user.id, false)).status).toBe(403);
+    expect((await status(person, person.user.id, false)).status).toBe(403);
+    expect((await status(admin, admin.user.id, false)).status).toBe(400);
+    expect((await status(admin, person.user.id, "no")).status).toBe(400);
+    expect((await status(admin, "000000000000000000000000", false)).status).toBe(404);
+
+    // The Admin-issued temporary password is gone: there is no such endpoint.
+    expect((await api(`/api/users/${person.user.id}/reset-password`, { method: "POST", token: admin.token })).status).toBe(404);
   });
 
 });

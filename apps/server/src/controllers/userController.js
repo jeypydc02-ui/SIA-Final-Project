@@ -1,18 +1,20 @@
-const crypto = require("crypto");
 const User = require("../models/User");
 const Bill = require("../models/Bill");
 const Budget = require("../models/Budget");
 const Notification = require("../models/Notification");
 const Comment = require("../models/Comment");
 const Transaction = require("../models/Transaction");
-const Receipt = require("../models/Receipt");
+const mongoose = require("mongoose");
 const { refreshUserSessions, destroyUserSessions } = require("../services/sessions");
-const { hashPassword } = require("../services/passwords");
 const { logAction } = require("../services/audit");
 const { notify } = require("../services/notifications");
 const { publish } = require("../services/events");
 
 const ROLES = ["Admin", "User"];
+
+// Admins who can still sign in. The last one can never be demoted,
+// deactivated or deleted, or nobody could administer the system.
+const activeAdmins = () => User.countDocuments({ role: "Admin", active: { $ne: false } });
 
 async function list(req, res) {
   const users = await User.find().select("-passwordHash").sort({ role: 1, name: 1 });
@@ -35,8 +37,7 @@ async function setRole(req, res) {
   }
   // Never let the last Admin be demoted, or nobody can administer the system.
   if (user.role === "Admin" && role !== "Admin") {
-    const admins = await User.countDocuments({ role: "Admin" });
-    if (admins <= 1) {
+    if ((await activeAdmins()) <= 1) {
       return res.status(400).json({ error: "This is the only Admin account — promote another Admin first." });
     }
   }
@@ -50,7 +51,7 @@ async function setRole(req, res) {
 
   // A live session still carries the old role until it is refreshed.
   await refreshUserSessions(user._id, { role });
-  await logAction(req.user.name, "Role Changed", `${user.name}: ${previous} -> ${role}.`);
+  await logAction(req.user, "Role Changed", `${user.name}: ${previous} -> ${role}.`);
   await notify("role", `Your role was changed from ${previous} to ${role}.`, user._id);
   // Their open tabs reload, so the menu matches the new role straight away.
   publish(user._id, "session");
@@ -58,32 +59,31 @@ async function setRole(req, res) {
   res.json({ id: user._id, name: user.name, email: user.email, role: user.role });
 }
 
-// Account recovery without email: there is no mail service to send a reset
-// link, so a person who forgets their password asks an Admin, who issues a
-// one-time temporary password. It is shown to the Admin once, every session
-// the account had is ended, and the owner must replace it at their next login
-// (see requireAuth), so the Admin does not keep a working password for it.
-async function resetPassword(req, res) {
+// PUT /api/users/:id/status { active: true | false } — deactivate or
+// reactivate an account. A deactivated account keeps all its data but cannot
+// sign in; its open sessions end at once.
+async function setStatus(req, res) {
+  const { active } = req.body || {};
+  if (typeof active !== "boolean") return res.status(400).json({ error: "Status must be active (true) or deactivated (false)." });
   const user = await User.findById(req.params.id);
   if (!user) return res.status(404).json({ error: "User not found." });
   if (String(user._id) === req.user.id) {
-    return res.status(400).json({ error: "Use Settings to change your own password." });
+    return res.status(400).json({ error: "You cannot deactivate your own account." });
   }
-
-  // 12 characters from an alphabet without look-alikes (0/O, 1/l/I), so it
-  // can be read out or copied by hand without mistakes.
-  const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789";
-  // randomInt, not a byte modulo the alphabet size, so every character is
-  // equally likely.
-  const temporaryPassword = Array.from({ length: 12 }, () => alphabet[crypto.randomInt(alphabet.length)]).join("");
-
-  user.passwordHash = await hashPassword(temporaryPassword);
-  user.mustChangePassword = true;
+  const wasActive = user.active !== false;
+  if (wasActive === active) {
+    return res.status(400).json({ error: `${user.name} is already ${active ? "active" : "deactivated"}.` });
+  }
+  if (!active && user.role === "Admin" && (await activeAdmins()) <= 1) {
+    return res.status(400).json({ error: "This is the only active Admin account and cannot be deactivated." });
+  }
+  user.active = active;
   await user.save();
-  await destroyUserSessions(user._id);
-  await logAction(req.user.name, "Password Reset", `Temporary password issued for ${user.name} (${user.email}).`);
-
-  res.json({ temporaryPassword });
+  if (!active) await destroyUserSessions(user._id);
+  // Their open tabs find out at once and fall back to the sign-in prompt.
+  publish(user._id, "session");
+  await logAction(req.user, active ? "Account Reactivated" : "Account Deactivated", `${user.name} (${user.email}).`, { ref: user._id });
+  res.json({ id: user._id, name: user.name, email: user.email, role: user.role, active: user.active });
 }
 
 async function remove(req, res) {
@@ -92,11 +92,8 @@ async function remove(req, res) {
   if (String(user._id) === req.user.id) {
     return res.status(400).json({ error: "You cannot delete your own account." });
   }
-  if (user.role === "Admin") {
-    const admins = await User.countDocuments({ role: "Admin" });
-    if (admins <= 1) {
-      return res.status(400).json({ error: "This is the only Admin account and cannot be deleted." });
-    }
+  if (user.role === "Admin" && user.active !== false && (await activeAdmins()) <= 1) {
+    return res.status(400).json({ error: "This is the only Admin account and cannot be deleted." });
   }
   await user.deleteOne();
   await destroyUserSessions(user._id);
@@ -110,11 +107,12 @@ async function remove(req, res) {
     Notification.deleteMany({ user: user._id }),
     Comment.deleteMany({ authorId: user._id }),
     Transaction.deleteMany({ submittedBy: user._id }),
-    Receipt.deleteMany({ owner: user._id }),
+    // Receipts from the retired receipt-review feature, if any remain.
+    mongoose.connection.collection("receipts").deleteMany({ owner: user._id }),
   ]);
 
-  await logAction(req.user.name, "Account Deleted", `${user.name} (${user.email}) removed, with their bills, budgets, entries, receipts and notes.`, { ref: user._id });
+  await logAction(req.user, "Account Deleted", `${user.name} (${user.email}) removed, with their bills, budgets, entries and notes.`, { ref: user._id });
   res.json({ ok: true });
 }
 
-module.exports = { list, setRole, resetPassword, remove };
+module.exports = { list, setRole, setStatus, remove };

@@ -1,7 +1,6 @@
 const { test, expect } = require("@playwright/test");
 const { execFileSync } = require("child_process");
 const path = require("path");
-const { pngBody, entryWithReceipt } = require("./receipt-helpers");
 const { api, accounts, signIn, gotoScreen, registerUser } = require("./helpers");
 const { todayISO, addDaysISO } = require("../apps/server/src/utils/dates");
 
@@ -53,9 +52,12 @@ test.describe("Integration", () => {
     const notifs = await api("/api/notifications", { token: user.token });
     expect(notifs.data.some((n) => n.type === "payment" && n.message.includes("Cascade Test Bill"))).toBe(true);
 
-    // 4. the action was recorded in the audit trail
+    // 4. the action was recorded in the payer's own activity log — not in
+    // the Admin's security log, which never shows anyone's money
+    const activity = await api("/api/activity", { token: user.token });
+    expect(activity.data.some((l) => l.action === "Payment Recorded" && l.detail.includes("Cascade Test Bill"))).toBe(true);
     const audit = await api("/api/audit-log", { token: admin.token });
-    expect(audit.data.some((l) => l.action === "Payment Recorded" && l.detail.includes("Cascade Test Bill"))).toBe(true);
+    expect(audit.data.some((l) => l.action === "Payment Recorded")).toBe(false);
   });
 
   test("IT-02 a notification reaches an open screen without a refresh", async ({ page }) => {
@@ -200,55 +202,60 @@ test.describe("Integration", () => {
     await expect(log).toContainText("overdue by 1 day");
   });
 
-  test("IT-07 a receipt moves through review: submitted, sent back, resubmitted as v2, verified", async () => {
-    const { user, admin } = accounts();
-    const inbox = async (who) => (await api("/api/notifications", { token: who.token })).data;
-    const before = new Set((await inbox(admin)).map((n) => n._id));
+  test("IT-07 one action log, two audiences: a User's own feed live, and the Admin's security log", async ({ page }) => {
+    const person = await registerUser("it07");
+    const { admin } = accounts();
+    await page.addInitScript((t) => window.sessionStorage.setItem("fts_token", t), person.token);
+    await page.goto("/activity");
+    await page.waitForSelector(".shell");
 
-    // 1. Submitting sets it For Review automatically and alerts the Admins.
-    const { entry, receipt } = await entryWithReceipt(user.token, { amount: 1560, note: "IT-07 groceries" });
-    expect(receipt.data.status).toBe("For Review");
-    expect(receipt.data.version).toBe(1);
-    const alert = (await inbox(admin)).find((n) => !before.has(n._id) && n.type === "receipt");
-    expect(alert.message).toContain("₱1,560.00");
+    // What the person does with their money reaches their open feed at once.
+    await api("/api/transactions", { method: "POST", token: person.token, body: { type: "Expense", category: "Transport", amount: 75, date: todayISO(), note: "IT-07 jeepney" } });
+    await expect(page.locator(".inbox").first()).toContainText("IT-07 jeepney");
 
-    // 2. Sent back: the owner is told why, and the reason is a note on the entry.
-    const back = await api(`/api/receipts/${receipt.data._id}/review`, { method: "POST", token: admin.token, body: { action: "revision", note: "Total is cut off in the photo" } });
-    expect(back.data.status).toBe("Needs Revision");
-    expect((await inbox(user)).some((n) => n.type === "receipt-revision" && n.message.includes("Total is cut off"))).toBe(true);
-    const notes = await api(`/api/comments?transactionId=${entry._id}`, { token: user.token });
-    expect(notes.data.some((c) => c.text === "Total is cut off in the photo" && c.author === "System Admin")).toBe(true);
+    // A password change concerns both: it is on the feed and the security log.
+    const changed = await api("/api/auth/me/password", { method: "PUT", token: person.token, body: { currentPassword: person.password, newPassword: "it07newpass1" } });
+    expect(changed.status).toBe(200);
+    const feed = (await api("/api/activity", { token: changed.data.token })).data;
+    expect(feed.some((l) => l.action === "Password Changed")).toBe(true);
+    // Sign-ups, sign-ins and failed sign-ins are security events, not personal ones.
+    await api("/api/auth/login", { method: "POST", body: { email: person.email, password: "wrong-password" } });
+    expect(feed.some((l) => /Login|Account Created/.test(l.action))).toBe(false);
 
-    // 3. The owner sends v2; v1 stays in the history with its decision.
-    const v2 = await api("/api/receipts", { method: "POST", token: user.token, body: { ...pngBody({ fileName: "retake.png" }), transactionId: entry._id } });
-    expect(v2.data.version).toBe(2);
-    expect(v2.data.parentId).toBe(receipt.data._id);
-    const queue = await api("/api/receipts/review", { token: admin.token });
-    expect(queue.data.filter((r) => String(r.entryId) === entry._id && r.status === "For Review").map((r) => r.version)).toEqual([2]);
-
-    // 4. Verified: final, the owner is notified, and every step is in the audit log.
-    await api(`/api/receipts/${v2.data._id}/review`, { method: "POST", token: admin.token, body: { action: "verify" } });
-    const mine = (await api("/api/receipts", { token: user.token })).data.filter((r) => String(r.entryId) === entry._id);
-    expect(mine.map((r) => `v${r.version} ${r.status}`).sort()).toEqual(["v1 Needs Revision", "v2 Verified"]);
-    expect((await inbox(user)).some((n) => n.type === "receipt-verified")).toBe(true);
-    const audit = (await api("/api/audit-log", { token: admin.token })).data;
-    for (const action of ["Receipt Submitted", "Receipt Revision Requested", "Receipt Resubmitted", "Receipt Verified"]) {
-      expect(audit.some((l) => l.action === action && l.status === "Success"), action).toBe(true);
+    const log = (await api("/api/audit-log", { token: admin.token })).data.filter((l) => l.user === person.user.name);
+    for (const action of ["Account Created", "Password Changed", "Failed Login"]) {
+      expect(log.some((l) => l.action === action), action).toBe(true);
     }
+    expect(log.some((l) => l.action === "Expense Recorded")).toBe(false);
   });
 
-  test("IT-08 changing the figures of an entry sends its verified receipt back for review", async () => {
-    const { user, admin } = accounts();
-    const { entry, receipt } = await entryWithReceipt(user.token, { amount: 990, note: "IT-08" });
-    await api(`/api/receipts/${receipt.data._id}/review`, { method: "POST", token: admin.token, body: { action: "verify" } });
-    // A note-only edit leaves it verified …
-    const v2 = await api(`/api/transactions/${entry._id}`, { method: "PUT", token: user.token, body: { note: "IT-08 renamed" } });
-    let r = (await api("/api/receipts", { token: user.token })).data.find((x) => x._id === receipt.data._id);
-    expect(r.status).toBe("Verified");
-    expect(String(r.entryId)).toBe(v2.data._id); // it followed the entry to v2
-    // … a new amount does not: the receipt no longer proves it.
-    await api(`/api/transactions/${v2.data._id}`, { method: "PUT", token: user.token, body: { amount: 909 } });
-    r = (await api("/api/receipts", { token: user.token })).data.find((x) => x._id === receipt.data._id);
-    expect(r.status).toBe("For Review");
+  test("IT-08 deactivating an account ends its open session at once and blocks sign-in until reactivated", async ({ page }) => {
+    const person = await registerUser("it08");
+    const { admin } = accounts();
+    await page.addInitScript((t) => window.sessionStorage.setItem("fts_token", t), person.token);
+    await page.goto("/dashboard");
+    await page.waitForSelector(".shell");
+
+    const off = await api(`/api/users/${person.user.id}/status`, { method: "PUT", token: admin.token, body: { active: false } });
+    expect(off.status).toBe(200);
+    expect(off.data.active).toBe(false);
+    // The open tab is told straight away and asks for the password …
+    await expect(page.locator("#reauth-title")).toBeVisible();
+    // … which no longer opens the account.
+    await page.locator("#reauth-password").fill(person.password);
+    await page.locator(".modal button[type=submit]").click();
+    await expect(page.locator(".modal")).toContainText("deactivated");
+    const login = () => api("/api/auth/login", { method: "POST", body: { email: person.email, password: person.password } });
+    expect((await login()).status).toBe(403);
+    // A deactivated account cannot get a reset link either.
+    await api("/api/auth/forgot", { method: "POST", body: { email: person.email } });
+    expect((await api("/api/dev/outbox?to=" + encodeURIComponent(person.email))).data.subject).not.toMatch(/password/i);
+
+    const on = await api(`/api/users/${person.user.id}/status`, { method: "PUT", token: admin.token, body: { active: true } });
+    expect(on.status).toBe(200);
+    expect((await login()).status).toBe(200);
+    const log = (await api("/api/audit-log", { token: admin.token })).data;
+    expect(log.some((l) => l.action === "Account Deactivated" && l.ref === person.user.id)).toBe(true);
+    expect(log.some((l) => l.action === "Account Reactivated" && l.ref === person.user.id)).toBe(true);
   });
 });

@@ -30,7 +30,7 @@ async function create(req, res) {
     return res.status(409).json({ error: `You already have a budget for "${name}".` });
   }
   const budget = await Budget.create({ user: req.user.id, category: name, limit: parseAmount(limit) });
-  await logAction(req.user.name, "Budget Created", `${budget.category} limit set to ${budget.limit}.`);
+  await logAction(req.user, "Budget Created", `${budget.category} limit set to ${budget.limit}.`);
   publish(req.user.id, "budgets");
   res.status(201).json(budget);
 }
@@ -58,7 +58,7 @@ async function update(req, res) {
   if (limit !== undefined) budget.limit = parseAmount(limit);
   await budget.save();
 
-  await logAction(req.user.name, "Budget Updated", `${budget.category} limit now ${budget.limit}.`);
+  await logAction(req.user, "Budget Updated", `${budget.category} limit now ${budget.limit}.`);
   publish(req.user.id, "budgets");
   res.json(budget);
 }
@@ -70,7 +70,7 @@ async function remove(req, res) {
     return res.status(403).json({ error: "You can only delete your own budgets." });
   }
   await budget.deleteOne();
-  await logAction(req.user.name, "Budget Deleted", `${budget.category} budget removed.`);
+  await logAction(req.user, "Budget Deleted", `${budget.category} budget removed.`);
   publish(req.user.id, "budgets");
   res.json({ ok: true });
 }

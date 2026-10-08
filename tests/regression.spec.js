@@ -46,16 +46,18 @@ test.describe("Pre-launch audit regressions", () => {
     expect(txs.data.some((t) => t.note === "Bill payment: Payment guard bill")).toBe(false);
   });
 
-  test("RT-03 entries count at once; only receipts go through review", async () => {
+  test("RT-03 entries count at once, with no review step", async () => {
     const { user } = accounts();
     const created = await api("/api/transactions", {
       method: "POST", token: user.token, body: { type: "Income", category: "Salary", amount: 1234, note: "no approval needed" },
     });
     expect(created.status).toBe(201);
     expect(created.data.status).toBe("Approved"); // stored name for a counted entry
-    // The old review endpoints no longer exist.
+    // The old review endpoints (entries, then receipts) no longer exist.
     expect((await api(`/api/transactions/${created.data._id}/review`, { method: "POST", token: user.token, body: { action: "approve" } })).status).toBe(404);
     expect((await api(`/api/transactions/${created.data._id}/resubmit`, { method: "POST", token: user.token, body: {} })).status).toBe(404);
+    expect((await api("/api/receipts", { token: user.token })).status).toBe(404);
+    expect((await api("/api/receipts", { method: "POST", token: user.token, body: { kind: "link", url: "https://drive.google.com/x", transactionId: created.data._id } })).status).toBe(404);
   });
 
   test("RT-04 dates and field types are validated, never a 500", async () => {
@@ -89,40 +91,33 @@ test.describe("Pre-launch audit regressions", () => {
       ["GET", "/api/transactions"], ["POST", "/api/transactions", { type: "Expense", category: "Food", amount: 5 }],
       ["GET", "/api/budgets"], ["POST", "/api/budgets", { category: "Food", limit: 5 }],
       ["GET", "/api/comments"], ["POST", "/api/comments", { text: "x" }],
-      ["GET", "/api/receipts"], ["POST", "/api/receipts", { kind: "link", url: "https://drive.google.com/x", transactionId: "000000000000000000000000" }],
+      ["GET", "/api/activity"],
     ]) {
       expect((await api(path, { method, token: admin.token, body })).status, `${method} ${path}`).toBe(403);
     }
     // The one-request load gives an Admin the system lists, not a wallet.
     const sync = (await api("/api/sync", { token: admin.token })).data;
-    for (const key of ["bills", "transactions", "budgets", "comments", "receipts"]) expect(sync[key], key).toEqual([]);
+    for (const key of ["bills", "transactions", "budgets", "comments", "activity"]) expect(sync[key], key).toEqual([]);
     expect(sync.users.length).toBeGreaterThan(0);
   });
 
-  test("RT-06 an Admin password reset forces a new password", async () => {
-    const { admin, user } = accounts();
+  test("RT-06 Admins no longer issue temporary passwords; people reset their own by e-mail", async ({ page }) => {
+    const { admin } = accounts();
     const person = await registerUser("forgetful");
-
-    expect((await api(`/api/users/${person.user.id}/reset-password`, { method: "POST", token: user.token })).status).toBe(403);
-    const reset = await api(`/api/users/${person.user.id}/reset-password`, { method: "POST", token: admin.token });
-    expect(reset.status).toBe(200);
-    const temp = reset.data.temporaryPassword;
-    expect(temp).toHaveLength(12);
-
-    // The old password and old sessions are dead.
-    expect((await api("/api/bills", { token: person.token })).status).toBe(401);
-    expect((await api("/api/auth/login", { method: "POST", body: { email: person.email, password: person.password } })).status).toBe(401);
-
-    // The temporary password only opens the door to changing it.
-    const login = await api("/api/auth/login", { method: "POST", body: { email: person.email, password: temp } });
-    expect(login.data.user.mustChangePassword).toBe(true);
-    expect((await api("/api/bills", { token: login.data.token })).status).toBe(403);
-    const changed = await api("/api/auth/me/password", {
-      method: "PUT", token: login.data.token, body: { currentPassword: temp, newPassword: "my-own-password" },
-    });
-    expect(changed.status).toBe(200);
-    expect(changed.data.user.mustChangePassword).toBe(false);
-    expect((await api("/api/bills", { token: changed.data.token })).status).toBe(200);
+    expect((await api(`/api/users/${person.user.id}/reset-password`, { method: "POST", token: admin.token })).status).toBe(404);
+    // No forced-change flag on the account or the session any more.
+    const me = await api("/api/auth/me", { token: person.token });
+    expect(me.data.user).not.toHaveProperty("mustChangePassword");
+    // The Users screen offers no reset, and the sign-in page links to the
+    // self-service page instead of "ask your administrator".
+    await signIn(page, "admin", "/users");
+    await expect(page.getByRole("button", { name: "Reset Password" })).toHaveCount(0);
+    await expect(page.locator("tr", { hasText: person.email })).toContainText("Active");
+    const visitor = await page.context().browser().newPage();
+    await visitor.goto("/login");
+    await expect(visitor.getByRole("link", { name: "Forgot your password?" })).toHaveAttribute("href", "/forgot-password");
+    await expect(visitor.locator("body")).not.toContainText("temporary password");
+    await visitor.close();
   });
 
   test("RT-07 security headers and JSON 404s", async ({ request }) => {
@@ -195,14 +190,15 @@ test.describe("Pre-launch audit regressions", () => {
     await signIn(page, "admin");
     await expect(page.locator(".console-status")).toContainText("Admin Console");
     await expect(page.locator(".kpi", { hasText: "Accounts" })).toBeVisible();
-    await expect(page.locator(".panel", { hasText: "Activity feed" })).toBeVisible();
+    await expect(page.locator(".panel", { hasText: "Recent events" })).toBeVisible();
     await expect(page.locator(".wallet")).toHaveCount(0);
-    // The console leads with the receipts waiting for the Admin's review, and
-    // there is no wallet at all: no tab, no finance screens in the menu.
-    await expect(page.locator(".kpi", { hasText: "Receipts to review" })).toBeVisible();
-    await expect(page.locator(".panel", { hasText: "Receipts waiting for review" })).toBeVisible();
-    await expect(page.locator(".segmented")).toHaveCount(0);
-    await expect(page.locator(".nav-item", { hasText: "Receipt Review" })).toBeVisible();
+    // The console is about accounts and security, and there is no wallet at
+    // all: no finance screens in the menu, and no review queue any more.
+    await expect(page.locator(".kpi", { hasText: "Deactivated" })).toBeVisible();
+    await expect(page.locator(".panel", { hasText: "Security events this week" })).toContainText("Sign-ins");
+    await expect(page.locator(".panel", { hasText: "Security events this week" })).not.toContainText("Income & expenses");
+    await expect(page.locator(".nav-item", { hasText: "Receipt Review" })).toHaveCount(0);
+    await expect(page.locator(".nav-item", { hasText: "My Activity" })).toHaveCount(0);
     await expect(page.locator(".nav-item", { hasText: "Bill Reminders" })).toHaveCount(0);
     await page.goto("/bills");
     await expect(page.locator(".content")).toContainText("keep a wallet of their own");
@@ -214,7 +210,7 @@ test.describe("Pre-launch audit regressions", () => {
     await userPage.waitForSelector(".shell");
     await expect(userPage.locator(".wallet")).toContainText("Balance");
     await expect(userPage.locator(".console-status")).toHaveCount(0);
-    await expect(userPage.locator(".segmented")).toHaveCount(0);
+    await expect(userPage.locator(".nav-item", { hasText: "My Activity" })).toBeVisible();
     await userPage.close();
   });
 
@@ -333,12 +329,14 @@ test.describe("Pre-launch audit regressions", () => {
     expect(chain.data.map((t) => t.status)).toEqual(["Superseded", "Superseded", "Approved"]);
   });
 
-  test("RT-12 the review page is the Admin's alone", async ({ page }) => {
-    await signIn(page, "user");
-    await expect(page.locator(".nav-item", { hasText: "Receipt Review" })).toHaveCount(0);
+  test("RT-12 My Activity is a User's page; the Admin is told why it is not theirs", async ({ page }) => {
+    await signIn(page, "admin");
+    await page.goto("/activity");
+    await expect(page.locator(".content")).toContainText("keep a wallet of their own");
+    await expect(page.locator(".inbox")).toHaveCount(0);
+    // The retired review page is simply not found.
     await page.goto("/review");
-    await expect(page.locator(".content")).toContainText("Restricted");
-    await expect(page.locator(".review-card")).toHaveCount(0);
+    await expect(page.locator(".content")).not.toContainText("Receipt");
   });
 
   test("RT-20 one request brings everything a screen needs, and only your own", async () => {
@@ -350,6 +348,8 @@ test.describe("Pre-launch audit regressions", () => {
       expect(Array.isArray(mine.data[key]), key).toBe(true);
     }
     expect(mine.data.transactions.every((t) => t.submittedBy === user.user.id)).toBe(true);
+    expect(mine.data.activity.length).toBeGreaterThan(0);
+    expect(mine.data.activity.every((l) => l.actorId === user.user.id)).toBe(true);
     expect(mine.data.bills.every((b) => b.createdBy === user.user.id)).toBe(true);
     // Admin-only lists are empty for a User …
     expect(mine.data.auditLog).toEqual([]);
@@ -437,7 +437,7 @@ test.describe("Pre-launch audit regressions", () => {
     expect(notes[0].type).toBe("overdue");
   });
 
-  test("RT-24 data from the old review workflow is converted on start-up", async () => {
+  test("RT-24 data from older versions is converted on start-up", async () => {
     // Runs the same migration the API runs when it starts, against the test
     // database, on rows shaped like the old workflow left them.
     const mongoose = require("mongoose");
@@ -462,8 +462,34 @@ test.describe("Pre-launch audit regressions", () => {
         user: new mongoose.Types.ObjectId(user.user.id), type: "submission", read: false, ts: new Date(),
         message: "Someone submitted an income of 300 for review.",
       });
+      // An account and session from the days of Admin-issued temporary
+      // passwords, and audit lines written before the log was split.
+      const Session = require("../apps/server/src/models/Session");
+      const AuditLog = require("../apps/server/src/models/AuditLog");
+      const forced = await User.collection.insertOne({
+        firstName: "Old", lastName: "Temp", name: "Old Temp", email: `oldtemp${Date.now()}@example.test`,
+        passwordHash: "x", role: "User", mustChangePassword: true,
+      });
+      await Session.collection.insertOne({ tokenHash: `rt24-${Date.now()}`, user: forced.insertedId, role: "User", mustChangePassword: true, expiresAt: new Date(Date.now() + 60000) });
+      const oldLines = await AuditLog.collection.insertMany([
+        { user: "Old Temp", action: "Login", detail: "old", ts: new Date(), status: "Success" },
+        { user: "Old Temp", action: "Expense Recorded", detail: "old", ts: new Date(), status: "Success" },
+        { user: "Old Temp", action: "Password Changed", detail: "old", ts: new Date(), status: "Success" },
+        { user: "Old Temp", action: "Failed: POST bills", detail: "old", ts: new Date(), status: "Failed" },
+      ]);
+      const receiptAlert = await Notification.collection.insertOne({
+        user: new mongoose.Types.ObjectId(user.user.id), type: "receipt", read: false, ts: new Date(),
+        message: "A receipt is waiting for review.",
+      });
       await runMigrations(() => {});
       expect((await Transaction.collection.findOne({ _id: pending.insertedId })).status).toBe("Approved");
+      expect(await Notification.collection.findOne({ _id: receiptAlert.insertedId })).toBeNull();
+      expect(await User.collection.findOne({ _id: forced.insertedId })).not.toHaveProperty("mustChangePassword");
+      expect(await Session.collection.findOne({ user: forced.insertedId })).not.toHaveProperty("mustChangePassword");
+      const scopes = (await AuditLog.collection.find({ _id: { $in: Object.values(oldLines.insertedIds) } }).toArray()).map((l) => `${l.action}=${l.scope}`);
+      expect(scopes.sort()).toEqual(["Expense Recorded=user", "Failed: POST bills=system", "Login=system", "Password Changed=both"]);
+      await User.collection.deleteOne({ _id: forced.insertedId });
+      await Session.collection.deleteMany({ user: forced.insertedId });
       // An alert asking someone to review a queue that no longer exists is removed.
       expect(await Notification.collection.findOne({ _id: queueAlert.insertedId })).toBeNull();
       expect((await User.collection.findOne({ _id: reviewer.insertedId })).role).toBe("User");

@@ -35,9 +35,33 @@ const registerLimiter = rateLimit({
   max: Number(process.env.RATE_LIMIT_REGISTER_MAX) || 20,
   message: "Too many accounts created from this address. Please try again later.",
 });
+// Sign-up codes and reset links send e-mail, so they are rationed per address
+// and per e-mail; code guesses are also capped per sign-up (5 tries).
+const mailLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: Number(process.env.RATE_LIMIT_MAIL_MAX) || 10,
+  message: "Too many e-mails requested. Please try again later.",
+});
+const mailPerAddress = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: Number(process.env.RATE_LIMIT_MAIL_MAX) || 5,
+  message: "Too many e-mails requested for this address. Please try again later.",
+  key: (req) => (req.body && typeof req.body.email === "string" ? "mail:" + req.body.email.toLowerCase().trim() : null),
+});
+const verifyLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: LOGIN_MAX * 3,
+  message: "Too many attempts. Please try again later.",
+});
 
 router.post("/login", loginLimiter, accountLimiter, authController.login);
-router.post("/register", registerLimiter, authController.register);
+// Sign-up in two steps: details → e-mailed 6-digit code → account.
+router.post("/register", registerLimiter, mailLimiter, mailPerAddress, authController.registerStart);
+router.post("/register/resend", mailLimiter, mailPerAddress, authController.registerResend);
+router.post("/register/verify", verifyLimiter, authController.registerVerify);
+// Forgot password: an e-mailed link, then a new password.
+router.post("/forgot", mailLimiter, mailPerAddress, authController.forgotPassword);
+router.post("/reset", verifyLimiter, authController.resetPassword);
 router.get("/me", requireAuth, authController.me);
 router.put("/me", requireAuth, authController.updateProfile);
 router.put("/me/password", requireAuth, authController.changePassword);

@@ -39,6 +39,14 @@ module.exports = defineConfig({
       // The suite signs in far more often than a person would.
       RATE_LIMIT_LOGIN_MAX: "200",
       RATE_LIMIT_REGISTER_MAX: "200",
+      RATE_LIMIT_MAIL_MAX: "200",
+      // Sign-up codes and reset links are kept in memory and read back
+      // through /api/dev/outbox instead of being e-mailed.
+      DEV_MAILBOX: "1",
+      GMAIL_USER: "",
+      GMAIL_APP_PASSWORD: "",
+      BREVO_API_KEY: "",
+      APP_URL: "",
     },
   },
 });

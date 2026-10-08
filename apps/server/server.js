@@ -15,8 +15,9 @@ const auditLogRoutes = require("./src/routes/auditLog");
 const userRoutes = require("./src/routes/users");
 const commentRoutes = require("./src/routes/comments");
 const eventRoutes = require("./src/routes/events");
-const receiptRoutes = require("./src/routes/receipts");
 const settingsRoutes = require("./src/routes/settings");
+const activityRoutes = require("./src/routes/activity");
+const devRoutes = require("./src/routes/dev");
 const { failureLog } = require("./src/middleware/failureLog");
 const { wrap } = require("./src/middleware/asyncHandler");
 const { requireAuth } = require("./src/middleware/auth");
@@ -47,11 +48,8 @@ async function main() {
   // The live-update stream is excluded: compression buffers output, and an
   // event stream must reach the browser the moment each message is written.
   app.use(compression({ filter: (req, res) => req.path !== "/api/events" && compression.filter(req, res) }));
-  // A cap on body size: an unbounded parser is a free denial-of-service.
-  // Receipt uploads are the one exception — a 2 MB file is about 2.7 MB once
-  // base64-encoded — and get their own, larger ceiling; everything else
-  // stays at 100kb. (The second parser skips a body already read.)
-  app.use("/api/receipts", express.json({ limit: "3mb" }));
+  // A cap on body size: nothing this API accepts is anywhere near 100kb, and
+  // an unbounded parser is a free denial-of-service.
   app.use(express.json({ limit: "100kb" }));
   // Refused or failed changes are written to the audit log as Failed lines.
   app.use("/api", failureLog);
@@ -86,8 +84,11 @@ async function main() {
   app.use("/api/users", userRoutes);
   app.use("/api/comments", commentRoutes);
   app.use("/api/events", eventRoutes);
-  app.use("/api/receipts", receiptRoutes);
   app.use("/api/settings", settingsRoutes);
+  app.use("/api/activity", activityRoutes);
+  // Development-only outbox for the automated tests (DEV_MAILBOX=1, never in
+  // production); the route refuses otherwise.
+  app.use("/api/dev", devRoutes);
   app.get("/api/sync", requireAuth, syncController.sync);
 
   // An unknown API address answers in JSON like every other API error, rather

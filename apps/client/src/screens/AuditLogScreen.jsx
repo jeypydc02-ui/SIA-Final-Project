@@ -1,8 +1,9 @@
 import { useState } from "react";
 
-// Audit trail and integration log (spec sections 8.4, 7.6 and 15): when, who,
-// what, whether it worked, and the record it concerned. "Failed" shows only
-// refused or failed actions, with the error message the person saw.
+// Audit trail and integration log (spec sections 8.4, 7.6 and 15), holding
+// security and system events only: when, who, what, whether it worked, and
+// the record it concerned. "Failed" shows only refused or failed actions,
+// with the error message the person saw.
 export default function AuditLogScreen({ auditLog }) {
   const [filter, setFilter] = useState("all");
   const status = (l) => l.status || "Success";
@@ -11,7 +12,7 @@ export default function AuditLogScreen({ auditLog }) {
 
   return (
     <div>
-      <div className="pagehead"><div><h2>Audit Log</h2><div className="desc">Record of key actions — sign-ins, bills, payments, entries, receipts and reviews — with failed and refused actions marked, and the id of the record each one concerned.</div></div></div>
+      <div className="pagehead"><div><h2>Audit Log</h2><div className="desc">Security and system events — sign-ups, sign-ins and sign-outs, failed logins, password resets, role and account changes, and settings — with failed and refused actions marked, and the id of the record each one concerned. What Users do with their own money is not shown here; each User sees that on their own My Activity page.</div></div></div>
       <div className="tabrow" style={{ marginBottom: 14 }}>
         {[["all", "All", auditLog.length], ["Success", "Success", auditLog.length - failedCount], ["Failed", "Failed", failedCount]].map(([id, label, n]) => (
           <button key={id} type="button" className={"tab" + (filter === id ? " active" : "")} onClick={() => setFilter(id)}>

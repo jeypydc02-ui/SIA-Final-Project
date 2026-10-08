@@ -8,6 +8,7 @@ const PATHS = {
   edit: <><path d="M4 20h4L19 9l-4-4L4 16z" /><path d="M13.5 6.5l4 4" /></>,
   pie: <><path d="M12 3a9 9 0 1 0 9 9h-9z" /><path d="M15 3.5A9 9 0 0 1 20.5 9H15z" /></>,
   receipt: <><path d="M6 3h12v18l-3-2-3 2-3-2-3 2z" /><path d="M9 8h6M9 12h6" /></>,
+  activity: <path d="M3 12h4l3-7 4 14 3-7h4" />,
   history: <><path d="M3 12a9 9 0 1 0 3-6.7" /><path d="M3 4v4h4" /><path d="M12 8v4l3 2" /></>,
   check: <><rect x="4" y="3.5" width="16" height="17" rx="2" /><path d="M9 11l2.5 2.5L16 9" /></>,
   message: <><path d="M4 5h16v11H9l-5 4z" /></>,

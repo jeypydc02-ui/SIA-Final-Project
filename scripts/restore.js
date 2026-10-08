@@ -10,7 +10,6 @@ const Notification = require("../apps/server/src/models/Notification");
 const Comment = require("../apps/server/src/models/Comment");
 const AuditLog = require("../apps/server/src/models/AuditLog");
 const Session = require("../apps/server/src/models/Session");
-const Receipt = require("../apps/server/src/models/Receipt");
 const Setting = require("../apps/server/src/models/Setting");
 
 // Database recovery (spec section 10.4).
@@ -34,7 +33,6 @@ const COLLECTIONS = {
   notifications: Notification,
   comments: Comment,
   auditLogs: AuditLog,
-  receipts: Receipt,
   settings: Setting,
 };
 
@@ -113,7 +111,7 @@ async function restore() {
 
 // JSON turns ObjectIds and Dates into strings; convert the ones the schemas
 // expect back into their real types.
-const ID_FIELDS = ["_id", "user", "createdBy", "submittedBy", "reviewedBy", "parentId", "transactionId", "authorId", "previousBill", "owner", "entryId"];
+const ID_FIELDS = ["_id", "user", "createdBy", "submittedBy", "reviewedBy", "parentId", "transactionId", "authorId", "previousBill", "actorId"];
 const DATE_FIELDS = ["ts", "createdAt", "editedAt", "submittedAt", "reviewedAt"];
 
 function reviveIds(row) {
@@ -126,8 +124,6 @@ function reviveIds(row) {
   for (const field of DATE_FIELDS) {
     if (out[field]) out[field] = new Date(out[field]);
   }
-  // Receipt files travel as base64 text (see backup.js).
-  if (typeof out.data === "string") out.data = Buffer.from(out.data, "base64");
   return out;
 }
 

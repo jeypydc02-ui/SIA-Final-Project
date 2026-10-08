@@ -21,7 +21,7 @@ const FEATURES = [
   { icon: "receipt", title: "Bill reminders", text: "Add your bills once. The reminder service alerts you before each due date, and monthly bills come back on their own." },
   { icon: "card", title: "Payment tracking", text: "Mark a bill as paid and the payment is logged as an expense, with a notification and an audit record — in one tap." },
   { icon: "pie", title: "Monthly budgets", text: "Set a limit per category. FinTrack Stark shows what is left and warns you at 80% and when you go over." },
-  { icon: "check", title: "Receipt review", text: "Attach a photo, PDF or Drive link of the receipt. An Admin verifies it, and edits keep the earlier version — nothing changes silently." },
+  { icon: "shield", title: "Your own activity", text: "My Activity lists everything you recorded, paid or changed, and edits keep the earlier version — nothing changes silently." },
 ];
 
 const STEPS = [
@@ -32,13 +32,13 @@ const STEPS = [
 
 const ROLES = [
   { role: "User", icon: "wallet", title: "Your wallet", points: ["Balance and monthly spending at a glance", "Bills, budgets and payment history", "Quick add for expenses, income and bills"] },
-  { role: "Admin", icon: "server", title: "The admin console", points: ["Receipt review: verify, reject or ask for a clearer copy", "Accounts, roles and password resets", "System status, weekly activity and the audit log"] },
+  { role: "Admin", icon: "server", title: "The admin console", points: ["Accounts and roles: deactivate, reactivate or remove", "Sign-ins, sign-ups and failed logins in the security log", "System status and system settings"] },
 ];
 
 const FACTS = [
   { value: "8 hrs", label: "before a sign-in expires by default (the Admin can shorten it), so a forgotten session on a shared computer does not stay open" },
   { value: "0", label: "financial records stored on your device by the app — your data always comes fresh from the server" },
-  { value: "3", label: "roles with separate access: people only ever see their own bills, budgets and notes" },
+  { value: "6 digits", label: "an e-mailed code confirms your address before an account is created, and a forgotten password is reset by an e-mailed link" },
   { value: "v1 → v2", label: "every edit to an entry keeps the earlier version, and every change is written to the audit log" },
 ];
 
@@ -46,9 +46,9 @@ const FAQ = [
   { q: "What is FinTrack Stark?", a: "A personal finance app for tracking bills, payments, income, expenses and monthly budgets, with reminders before due dates and live notifications." },
   { q: "Does it move real money?", a: "No. FinTrack Stark is a record-keeping tool. Marking a bill as paid records a payment you made elsewhere — it never connects to a bank or e-wallet." },
   { q: "How do bill reminders work?", a: "Once a day, the reminder service checks every unpaid bill and sends an alert to your Inbox when one is due within three days or already overdue. Monthly bills schedule next month's bill when you pay them." },
-  { q: "What is a receipt review?", a: "When you record an expense or income you can attach its receipt — a photo, a PDF, or a Google Drive, OneDrive or Dropbox link. An Admin checks it against the entry and verifies it, rejects it, or asks for a clearer copy. Your entry counts in your balance either way." },
+  { q: "I forgot my password. What now?", a: "Choose \"Forgot your password?\" on the sign-in page and enter your e-mail. We send a link that works once and expires in 30 minutes; open it, choose a new password, and every device that was signed in is signed out." },
   { q: "Can I fix a wrong entry?", a: "Yes. Edit it from My Entries and the corrected version counts from then on, while the earlier one stays in Revision History. Deleting an entry stops it counting but keeps it in the history." },
-  { q: "Is my financial data safe?", a: "Passwords are hashed, sessions expire (after eight hours by default), and other users cannot see your bills, budgets or notes. Read the Privacy Policy for the details." },
+  { q: "Is my financial data safe?", a: "Passwords are hashed, sessions expire (after eight hours by default), and other users cannot see your bills, budgets, notes or activity — not even an Admin. Read the Privacy Policy for the details." },
   { q: "Can I install it on my phone?", a: "Yes. On Android or Chrome, choose Install app. On iPhone, open it in Safari and tap Share, then Add to Home Screen. It opens like an app and still opens without a connection." },
 ];
 
@@ -213,8 +213,8 @@ export default function LandingPage({ theme, setTheme, onLogin, onGetStarted }) 
       <section className="lp-section" id="roles">
         <div className="lp-container">
           <span className="lp-tag">Roles</span>
-          <h2 className="lp-h2">One app, three ways to use it</h2>
-          <p className="lp-sub">Every account starts as a User. Admins run the system and check receipts; they keep no wallet of their own.</p>
+          <h2 className="lp-h2">One app, two ways to use it</h2>
+          <p className="lp-sub">Every account starts as a User. Admins run the system; they keep no wallet of their own and never see anyone's money.</p>
           <div className="lp-roles two">
             {ROLES.map((r) => (
               <div key={r.role} className={"lp-role role-" + r.role.toLowerCase()}>

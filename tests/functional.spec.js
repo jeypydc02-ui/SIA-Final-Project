@@ -1,6 +1,5 @@
 const { test, expect } = require("@playwright/test");
-const { PNG } = require("./receipt-helpers");
-const { api, accounts, signIn, gotoScreen } = require("./helpers");
+const { api, accounts, signIn, gotoScreen, mailTo, codeIn, uniqueEmail } = require("./helpers");
 
 // Functional test cases (spec section 16: minimum 8).
 // Each case names the functional requirement it covers so the results drop
@@ -222,6 +221,8 @@ test.describe("Functional", () => {
   });
 
   test("FT-08 (FR-010) important actions are written to the audit log", async ({ page }) => {
+    // A failed sign-in, so the Failed filter has something of its own to show.
+    await api("/api/auth/login", { method: "POST", body: { email: accounts().other.email, password: "not-the-password" } });
     await signIn(page, "admin");
     await gotoScreen(page, "Audit Log");
 
@@ -238,37 +239,44 @@ test.describe("Functional", () => {
     await expect(page.locator("tbody tr").first()).toContainText("Failed");
   });
 
-  test("FT-11 (FR-003) a receipt photo can be attached while recording an entry", async ({ page }) => {
-    await signIn(page, "user", "/submit");
-    await page.locator("input[type=number]").first().fill("315");
-    await page.getByText("Attach a receipt").click();
-    await page.locator("#log-receipt-file").setInputFiles({ name: "pharmacy.png", mimeType: "image/png", buffer: PNG });
-    await expect(page.locator(".file-drop")).toContainText("pharmacy.jpg");
-    await page.getByRole("button", { name: "Save Entry" }).click();
-    await expect(page.locator(".toast")).toContainText("receipt sent for review");
+  test("FT-11 (FR-001) signing up needs the code e-mailed to the address", async ({ page }) => {
+    const email = uniqueEmail("ft11");
+    await page.goto("/register");
+    await page.locator(".auth-form input").nth(0).fill("Lara");
+    await page.locator(".auth-form input").nth(1).fill("Reyes");
+    await page.locator(".auth-form input").nth(2).fill(email);
+    await page.locator(".auth-form input[type=password]").nth(0).fill("ft11pass123");
+    await page.locator(".auth-form input[type=password]").nth(1).fill("ft11pass123");
+    await page.getByRole("button", { name: "Create Account" }).click();
+    await expect(page.locator(".auth-title")).toHaveText("Check your e-mail");
 
-    await page.goto("/entries");
-    const row = page.locator(".entry-row", { hasText: "315" }).first();
-    await expect(row.locator(".receipt-chip")).toHaveText("Receipt v1 · For review");
-    // Opening it shows the photo itself.
-    await row.locator(".receipt-chip").click();
-    await expect(page.locator(".receipt-modal img.receipt-img")).toBeVisible();
+    // A wrong code is refused and says how many tries are left.
+    const code = codeIn(await mailTo(email));
+    await page.locator("#otp").fill(code === "000000" ? "111111" : "000000");
+    await page.getByRole("button", { name: "Verify and Create Account" }).click();
+    await expect(page.locator(".auth-error")).toContainText("4 attempts left");
+
+    await page.locator("#otp").fill(code);
+    await page.getByRole("button", { name: "Verify and Create Account" }).click();
+    await expect(page.locator(".shell")).toBeVisible();
+    await expect(page.locator(".side-foot")).toContainText("Lara Reyes");
   });
 
-  test("FT-12 (FR-005) the Admin can verify, reject or send back a receipt from the review page", async ({ page }) => {
-    const { user } = accounts();
-    const { entryWithReceipt } = require("./receipt-helpers");
-    await entryWithReceipt(user.token, { amount: 818, note: "review page probe" });
-    await signIn(page, "admin", "/review");
-    const card = page.locator(".review-card", { hasText: "818" }).first();
-    await expect(card).toContainText("John Paul Dela Cruz");
-    await card.getByRole("button", { name: "Review receipt" }).click();
-    const dialog = page.locator(".review-modal");
-    await expect(dialog.locator("img.receipt-img")).toBeVisible();
-    await expect(dialog).toContainText("₱818.00");
-    await dialog.getByRole("button", { name: "Verify" }).click();
-    await expect(page.locator(".toast")).toContainText("Receipt verified");
-    await page.locator(".tab", { hasText: "Decided by you" }).click();
-    await expect(page.locator(".review-card", { hasText: "818" }).first()).toContainText("Verified");
+  test("FT-12 (FR-010) a User sees their own activity, and only theirs", async ({ page }) => {
+    const { user, other } = accounts();
+    await api("/api/budgets", { method: "POST", token: other.token, body: { category: "Health", limit: 777 } });
+    await api("/api/transactions", { method: "POST", token: user.token, body: { type: "Expense", category: "Food", amount: 432, date: new Date().toISOString().slice(0, 10), note: "FT-12 lunch" } });
+
+    await signIn(page, "user");
+    await gotoScreen(page, "My Activity");
+    const feed = page.locator(".inbox").first();
+    await expect(feed).toContainText("Expense Recorded");
+    await expect(feed).toContainText("FT-12 lunch");
+    await expect(page.locator(".pagehead")).toContainText("Only you can see this");
+    // Another person's budget never appears here.
+    await expect(page.locator("body")).not.toContainText("Health limit set to 777");
+    // Filters narrow the list by kind.
+    await page.locator(".tab", { hasText: "Bills & payments" }).click();
+    await expect(page.locator("body")).not.toContainText("FT-12 lunch");
   });
 });

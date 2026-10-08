@@ -2,8 +2,8 @@
 // read from this one list, so a screen cannot exist in the menu without an
 // address you can bookmark, share, or reload.
 //
-// Two roles: a User keeps their own wallet; an Admin runs the system and
-// reviews the receipts Users attach, with no wallet of their own.
+// Two roles: a User keeps their own wallet; an Admin runs the system
+// (accounts, settings, the security log) with no wallet of their own.
 const MEMBER = ["User"];
 const ADMIN = ["Admin"];
 
@@ -23,11 +23,9 @@ export const NAV = [
     { path: "/notes", label: "Notes / Feedback", icon: "message", roles: MEMBER },
     { path: "/payments", label: "Payment History", icon: "card", roles: MEMBER },
   ]},
-  { group: "Review", items: [
-    { path: "/review", label: "Receipt Review", icon: "check", roles: ADMIN },
-  ]},
   { group: "System", items: [
     { path: "/notifications", label: "Notification Log", icon: "bell" },
+    { path: "/activity", label: "My Activity", icon: "activity", roles: MEMBER },
     { path: "/audit", label: "Audit Log", icon: "shield", roles: ADMIN },
     { path: "/reports", label: "Reports", icon: "chart", roles: MEMBER },
     { path: "/users", label: "User & Role Mgmt", icon: "users", roles: ADMIN },

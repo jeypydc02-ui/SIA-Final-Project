@@ -1,9 +1,7 @@
-// Screens only ever see errors; the app shell needs to know about two kinds
-// that are not the screen's problem at all — the session ending (401) and the
-// account being required to change its password first (403 with a flag) — so
-// those are also announced as window events App listens for.
+// Screens only ever see errors; the app shell also needs to know when the
+// session itself has ended (401), which is not the screen's problem at all,
+// so that is announced as a window event App listens for.
 export const SESSION_ENDED = "fts:session-ended";
-export const PASSWORD_CHANGE_REQUIRED = "fts:password-change-required";
 const REQUEST_TIMEOUT_MS = 60000;
 
 export async function api(path, opts = {}) {
@@ -54,9 +52,6 @@ export async function api(path, opts = {}) {
     // a 401, but carries no flag, so it is not announced.
     if (res.status === 401 && data && data.sessionEnded && !opts.quiet) {
       window.dispatchEvent(new Event(SESSION_ENDED));
-    }
-    if (res.status === 403 && data && data.mustChangePassword) {
-      window.dispatchEvent(new Event(PASSWORD_CHANGE_REQUIRED));
     }
     throw err;
   }

@@ -50,16 +50,31 @@ async function gotoScreen(page, label) {
   return target;
 }
 
-// Registers a throwaway account so a test can prove one user cannot see
-// another user's records.
-async function registerUser(prefix = "test") {
-  const email = `${prefix}${Date.now()}${Math.floor(Math.random() * 1000)}@example.test`;
-  const res = await api("/api/auth/register", {
+// The last e-mail the server "sent" to an address. The test server runs with
+// DEV_MAILBOX=1, so mail is kept in memory instead of being delivered.
+async function mailTo(email) {
+  const res = await api("/api/dev/outbox?to=" + encodeURIComponent(email));
+  if (res.status !== 200) throw new Error("no e-mail for " + email);
+  return res.data;
+}
+const codeIn = (mail) => mail.text.match(/\b(\d{6})\b/)[1];
+const linkIn = (mail) => mail.text.match(/https?:\/\/\S+\/reset-password\?token=[a-f0-9]+/)[0];
+
+const uniqueEmail = (prefix = "test") => `${prefix}${Date.now()}${Math.floor(Math.random() * 1000)}@example.test`;
+
+// Registers a throwaway account (details, then the e-mailed code) so a test
+// can prove one user cannot see another user's records.
+async function registerUser(prefix = "test", password = "testpass123") {
+  const email = uniqueEmail(prefix);
+  const start = await api("/api/auth/register", {
     method: "POST",
-    body: { firstName: "Test", lastName: "Account", email, password: "testpass123" },
+    body: { firstName: "Test", lastName: "Account", email, password },
   });
-  if (res.status !== 201) throw new Error("registerUser failed: " + JSON.stringify(res.data));
-  return { email, password: "testpass123", token: res.data.token, user: res.data.user };
+  if (start.status !== 200) throw new Error("registerUser failed: " + JSON.stringify(start.data));
+  const code = codeIn(await mailTo(email));
+  const res = await api("/api/auth/register/verify", { method: "POST", body: { email, code } });
+  if (res.status !== 201) throw new Error("registerUser verify failed: " + JSON.stringify(res.data));
+  return { email, password, token: res.data.token, user: res.data.user };
 }
 
-module.exports = { BASE, api, accounts, signIn, gotoScreen, registerUser };
+module.exports = { BASE, api, accounts, signIn, gotoScreen, registerUser, mailTo, codeIn, linkIn, uniqueEmail };

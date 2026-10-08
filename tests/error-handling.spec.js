@@ -1,6 +1,5 @@
 const { test, expect } = require("@playwright/test");
-const { PNG, pngBody, entryWithReceipt } = require("./receipt-helpers");
-const { api, accounts, signIn, gotoScreen } = require("./helpers");
+const { api, accounts, signIn, gotoScreen, registerUser, mailTo, codeIn, linkIn, uniqueEmail } = require("./helpers");
 
 // Error-handling test cases (spec section 16: minimum 5), covering what
 // section 7.5 asks for: missing, invalid, duplicate, and failed data.
@@ -96,54 +95,74 @@ test.describe("Error handling", () => {
     expect((await api(`/api/transactions/${v2.data._id}`, { method: "DELETE", token: user.token })).status).toBe(400);
   });
 
-  test("ET-06 invalid uploads are refused with a reason, and nothing is saved", async () => {
-    const { user } = accounts();
-    const entry = (await api("/api/transactions", { method: "POST", token: user.token, body: { type: "Expense", category: "Food", amount: 75 } })).data;
-    const bad = [
-      [{ kind: "file", mimeType: "application/x-msdownload", data: PNG.toString("base64") }, /photo .* or a PDF/],
-      [{ kind: "file", mimeType: "image/png", data: Buffer.from("MZ this is a program").toString("base64") }, /not really a photo/],
-      [{ kind: "file", mimeType: "application/pdf", data: PNG.toString("base64") }, /not really a PDF/],
-      [{ kind: "file", mimeType: "image/png", data: Buffer.concat([PNG, Buffer.alloc(2.1 * 1024 * 1024)]).toString("base64") }, /larger than 2 MB/],
-      [{ kind: "file", mimeType: "image/png", data: "" }, /Choose a file/],
-      [{ kind: "link", url: "http://drive.google.com/insecure" }, /https/],
-      [{ kind: "link", url: "javascript:alert(1)" }, /https/],
-      [{ kind: "link", url: "not a link" }, /not a valid web address/],
-      [{ kind: "carrier-pigeon" }, /file or a link/],
-    ];
-    for (const [body, message] of bad) {
-      const res = await api("/api/receipts", { method: "POST", token: user.token, body: { ...body, transactionId: entry._id } });
-      expect(res.status, JSON.stringify(body).slice(0, 60)).toBe(400);
-      expect(res.data.error).toMatch(message);
-    }
-    const mine = await api("/api/receipts", { token: user.token });
-    expect(mine.data.some((r) => String(r.entryId) === entry._id)).toBe(false);
+  test("ET-06 a wrong, spent or expired sign-up code is refused, and no account is made", async () => {
+    const email = uniqueEmail("et06");
+    const start = (body = {}) => api("/api/auth/register", { method: "POST", body: { firstName: "Code", lastName: "Tester", email, password: "et06pass123", ...body } });
+    const verify = (code, to = email) => api("/api/auth/register/verify", { method: "POST", body: { email: to, code } });
 
-    // A deleted entry cannot be given a receipt.
-    await api(`/api/transactions/${entry._id}`, { method: "DELETE", token: user.token });
-    const late = await api("/api/receipts", { method: "POST", token: user.token, body: { ...pngBody(), transactionId: entry._id } });
-    expect(late.status).toBe(400);
+    // Missing or malformed details are refused before any e-mail is sent.
+    expect((await start({ email: "not-an-email" })).status).toBe(400);
+    expect((await start({ password: "short" })).status).toBe(400);
+    // An address that already has an account cannot be signed up again.
+    const taken = await api("/api/auth/register", { method: "POST", body: { firstName: "A", lastName: "B", email: accounts().user.email, password: "et06pass123" } });
+    expect(taken.status).toBe(409);
+
+    expect((await start()).status).toBe(200);
+    const code = codeIn(await mailTo(email));
+    const wrong = code === "000000" ? "111111" : "000000";
+    expect((await verify("12ab")).status).toBe(400);
+    const miss = await verify(wrong);
+    expect(miss.status).toBe(400);
+    expect(miss.data.error).toMatch(/4 attempts left/);
+    // A new code at once is refused; one a minute at most.
+    const soon = await api("/api/auth/register/resend", { method: "POST", body: { email } });
+    expect(soon.status).toBe(429);
+    // After five wrong tries even the right code no longer works.
+    for (let i = 0; i < 4; i++) await verify(wrong);
+    const locked = await verify(code);
+    expect(locked.status).toBe(429);
+    expect(locked.data.error).toMatch(/new one/);
+    // Nothing was created along the way.
+    expect((await api("/api/auth/login", { method: "POST", body: { email, password: "et06pass123" } })).status).toBe(401);
+
+    // An expired code is refused even when it is right.
+    const mongoose = require("mongoose");
+    const PendingRegistration = require("../apps/server/src/models/PendingRegistration");
+    expect((await start()).status).toBe(200);
+    const fresh = codeIn(await mailTo(email));
+    await mongoose.connect(process.env.MONGO_URI);
+    try {
+      await PendingRegistration.updateOne({ email }, { $set: { expiresAt: new Date(Date.now() - 1000) } });
+    } finally {
+      await mongoose.disconnect();
+    }
+    expect((await verify(fresh)).status).toBe(410);
+    // And a code for an address that never started signing up goes nowhere.
+    expect((await verify(fresh, uniqueEmail("never"))).status).toBe(410);
   });
 
-  test("ET-07 a failed review is refused cleanly and written to the log as Failed", async () => {
-    const { user, admin } = accounts();
-    const { receipt } = await entryWithReceipt(user.token);
-    const id = receipt.data._id;
-    // A note is required to send back or reject.
-    const noNote = await api(`/api/receipts/${id}/review`, { method: "POST", token: admin.token, body: { action: "reject" } });
-    expect(noNote.status).toBe(400);
-    expect((await api(`/api/receipts/${id}/review`, { method: "POST", token: admin.token, body: { action: "approve-ish" } })).status).toBe(400);
-    // Decided once; a second decision is refused.
-    expect((await api(`/api/receipts/${id}/review`, { method: "POST", token: admin.token, body: { action: "verify" } })).status).toBe(200);
-    const again = await api(`/api/receipts/${id}/review`, { method: "POST", token: admin.token, body: { action: "reject", note: "late" } });
-    expect(again.status).toBe(409);
-    // A verified receipt is final.
-    const replace = await api("/api/receipts", { method: "POST", token: user.token, body: { ...receipt.data, ...pngBody(), transactionId: receipt.data.entryId } });
-    expect(replace.status).toBe(409);
-    // The refusals are in the integration log with status, reason and record id.
-    const failed = await api("/api/audit-log?status=Failed", { token: admin.token });
-    const line = failed.data.find((l) => l.ref === id && /409/.test(l.detail));
-    expect(line).toBeTruthy();
-    expect(line.status).toBe("Failed");
-    expect(line.detail).toMatch(/already decided/);
+  test("ET-07 a reset link works once, and bad links or weak passwords are refused", async () => {
+    const person = await registerUser("et07");
+    const reset = (body) => api("/api/auth/reset", { method: "POST", body });
+    // The same answer whether or not an account exists: the form cannot be
+    // used to find out who has one.
+    const known = await api("/api/auth/forgot", { method: "POST", body: { email: person.email } });
+    const unknown = await api("/api/auth/forgot", { method: "POST", body: { email: uniqueEmail("nobody") } });
+    expect(known.status).toBe(200);
+    expect(unknown.status).toBe(200);
+    expect(unknown.data.message).toBe(known.data.message);
+    expect((await api("/api/auth/forgot", { method: "POST", body: { email: "nonsense" } })).status).toBe(400);
+
+    const token = new URL(linkIn(await mailTo(person.email))).searchParams.get("token");
+    expect((await reset({ token: "f".repeat(64), password: "et07newpass1" })).status).toBe(400);
+    expect((await reset({ token })).status).toBe(400);
+    const weak = await reset({ token, password: "short" });
+    expect(weak.status).toBe(400);
+    // A refused attempt does not spend the link.
+    expect((await reset({ token, password: "et07newpass1" })).status).toBe(200);
+    const twice = await reset({ token, password: "et07other22" });
+    expect(twice.status).toBe(400);
+    expect(twice.data.error).toMatch(/expired or was already used/);
+    expect((await api("/api/auth/login", { method: "POST", body: { email: person.email, password: "et07newpass1" } })).status).toBe(200);
   });
 });

@@ -5,8 +5,8 @@ const commentController = wrap(require("../controllers/commentController"));
 
 const router = express.Router();
 
-// Personal finance is for Users. An Admin administers the system and reviews
-// receipts, but has no wallet of their own (separation of duties, §8.2).
+// Personal finance is for Users. An Admin administers the system and has no
+// wallet of their own (separation of duties, §8.2).
 const member = [requireAuth, requireRole("User")];
 
 router.get("/", ...member, commentController.list);

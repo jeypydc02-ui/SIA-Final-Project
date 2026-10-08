@@ -8,9 +8,9 @@ const Notification = require("../apps/server/src/models/Notification");
 const AuditLog = require("../apps/server/src/models/AuditLog");
 const Comment = require("../apps/server/src/models/Comment");
 const Session = require("../apps/server/src/models/Session");
-const Receipt = require("../apps/server/src/models/Receipt");
+const PendingRegistration = require("../apps/server/src/models/PendingRegistration");
+const PasswordReset = require("../apps/server/src/models/PasswordReset");
 const Setting = require("../apps/server/src/models/Setting");
-const { samplePng } = require("./sample-receipt");
 const { todayISO: phToday, addDaysISO } = require("../apps/server/src/utils/dates");
 
 // `npm run seed -- --reset` wipes the collections first. Used when the schema
@@ -40,14 +40,17 @@ async function seed() {
     await Promise.all([
       User.deleteMany({}), Bill.deleteMany({}), Transaction.deleteMany({}),
       Budget.deleteMany({}), Notification.deleteMany({}), AuditLog.deleteMany({}),
-      Comment.deleteMany({}), Session.deleteMany({}), Receipt.deleteMany({}), Setting.deleteMany({}),
+      Comment.deleteMany({}), Session.deleteMany({}), Setting.deleteMany({}),
+      PendingRegistration.deleteMany({}), PasswordReset.deleteMany({}),
+      mongoose.connection.collection("receipts").deleteMany({}),
     ]);
     // Indexes are rebuilt from the current schemas, so a changed unique
     // constraint does not survive from the previous shape of the data.
     await Promise.all([
       User.syncIndexes(), Bill.syncIndexes(), Transaction.syncIndexes(),
       Budget.syncIndexes(), Notification.syncIndexes(), Comment.syncIndexes(),
-      Session.syncIndexes(), Receipt.syncIndexes(),
+      Session.syncIndexes(), AuditLog.syncIndexes(),
+      PendingRegistration.syncIndexes(), PasswordReset.syncIndexes(),
     ]);
     console.log("[seed] --reset: all collections cleared and indexes rebuilt.");
   }
@@ -83,9 +86,9 @@ async function seed() {
     passwordHash: user2Hash,
     role: "User",
   });
-  // Administers the system and reviews the receipts people attach (Review
-  // and Approval, spec section 5). Has no wallet of their own.
-  const reviewer = await User.create({
+  // Administers the system: accounts, settings and the security log. Has no
+  // wallet of their own.
+  await User.create({
     firstName: "System",
     lastName: "Admin",
     name: "System Admin",
@@ -133,7 +136,7 @@ async function seed() {
     status: "Superseded", version: 1,
     submittedBy: jp._id,
   });
-  const correctedEntry = await Transaction.create({
+  await Transaction.create({
     type: "Expense", category: "Transport", amount: 1650, date: addDays(-8),
     note: "Airport transfer (corrected from receipt)",
     status: "Approved", version: 2, parentId: originalEntry._id,
@@ -159,40 +162,25 @@ async function seed() {
     ].join("\n"),
   });
 
-  // Receipts in every state the review screen shows. Links point nowhere
-  // real: sample data only (spec section 21.8).
-  const [, groceries, , , netflix, market] = entries;
-  const hoursAgo = (h) => new Date(Date.now() - h * 3600000);
-  const reviewed = (note, h) => ({ reviewedBy: reviewer._id, reviewerName: reviewer.name, reviewedAt: hoursAgo(h), reviewNote: note });
-  const base = { owner: jp._id, ownerName: jp.name };
-  await Receipt.create([
-    { ...base, entryId: groceries._id, kind: "link", url: "https://drive.google.com/file/d/sample-groceries-receipt/view", provider: "Google Drive",
-      status: "Verified", submittedAt: hoursAgo(400), ...reviewed("Matches the amount and date.", 390) },
-    { ...base, entryId: netflix._id, kind: "link", url: "https://onedrive.live.com/sample/netflix-invoice", provider: "OneDrive",
-      status: "Verified", submittedAt: hoursAgo(140), ...reviewed("", 130) },
-    { ...base, entryId: market._id, kind: "file", fileName: "market-receipt.png", mimeType: "image/png",
-      data: samplePng(), status: "For Review", submittedAt: hoursAgo(2) },
-  ]);
-  const blurry = await Receipt.create({
-    ...base, entryId: correctedEntry._id, kind: "link", url: "https://www.dropbox.com/s/sample/airport-blurry.jpg", provider: "Dropbox",
-    status: "Needs Revision", latest: false, submittedAt: hoursAgo(180), ...reviewed("The photo is blurry — the total cannot be read.", 170),
-  });
-  await Receipt.create({
-    ...base, entryId: correctedEntry._id, kind: "link", url: "https://www.dropbox.com/s/sample/airport-receipt.jpg", provider: "Dropbox",
-    version: 2, parentId: blurry._id, status: "For Review", submittedAt: hoursAgo(20),
-  });
-  await Comment.create({
-    transactionId: correctedEntry._id, author: reviewer.name, authorId: reviewer._id,
-    title: "Receipt v1 needs revision", text: "The photo is blurry — the total cannot be read.", ts: hoursAgo(170),
-  });
-
   // Bill reminders are deliberately NOT seeded: the reminder service raises
   // those itself on its first sweep, which is what makes them real.
   await Notification.insertMany([
     { user: jp._id, type: "bill", message: "Welcome to FinTrack Stark. Your sample bills are set up — the reminder service will alert you before each due date." },
   ]);
 
-  await AuditLog.create({ user: "System", action: "Seed", detail: "Sample data initialized for demo." });
+  // A short history for the demo User's My Activity screen, and the
+  // matching sign-up line on the Admin's security log.
+  const minsAgo = (m) => new Date(Date.now() - m * 60000);
+  const mine = { user: jp.name, actorId: jp._id };
+  await AuditLog.create([
+    { user: "System", action: "Seed", detail: "Sample data initialized for demo.", scope: "system", ts: minsAgo(30 * 24 * 60) },
+    { ...mine, action: "Account Created", detail: `${jp.name} (${jp.email}) verified their e-mail and joined.`, scope: "system", ts: minsAgo(21 * 24 * 60) },
+    { ...mine, action: "Income Recorded", detail: `Salary: 32000 on ${addDays(-20)} — Monthly salary.`, scope: "user", ts: minsAgo(20 * 24 * 60) },
+    { ...mine, action: "Budget Created", detail: "Food limit set to 6000.", scope: "user", ts: minsAgo(19 * 24 * 60) },
+    { ...mine, action: "Transaction Edited", detail: "Transport 1650 — v2 replaces v1.", scope: "user", ts: minsAgo(8 * 24 * 60) },
+    { ...mine, action: "Payment Recorded", detail: "Netflix Subscription marked Paid, amount 549.", scope: "user", ts: minsAgo(6 * 24 * 60) },
+    { ...mine, action: "Expense Recorded", detail: `Food: 1200 on ${todayISO()} — Weekly market run.`, scope: "user", ts: minsAgo(90) },
+  ]);
 
   console.log("[seed] done. Demo accounts:");
   console.log("  User   -> jp@fintrackstark.app / demo123");
