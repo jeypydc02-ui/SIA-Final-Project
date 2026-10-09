@@ -769,7 +769,7 @@ test.describe("Pre-launch audit regressions", () => {
     }
   });
 
-  test("RT-38 an overall monthly budget, a daily allowance, and earlier months", async ({ page }) => {
+  test("RT-38 an overall monthly budget, reducing a budget, and earlier months", async ({ page }) => {
     const person = await registerUser("rt38");
     const post = (path, body) => api(path, { method: "POST", token: person.token, body });
     const today = todayISO();
@@ -796,15 +796,36 @@ test.describe("Pre-launch audit regressions", () => {
     const overall = page.locator(".overall-budget");
     await expect(overall).toContainText("₱2,050.00");
     await expect(overall).toContainText("Over by ₱50.00");
-    await expect(overall.locator(".per-day")).toHaveText("Nothing left to spend this month");
-    // A category with room left shows what can still be spent each day.
-    const food = page.locator(".card", { hasText: "Food" }).filter({ hasNot: page.locator(".overall-budget") }).last();
-    await expect(food.locator(".per-day")).toContainText(/a day (for the next \d+ days|for the rest of today)/);
 
-    // Last month: only last month's spending, and no daily allowance.
+    // Reducing a budget: ₱5,000 less ₱100 is ₱4,900, and the card says so.
+    const food = page.locator(".grid-2 .card", { hasText: "Food" });
+    await food.getByRole("button", { name: "Edit" }).click();
+    const dialog = page.locator(".modal");
+    await expect(dialog.getByRole("button", { name: "Decrease" })).toHaveAttribute("aria-pressed", "true");
+    // Taking off more than the budget has is refused before it is sent.
+    await page.locator("#budget-change-amount").fill("6000");
+    await expect(dialog.locator(".change-preview")).toContainText("cannot go below");
+    await expect(dialog.getByRole("button", { name: "Save" })).toBeDisabled();
+    await page.locator("#budget-change-amount").fill("100");
+    await expect(dialog.locator(".change-preview")).toHaveText("₱5,000.00 → ₱4,900.00");
+    await dialog.getByRole("button", { name: "Save" }).click();
+    await expect(page.locator(".toast")).toContainText("Food budget reduced by ₱100.00 — now ₱4,900.00");
+    await expect(food).toContainText("of ₱4,900.00");
+    await expect(food.locator(".budget-change")).toContainText("Reduced by ₱100.00");
+    await expect(food.locator(".budget-change")).toContainText("was ₱5,000.00");
+    // Raising it again works the same way.
+    await food.getByRole("button", { name: "Edit" }).click();
+    await dialog.getByRole("button", { name: "Increase" }).click();
+    await page.locator("#budget-change-amount").fill("600");
+    await dialog.getByRole("button", { name: "Save" }).click();
+    await expect(food).toContainText("of ₱5,500.00");
+    await expect(food.locator(".budget-change")).toContainText("Raised by ₱600.00");
+    const feed = (await api("/api/activity", { token: person.token })).data;
+    expect(feed.some((l) => l.action === "Budget Updated" && l.detail.includes("5000 -> 4900 (reduced by 100)"))).toBe(true);
+
+    // Last month: only last month's spending.
     await page.getByRole("button", { name: "Previous month" }).first().click();
     await expect(overall).toContainText("₱400.00");
-    await expect(page.locator(".per-day")).toHaveCount(0);
     await expect(page.locator(".budget-month")).toContainText("against your current limits");
 
     // Reports agree, for both months.

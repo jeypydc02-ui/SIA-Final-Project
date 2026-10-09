@@ -1,7 +1,7 @@
 import { useState } from "react";
-import { peso, thisMonthISO } from "../lib/utils.js";
+import { peso, thisMonthISO, fmtDate } from "../lib/utils.js";
 import { EXPENSE_CATEGORIES } from "../lib/categories.js";
-import { OVERALL, splitBudgets, monthSpending, spentFor, perDay, monthYearLabel } from "../lib/budgets.js";
+import { OVERALL, splitBudgets, monthSpending, spentFor, monthYearLabel } from "../lib/budgets.js";
 import MonthPicker from "../components/MonthPicker.jsx";
 
 // Every expense category can have a budget, including the ones bills are
@@ -10,15 +10,35 @@ const SUGGESTED = EXPENSE_CATEGORIES;
 
 const titleOf = (category) => (category === OVERALL ? "Overall Monthly" : category);
 
+// Changing a limit: take some off, add some on, or type the new figure.
+const MODES = [["decrease", "Decrease"], ["increase", "Increase"], ["set", "Set new limit"]];
+function newLimitOf(current, mode, amount) {
+  const n = Number(amount);
+  if (!(n > 0)) return null;
+  if (mode === "decrease") return Math.round((current - n) * 100) / 100;
+  if (mode === "increase") return Math.round((current + n) * 100) / 100;
+  return n;
+}
+
+// "Reduced by ₱100.00 · was ₱500.00 · Oct 9, 2026" — the last change to the limit.
+function LimitChange({ budget }) {
+  if (budget.previousLimit == null || budget.previousLimit === budget.limit) return null;
+  const diff = budget.limit - budget.previousLimit;
+  return (
+    <div className={"budget-change " + (diff < 0 ? "down" : "up")}>
+      <span className="tag">{diff < 0 ? "Reduced" : "Raised"} by {peso(Math.abs(diff))}</span>
+      <span>was {peso(budget.previousLimit)}{budget.limitChangedAt ? ` · ${fmtDate(budget.limitChangedAt)}` : ""}</span>
+    </div>
+  );
+}
+
 // One budget's figures for the month on screen: spent of limit, a bar, what
-// is left (or how far over), and — for the month in progress — how much can
-// still be spent each day.
-function BudgetFigures({ budget, spent, month }) {
+// is left (or how far over), and the last change to the limit.
+function BudgetFigures({ budget, spent }) {
   // Guard the division: a limit can never be zero server-side, but a stale
   // record should still render rather than print Infinity.
   const pct = budget.limit > 0 ? Math.min(100, Math.round((spent / budget.limit) * 100)) : 0;
   const over = spent > budget.limit;
-  const daily = perDay(budget.limit, spent, month);
   return (
     <>
       <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12.5, margin: "12px 0 6px" }}>
@@ -34,13 +54,7 @@ function BudgetFigures({ budget, spent, month }) {
       <div style={{ fontSize: 11.5, color: "var(--text-dim)", marginTop: 8 }}>
         {over ? `Over by ${peso(spent - budget.limit)}` : `${peso(budget.limit - spent)} remaining`}
       </div>
-      {daily && (
-        <div className="per-day">
-          {daily.amount > 0
-            ? <><strong>{peso(daily.amount)}</strong> a day {daily.days === 1 ? "for the rest of today" : `for the next ${daily.days} days`}</>
-            : "Nothing left to spend this month"}
-        </div>
-      )}
+      <LimitChange budget={budget} />
     </>
   );
 }
@@ -49,7 +63,7 @@ export default function BudgetsScreen({ budgets, tx, addBudget, editBudget, dele
   const current = thisMonthISO();
   const [month, setMonth] = useState(current);
   const [adding, setAdding] = useState(null); // {category, limit}
-  const [editing, setEditing] = useState(null); // {_id, category, limit}
+  const [editing, setEditing] = useState(null); // {budget, mode, amount}
   const [busy, setBusy] = useState(false);
 
   // A budget is a monthly limit, so only the chosen month's recorded
@@ -71,11 +85,20 @@ export default function BudgetsScreen({ budgets, tx, addBudget, editBudget, dele
     if (ok) setAdding(null);
   }
 
+  const startEdit = (budget) => setEditing({ budget, mode: "decrease", amount: "" });
+  const nextLimit = editing && newLimitOf(editing.budget.limit, editing.mode, editing.amount);
+  const editProblem = !editing || nextLimit === null ? "Enter an amount greater than zero."
+    : nextLimit < 1 ? `You can take off at most ${peso(editing.budget.limit - 1)}; a budget cannot go below ₱1.00.`
+    : nextLimit === editing.budget.limit ? "That is the limit it already has." : "";
+
   async function submitEdit(e) {
     e.preventDefault();
-    if (busy) return;
+    if (busy || editProblem) return;
     setBusy(true);
-    const ok = await editBudget(editing._id, { limit: Number(editing.limit) });
+    const { budget } = editing;
+    const diff = nextLimit - budget.limit;
+    const message = `${titleOf(budget.category)} budget ${diff < 0 ? "reduced" : "raised"} by ${peso(Math.abs(diff))} — now ${peso(nextLimit)}.`;
+    const ok = await editBudget(budget._id, { limit: nextLimit }, message);
     setBusy(false);
     if (ok) setEditing(null);
   }
@@ -105,16 +128,13 @@ export default function BudgetsScreen({ budgets, tx, addBudget, editBudget, dele
       {overall ? (
         <div className="card overall-budget">
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-            <div>
-              <h3 style={{ margin: 0 }}>Overall monthly budget</h3>
-              <div className="hint" style={{ margin: "4px 0 0" }}>All your expenses together, every category.</div>
-            </div>
+            <h3 style={{ margin: 0 }}>Overall monthly budget</h3>
             <div style={{ display: "flex", gap: 6 }}>
-              <button className="btn small ghost" onClick={() => setEditing({ ...overall, limit: String(overall.limit) })}>Edit</button>
+              <button className="btn small ghost" onClick={() => startEdit(overall)}>Edit</button>
               <button className="btn small danger" onClick={() => deleteBudget(overall)}>Remove</button>
             </div>
           </div>
-          <BudgetFigures budget={overall} spent={spending.total} month={month} />
+          <BudgetFigures budget={overall} spent={spending.total} />
         </div>
       ) : (
         <div className="card overall-budget unset">
@@ -154,11 +174,11 @@ export default function BudgetsScreen({ budgets, tx, addBudget, editBudget, dele
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
                 <h3 style={{ margin: 0 }}>{b.category}</h3>
                 <div style={{ display: "flex", gap: 6 }}>
-                  <button className="btn small ghost" onClick={() => setEditing({ ...b, limit: String(b.limit) })}>Edit</button>
+                  <button className="btn small ghost" onClick={() => startEdit(b)}>Edit</button>
                   <button className="btn small danger" onClick={() => deleteBudget(b)}>Remove</button>
                 </div>
               </div>
-              <BudgetFigures budget={b} spent={spentFor(b, spending)} month={month} />
+              <BudgetFigures budget={b} spent={spentFor(b, spending)} />
             </div>
           ))}
         </div>
@@ -196,15 +216,30 @@ export default function BudgetsScreen({ budgets, tx, addBudget, editBudget, dele
       {editing && (
         <div className="modal-overlay" onClick={() => setEditing(null)}>
           <div className="modal" onClick={(e) => e.stopPropagation()}>
-            <h3>Edit {titleOf(editing.category)} Budget</h3>
+            <h3>Change {titleOf(editing.budget.category)} Budget</h3>
+            <p className="hint" style={{ marginTop: 0 }}>Current limit: <strong>{peso(editing.budget.limit)}</strong></p>
             <form onSubmit={submitEdit}>
-              <div className="form-row">
-                <label className="field">Monthly limit (₱)</label>
-                <input type="number" min="1" value={editing.limit} onChange={(e) => setEditing({ ...editing, limit: e.target.value })} required />
+              <div className="tabrow" role="group" aria-label="How to change it" style={{ marginBottom: 12 }}>
+                {MODES.map(([key, label]) => (
+                  <button key={key} type="button" className={"tab" + (editing.mode === key ? " active" : "")} aria-pressed={editing.mode === key}
+                    onClick={() => setEditing({ ...editing, mode: key })}>{label}</button>
+                ))}
               </div>
+              <div className="form-row">
+                <label className="field" htmlFor="budget-change-amount">
+                  {editing.mode === "decrease" ? "Take off (₱)" : editing.mode === "increase" ? "Add (₱)" : "New monthly limit (₱)"}
+                </label>
+                <input id="budget-change-amount" type="number" min="0.01" step="0.01" autoFocus value={editing.amount}
+                  onChange={(e) => setEditing({ ...editing, amount: e.target.value })} />
+              </div>
+              {editing.amount !== "" && (
+                <div className={"change-preview" + (editProblem ? " bad" : "")}>
+                  {editProblem || <>{peso(editing.budget.limit)} → <strong>{peso(nextLimit)}</strong></>}
+                </div>
+              )}
               <div className="actions">
                 <button type="button" className="btn ghost" onClick={() => setEditing(null)} disabled={busy}>Cancel</button>
-                <button className="btn" type="submit" disabled={busy}>{busy ? "Saving…" : "Save"}</button>
+                <button className="btn" type="submit" disabled={busy || !!editProblem}>{busy ? "Saving…" : "Save"}</button>
               </div>
             </form>
           </div>

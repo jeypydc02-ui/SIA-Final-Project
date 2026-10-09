@@ -56,10 +56,17 @@ async function update(req, res) {
     if (clash) return res.status(409).json({ error: `You already have a ${budgetName(name)}.` });
     budget.category = name;
   }
-  if (limit !== undefined) budget.limit = parseAmount(limit);
+  const before = budget.limit;
+  if (limit !== undefined && parseAmount(limit) !== before) {
+    budget.previousLimit = before;
+    budget.limit = parseAmount(limit);
+    budget.limitChangedAt = new Date();
+  }
   await budget.save();
 
-  await logAction(req.user, "Budget Updated", `${budget.category} limit now ${budget.limit}.`);
+  const change = budget.limit - before;
+  const how = change < 0 ? `reduced by ${-change}` : change > 0 ? `raised by ${change}` : "unchanged";
+  await logAction(req.user, "Budget Updated", `${budget.category} limit ${before} -> ${budget.limit} (${how}).`);
   publish(req.user.id, "budgets");
   res.json(budget);
 }
