@@ -39,7 +39,7 @@ npm start                          # API + built frontend on one port
 npm run reminder                   # optional: the stand-alone reminder worker, if the host allows a second process
 ```
 
-Everyone else signs up through the app as a User, confirming their e-mail with a code. An Admin can make another account an Admin from User & Role Management. Admins keep no wallet of their own, so use a separate User account for your own bills and entries.
+The system has exactly one Admin: `create-admin` refuses to make a second. Everyone else signs up through the app as a User, confirming their e-mail with a code, and roles are never changed from the app. The Admin keeps no wallet, so use a separate User account for your own bills and entries.
 
 ## 4. E-mail: sign-up codes and forgotten passwords
 

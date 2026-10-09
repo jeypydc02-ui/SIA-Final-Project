@@ -49,7 +49,7 @@ Bill reminders: once a day, every unpaid bill due within the reminder lead time 
 | Role | Dashboard | Can do |
 |---|---|---|
 | User | Home: wallet, spending by category, bills, budgets, recent entries | own bills, budgets, income/expense entries, notes, and their own **My Activity** history |
-| Admin | Admin Console: system status, accounts, deactivated accounts, security events this week, failed logins | manage accounts and roles, deactivate/reactivate accounts, system settings, and the security log. **No wallet of their own** — finance endpoints refuse an Admin, and the Admin never sees anyone's money or activity |
+| Admin | Admin Console: system status, accounts, deactivated accounts, security events this week, failed logins | the system's one Admin (created with `npm run create-admin`): deactivate, reactivate or remove User accounts, system settings, and the security log. Roles are never changed from the app. **No wallet of their own** — finance endpoints refuse an Admin, and the Admin never sees anyone's money or activity |
 
 Income and expense entries count the moment they are recorded. Editing one saves a new version (v1 → v2) and keeps the earlier one in Revision History; deleting one keeps it in the history as "Deleted".
 

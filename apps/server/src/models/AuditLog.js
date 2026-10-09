@@ -7,7 +7,7 @@ const { Schema, model } = require("mongoose");
 // Each line also says who may see it:
 //   "user"   — the person's own money activity (My Activity); the Admin does
 //              not see it, because it would show what people spend.
-//   "system" — sign-ins, accounts, roles, settings, security (Admin Activity Log).
+//   "system" — sign-ins, accounts, settings, security (Admin Activity Log).
 //   "both"   — security events about a person's own account, such as a
 //              password change: shown to that person and to the Admin.
 const AuditLogSchema = new Schema({

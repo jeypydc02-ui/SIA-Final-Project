@@ -70,17 +70,13 @@ test.describe("Security and access control", () => {
     // A User may not administer accounts or read the audit trail.
     expect((await api("/api/users", { token: user.token })).status).toBe(403);
     expect((await api("/api/audit-log", { token: user.token })).status).toBe(403);
-    expect((await api(`/api/users/${user.user.id}/role`, {
-      method: "PUT", token: user.token, body: { role: "Admin" },
-    })).status).toBe(403);
-
-    // Only Admin and User exist; anything else (including the old Reviewer) is refused.
-    expect((await api(`/api/users/${other.user.id}/role`, {
-      method: "PUT", token: admin.token, body: { role: "Superuser" },
-    })).status).toBe(400);
-    expect((await api(`/api/users/${other.user.id}/role`, {
-      method: "PUT", token: admin.token, body: { role: "Reviewer" },
-    })).status).toBe(400);
+    // There is no way to change a role from the app, for anyone: the system
+    // has one Admin, and everyone else is a User.
+    for (const who of [user, admin]) {
+      expect((await api(`/api/users/${other.user.id}/role`, {
+        method: "PUT", token: who.token, body: { role: "Admin" },
+      })).status).toBe(404);
+    }
 
     // Registration never grants elevated rights, whatever the caller asks for.
     const sneakyEmail = uniqueEmail("sneaky");
@@ -94,11 +90,10 @@ test.describe("Security and access control", () => {
     expect(sneaky.status).toBe(201);
     expect(sneaky.data.user.role).toBe("User");
 
-    // Separation of duties: an Admin cannot change their own role, and the
-    // last Admin cannot be demoted.
-    expect((await api(`/api/users/${admin.user.id}/role`, {
-      method: "PUT", token: admin.token, body: { role: "User" },
-    })).status).toBe(400);
+    // The Admin account can be neither deactivated nor deleted, so the system
+    // is never left without an administrator.
+    expect((await api(`/api/users/${admin.user.id}/status`, { method: "PUT", token: admin.token, body: { active: false } })).status).toBe(400);
+    expect((await api(`/api/users/${admin.user.id}`, { method: "DELETE", token: admin.token })).status).toBe(400);
 
     // The restricted screens are also absent from the interface, not merely
     // refused by the API.

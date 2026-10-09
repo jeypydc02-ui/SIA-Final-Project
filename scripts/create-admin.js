@@ -4,9 +4,10 @@ const { hashPassword } = require("../apps/server/src/services/passwords");
 const { passwordProblem } = require("../apps/server/src/utils/validate");
 const { logAction } = require("../apps/server/src/services/audit");
 
-// Creates the first Admin on a fresh production database, where the demo seed
-// (with its published passwords) must never run. Everyone else registers
-// through the app and is promoted from User & Role Management.
+// Creates the Admin on a fresh production database, where the demo seed (with
+// its published passwords) must never run. The system has exactly one Admin;
+// everyone else signs up through the app as a User, and roles are never
+// changed from the app.
 //
 //   ADMIN_EMAIL=you@example.com ADMIN_PASSWORD='a long passphrase' \
 //   ADMIN_FIRST_NAME=Juan ADMIN_LAST_NAME='Dela Cruz' npm run create-admin
@@ -31,6 +32,10 @@ async function main() {
 
   await connectDB();
   try {
+    const existingAdmin = await User.findOne({ role: "Admin" });
+    if (existingAdmin) {
+      throw new Error(`this system already has its Admin (${existingAdmin.email}); there is only one`);
+    }
     if (await User.findOne({ email })) {
       throw new Error(`an account with ${email} already exists`);
     }

@@ -397,10 +397,6 @@ function FinTrackStark() {
   }
 
   // ---- Admin ----
-  const setUserRole = (userId, role) => perform(
-    () => api("/api/users/" + userId + "/role", { method: "PUT", body: { role } }),
-    "Role updated."
-  );
   function deleteUser(user) {
     askConfirm(`Delete the account for ${user.name}? Their bills, budgets, entries and notes are removed too. This cannot be undone.`, async () => {
       setConfirmDialog(null);
@@ -518,7 +514,7 @@ function FinTrackStark() {
             <Route path="/system" element={<SystemSettingsScreen onSaved={fireToast} />} />
           </Route>
           <Route element={<RequireRole session={session} path="/users" />}>
-            <Route path="/users" element={<UsersScreen users={users} session={session} setUserRole={setUserRole} setUserActive={setUserActive} deleteUser={deleteUser} />} />
+            <Route path="/users" element={<UsersScreen users={users} session={session} setUserActive={setUserActive} deleteUser={deleteUser} />} />
           </Route>
 
           <Route path="*" element={<NotFoundScreen onHome={() => navigate("/dashboard")} />} />
