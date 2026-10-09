@@ -1,16 +1,31 @@
+import { useState } from "react";
 import { peso, thisMonthISO } from "../lib/utils.js";
+import { splitBudgets, monthSpending, monthYearLabel } from "../lib/budgets.js";
+import MonthPicker from "../components/MonthPicker.jsx";
+
+function BudgetRow({ label, limit, spent, strong }) {
+  const variance = limit - spent;
+  const over = variance < 0;
+  return (
+    <tr className={strong ? "row-total" : ""}>
+      <td>{label}</td><td>{peso(limit)}</td><td>{peso(spent)}</td>
+      <td style={{ color: over ? "var(--danger)" : "var(--ok)" }}>{over ? "-" : "+"}{peso(Math.abs(variance))}</td>
+      <td><span className={"badge " + (over ? "danger" : "ok")}>{over ? "Over Budget" : "Within Budget"}</span></td>
+    </tr>
+  );
+}
 
 export default function ReportsScreen({ tx, bills, budgets }) {
+  const [month, setMonth] = useState(thisMonthISO);
   const approved = tx.filter(t => t.status === "Approved");
   const byCat = {};
   approved.filter(t => t.type === "Expense").forEach(t => { byCat[t.category] = (byCat[t.category] || 0) + t.amount; });
   const max = Math.max(1, ...Object.values(byCat));
-  // Budget vs. Actual compares a monthly limit, so it uses this month only,
-  // the same figure the Budgets screen shows.
-  const month = thisMonthISO();
-  const monthByCat = {};
-  approved.filter(t => t.type === "Expense" && String(t.date).startsWith(month))
-    .forEach(t => { monthByCat[t.category] = (monthByCat[t.category] || 0) + t.amount; });
+  // Budget vs. Actual compares a monthly limit with one month's spending —
+  // the month in progress unless an earlier one is picked, the same figures
+  // the Budgets screen shows. Earlier months use the current limits.
+  const spending = monthSpending(tx, month);
+  const { overall, categories } = splitBudgets(budgets);
   // paidAmount defaults to null on the model, so coerce before summing —
   // one legacy row without it would otherwise turn the whole total into NaN.
   const totalPaid = bills.filter(b => b.paid).reduce((s, b) => s + (Number(b.paidAmount) || 0), 0);
@@ -44,25 +59,21 @@ export default function ReportsScreen({ tx, bills, budgets }) {
       </div>
 
       <div className="card" style={{ marginTop: 16 }}>
-        <h3>Budget vs. Actual <span style={{ fontWeight: 400, color: "var(--text-dim)" }}>· this month</span></h3>
-        <table>
-          <thead><tr><th>Category</th><th>Monthly Limit</th><th>Spent This Month</th><th>Variance</th><th>Status</th></tr></thead>
-          <tbody>
-            {budgets.map(b => {
-              const spent = monthByCat[b.category] || 0;
-              const variance = b.limit - spent;
-              const over = variance < 0;
-              return (
-                <tr key={b._id}>
-                  <td>{b.category}</td><td>{peso(b.limit)}</td><td>{peso(spent)}</td>
-                  <td style={{ color: over ? "var(--danger)" : "var(--ok)" }}>{over ? "-" : "+"}{peso(Math.abs(variance))}</td>
-                  <td><span className={"badge " + (over ? "danger" : "ok")}>{over ? "Over Budget" : "Within Budget"}</span></td>
-                </tr>
-              );
-            })}
-            {budgets.length === 0 && <tr><td colSpan="5"><div className="empty">No budgets set yet.</div></td></tr>}
-          </tbody>
-        </table>
+        <div className="panel-head" style={{ flexWrap: "wrap", gap: 8 }}>
+          <h3 style={{ margin: 0 }}>Budget vs. Actual <span style={{ fontWeight: 400, color: "var(--text-dim)" }}>· {monthYearLabel(month)}</span></h3>
+          <MonthPicker month={month} onChange={setMonth} />
+        </div>
+        <div className="table-scroll">
+          <table>
+            <thead><tr><th>Category</th><th>Monthly Limit</th><th>Spent</th><th>Variance</th><th>Status</th></tr></thead>
+            <tbody>
+              {categories.map(b => <BudgetRow key={b._id} label={b.category} limit={b.limit} spent={spending.byCategory[b.category] || 0} />)}
+              {overall && <BudgetRow label="Overall (all expenses)" limit={overall.limit} spent={spending.total} strong />}
+              {budgets.length === 0 && <tr><td colSpan="5"><div className="empty">No budgets set yet.</div></td></tr>}
+            </tbody>
+          </table>
+        </div>
+        {month !== thisMonthISO() && budgets.length > 0 && <div className="hint" style={{ marginTop: 8 }}>Compared with your current limits.</div>}
       </div>
     </div>
   );

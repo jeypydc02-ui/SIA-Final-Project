@@ -1112,3 +1112,22 @@ div.field{font-size:12px; font-weight:600; color:var(--text-dim); margin-bottom:
 .setting-suffix{font-size:12.5px; color:var(--text-dim); max-width:150px;}
 .settings-foot{display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap; margin-top:16px;}
 @media(max-width:600px){ .setting-row{flex-direction:column; gap:8px;} }
+
+/* Budgets: month picker, the overall budget, and the daily allowance */
+.budget-month{display:flex; align-items:center; gap:12px; flex-wrap:wrap; margin-bottom:14px;}
+.budget-month .hint{margin:0;}
+.month-picker{display:inline-flex; align-items:center; gap:6px;}
+.month-step{
+  font:inherit; font-size:18px; line-height:1; width:32px; height:32px; border-radius:50%;
+  border:1px solid var(--line); background:var(--panel); color:var(--text); cursor:pointer;
+}
+.month-step:hover:not(:disabled){border-color:var(--primary); color:var(--primary);}
+.month-step:disabled{opacity:.35; cursor:default;}
+.month-picker-label{min-width:128px; text-align:center; font-weight:600; font-size:14px; color:var(--text);}
+.month-picker .linkbtn{margin-left:4px;}
+.overall-budget{margin-bottom:16px; border-left:4px solid var(--primary);}
+.overall-budget.unset{display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; border-left-color:var(--line);}
+.per-day{margin-top:8px; font-size:12.5px; color:var(--text-dim);}
+.per-day strong{color:var(--primary);}
+.budget-row.overall .row-sub strong{color:var(--primary);}
+tr.row-total td{font-weight:700; border-top:2px solid var(--line);}

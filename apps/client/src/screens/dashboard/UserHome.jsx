@@ -3,6 +3,7 @@ import { peso, fmtDate, billStatus, thisMonthISO, todayISO, txStatusLabel } from
 import Icon from "../../components/Icon.jsx";
 import CategoryIcon, { categoryTone } from "../../components/CategoryIcon.jsx";
 import DonutChart from "../../components/DonutChart.jsx";
+import { shiftMonth, monthLabel, splitBudgets, perDay } from "../../lib/budgets.js";
 
 // The personal wallet: what a User sees first, and what staff open under
 // "My Wallet". The summary card follows the familiar budgeting-app pattern —
@@ -28,12 +29,6 @@ function dueText(bill) {
   return `Due in ${n} days · ${fmtDate(bill.due)}`;
 }
 
-// "2026-10" shifted by n months.
-function shiftMonth(ym, n) {
-  const [y, m] = ym.split("-").map(Number);
-  return new Date(Date.UTC(y, m - 1 + n, 1)).toISOString().slice(0, 7);
-}
-const monthLabel = (ym) => new Date(ym + "-01T00:00:00Z").toLocaleDateString("en-PH", { month: "long", timeZone: "UTC" });
 
 export default function UserHome({ bills, tx, budgets, onNavigate }) {
   const [hidden, setHidden] = useState(readHidden);
@@ -70,6 +65,9 @@ export default function UserHome({ bills, tx, budgets, onNavigate }) {
   const thisMonthSpent = {};
   approved.filter((t) => t.type === "Expense" && String(t.date).startsWith(current))
     .forEach((t) => { thisMonthSpent[t.category] = (thisMonthSpent[t.category] || 0) + t.amount; });
+  const thisMonthTotal = Object.values(thisMonthSpent).reduce((s, n) => s + n, 0);
+  const { overall, categories: categoryBudgets } = splitBudgets(budgets);
+  const overallDaily = overall && perDay(overall.limit, thisMonthTotal, current);
 
   const unpaid = bills.filter((b) => !b.paid).sort((a, b) => a.due.localeCompare(b.due));
   const overdue = unpaid.filter((b) => billStatus(b.due, false) === "Overdue").length;
@@ -182,7 +180,31 @@ export default function UserHome({ bills, tx, budgets, onNavigate }) {
             <h3>Budgets · {monthLabel(current)}</h3>
             <button className="linkbtn" onClick={() => onNavigate("/budgets")}>Manage</button>
           </div>
-          {budgets.map((b) => {
+          {overall && (() => {
+            const left = overall.limit - thisMonthTotal;
+            const pct = overall.limit > 0 ? Math.min(100, Math.round((thisMonthTotal / overall.limit) * 100)) : 0;
+            return (
+              <div className="budget-row overall">
+                <span className="quick-circle small"><Icon name="pie" size={16} /></span>
+                <div className="budget-main">
+                  <div className="budget-top">
+                    <span className="row-title">All spending</span>
+                    <span className={left < 0 ? "budget-left danger" : "budget-left"}>
+                      {left < 0 ? `Over by ${money(-left)}` : `${money(left)} left`}
+                    </span>
+                  </div>
+                  <div className="progress-track">
+                    <div className="progress-fill" style={{ width: pct + "%", background: pct >= 100 ? "var(--danger)" : pct >= 80 ? "var(--warn)" : "var(--primary)" }} />
+                  </div>
+                  <div className="row-sub">
+                    {money(thisMonthTotal)} of {money(overall.limit)}
+                    {overallDaily && overallDaily.amount > 0 && <> · <strong>{money(overallDaily.amount)}</strong> a day left</>}
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
+          {categoryBudgets.map((b) => {
             const spent = thisMonthSpent[b.category] || 0;
             const left = b.limit - spent;
             const pct = b.limit > 0 ? Math.min(100, Math.round((spent / b.limit) * 100)) : 0;

@@ -362,10 +362,10 @@ function FinTrackStark() {
   }
 
   // ---- Budgets ----
-  const addBudget = (b) => perform(() => api("/api/budgets", { method: "POST", body: b }), `Budget for ${b.category} set.`);
+  const addBudget = (b) => perform(() => api("/api/budgets", { method: "POST", body: b }), b.category === "Overall" ? "Overall monthly budget set." : `Budget for ${b.category} set.`);
   const editBudget = (id, patch) => perform(() => api("/api/budgets/" + id, { method: "PUT", body: patch }), "Budget updated.");
   function deleteBudget(budget) {
-    askConfirm(`Remove the ${budget.category} budget?`, async () => {
+    askConfirm(`Remove the ${budget.category === "Overall" ? "overall monthly" : budget.category} budget?`, async () => {
       setConfirmDialog(null);
       await perform(() => api("/api/budgets/" + budget._id, { method: "DELETE" }), "Budget removed.");
     }, "Remove Budget");

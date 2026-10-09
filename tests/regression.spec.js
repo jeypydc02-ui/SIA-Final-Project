@@ -768,4 +768,52 @@ test.describe("Pre-launch audit regressions", () => {
       await api("/api/settings", { method: "PUT", token: admin.token, body: DEFAULTS });
     }
   });
+
+  test("RT-38 an overall monthly budget, a daily allowance, and earlier months", async ({ page }) => {
+    const person = await registerUser("rt38");
+    const post = (path, body) => api(path, { method: "POST", token: person.token, body });
+    const today = todayISO();
+    const lastMonth = addDaysISO(today.slice(0, 8) + "01", -1);
+
+    // One overall limit per person, next to the per-category ones.
+    expect((await post("/api/budgets", { category: "Overall", limit: 2000 })).status).toBe(201);
+    const twice = await post("/api/budgets", { category: "Overall", limit: 500 });
+    expect(twice.status).toBe(409);
+    expect(twice.data.error).toMatch(/overall monthly budget/);
+    expect((await post("/api/budgets", { category: "Food", limit: 5000 })).status).toBe(201);
+
+    await post("/api/transactions", { type: "Expense", category: "Food", amount: 600, date: today, note: "rt38 groceries" });
+    await post("/api/transactions", { type: "Expense", category: "Transport", amount: 250, date: today });
+    await post("/api/transactions", { type: "Expense", category: "Transport", amount: 400, date: lastMonth });
+    // Going over the overall limit warns, whichever category did it.
+    await post("/api/transactions", { type: "Expense", category: "Other", amount: 1200, date: today });
+    const inbox = (await api("/api/notifications", { token: person.token })).data;
+    expect(inbox.some((n) => n.type === "budget" && n.message.includes("over your overall monthly budget"))).toBe(true);
+
+    await page.addInitScript((t) => window.sessionStorage.setItem("fts_token", t), person.token);
+    await page.goto("/budgets");
+    await page.waitForSelector(".shell");
+    const overall = page.locator(".overall-budget");
+    await expect(overall).toContainText("₱2,050.00");
+    await expect(overall).toContainText("Over by ₱50.00");
+    await expect(overall.locator(".per-day")).toHaveText("Nothing left to spend this month");
+    // A category with room left shows what can still be spent each day.
+    const food = page.locator(".card", { hasText: "Food" }).filter({ hasNot: page.locator(".overall-budget") }).last();
+    await expect(food.locator(".per-day")).toContainText(/a day (for the next \d+ days|for the rest of today)/);
+
+    // Last month: only last month's spending, and no daily allowance.
+    await page.getByRole("button", { name: "Previous month" }).first().click();
+    await expect(overall).toContainText("₱400.00");
+    await expect(page.locator(".per-day")).toHaveCount(0);
+    await expect(page.locator(".budget-month")).toContainText("against your current limits");
+
+    // Reports agree, for both months.
+    await page.goto("/reports");
+    const row = page.locator("tr", { hasText: "Overall (all expenses)" });
+    await expect(row).toContainText("₱2,050.00");
+    await expect(row).toContainText("Over Budget");
+    await page.getByRole("button", { name: "Previous month" }).click();
+    await expect(row).toContainText("₱400.00");
+    await expect(row).toContainText("Within Budget");
+  });
 });

@@ -13,8 +13,12 @@ const INCOME_CATEGORIES = ["Salary", "Freelance", "Allowance", "Other Income"];
 // an expense under the same category, so it always counts against a budget.
 const BILL_CATEGORIES = ["Utilities", "Housing", "Internet", "Credit", "Subscription", "Other"];
 
+// The overall monthly budget: one limit on all spending together, stored as a
+// budget under this name next to the per-category ones.
+const OVERALL_BUDGET = "Overall";
+
 function categoriesFor(type) {
   return type === "Income" ? INCOME_CATEGORIES : EXPENSE_CATEGORIES;
 }
 
-module.exports = { EXPENSE_CATEGORIES, INCOME_CATEGORIES, BILL_CATEGORIES, categoriesFor };
+module.exports = { EXPENSE_CATEGORIES, INCOME_CATEGORIES, BILL_CATEGORIES, OVERALL_BUDGET, categoriesFor };

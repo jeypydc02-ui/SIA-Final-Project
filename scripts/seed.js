@@ -103,6 +103,7 @@ async function seed() {
     { user: jp._id, category: "Transport", limit: 3500 },
     { user: jp._id, category: "Utilities", limit: 5000 },
     { user: jp._id, category: "Subscription", limit: 1000 },
+    { user: jp._id, category: "Overall", limit: 20000 },
   ]);
 
   await Bill.insertMany([
