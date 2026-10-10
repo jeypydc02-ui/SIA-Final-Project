@@ -24,7 +24,7 @@ function ensureTodaysSweep() {
   if (lastSweepDay === today || running) return running;
   if (Date.now() - lastFailureAt < RETRY_AFTER_MS) return null;
 
-  // The lead time comes from the Admin's system settings.
+    // The lead time is the fixed default from services/settings.js.
   running = runReminderSweep({ today })
     .then(() => { lastSweepDay = today; })
     .catch((err) => {

@@ -47,7 +47,7 @@ async function main() {
     }
   });
 
-  console.log(`[reminder] service running — schedule "${SCHEDULE}"; lead time from the Admin's system settings.`);
+    console.log(`[reminder] service running — schedule "${SCHEDULE}"; fixed lead time of 3 days.`);
 
   const shutdown = async (signal) => {
     console.log(`[reminder] ${signal} received, shutting down.`);

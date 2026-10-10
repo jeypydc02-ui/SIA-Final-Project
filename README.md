@@ -49,7 +49,7 @@ Bill reminders: once a day, every unpaid bill due within the reminder lead time 
 | Role | Dashboard | Can do |
 |---|---|---|
 | User | Home: wallet, spending by category, bills, budgets, recent entries | own bills, budgets, income/expense entries, notes, and their own **My Activity** history |
-| Admin | Admin Console: system status, accounts, deactivated accounts, security events this week, failed logins | the system's one Admin (created with `npm run create-admin`): deactivate, reactivate or remove User accounts, system settings, and the security log. Roles are never changed from the app. **No wallet of their own** — finance endpoints refuse an Admin, and the Admin never sees anyone's money or activity |
+| Admin | Admin Console: system status, accounts, deactivated accounts, security events this week, failed logins | the system's one Admin (created with `npm run create-admin`): deactivate, reactivate or remove User accounts and read the security log. Roles are never changed from the app. **No wallet of their own** — finance endpoints refuse an Admin, and the Admin never sees anyone's money or activity |
 
 Income and expense entries count the moment they are recorded. Editing one saves a new version (v1 → v2) and keeps the earlier one in Revision History; deleting one keeps it in the history as "Deleted".
 
@@ -61,9 +61,9 @@ Income and expense entries count the moment they are recorded. Editing one saves
 
 E-mail is sent through Gmail (an App Password) or the Brevo HTTPS API — see [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md). With neither configured in development, codes and links are printed in the API's terminal.
 
-## System settings
+   ## Fixed defaults
 
-The Admin manages three system-wide settings from **System Settings** (`/system`, `GET`/`PUT /api/settings`): the bill reminder lead time (1–14 days, default 3), the budget warning level (50–95%, default 80) and the session length (1–24 hours, default 8, for new sign-ins). They are stored in the shared database, so the separate reminder worker uses the same lead time as the API, and every change is written to the audit log as "Settings Changed".
+   The bill reminder lead time (3 days), the budget warning level (80%) and the session length (8 hours) are fixed defaults defined in `apps/server/src/services/settings.js`. They are no longer configurable from the app.
 
 ## Audit and integration log
 

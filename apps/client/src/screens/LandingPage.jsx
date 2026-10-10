@@ -32,7 +32,7 @@ const STEPS = [
 
 const ROLES = [
   { role: "User", icon: "wallet", title: "Your wallet", points: ["Balance and monthly spending at a glance", "Bills, budgets and payment history", "Quick add for expenses, income and bills"] },
-  { role: "Admin", icon: "server", title: "The admin console", points: ["User accounts: deactivate, reactivate or remove", "Sign-ins, sign-ups and failed logins in the security log", "System status and system settings"] },
+  { role: "Admin", icon: "server", title: "The admin console", points: ["User accounts: deactivate, reactivate or remove", "Sign-ins, sign-ups and failed logins in the security log", "System status and account oversight"] },
 ];
 
 const FACTS = [

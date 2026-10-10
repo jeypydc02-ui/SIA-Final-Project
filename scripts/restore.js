@@ -10,7 +10,6 @@ const Notification = require("../apps/server/src/models/Notification");
 const Comment = require("../apps/server/src/models/Comment");
 const AuditLog = require("../apps/server/src/models/AuditLog");
 const Session = require("../apps/server/src/models/Session");
-const Setting = require("../apps/server/src/models/Setting");
 
 // Database recovery (spec section 10.4).
 //
@@ -33,7 +32,6 @@ const COLLECTIONS = {
   notifications: Notification,
   comments: Comment,
   auditLogs: AuditLog,
-  settings: Setting,
 };
 
 const SUPPORTED_SCHEMA = 1;

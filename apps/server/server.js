@@ -15,7 +15,6 @@ const auditLogRoutes = require("./src/routes/auditLog");
 const userRoutes = require("./src/routes/users");
 const commentRoutes = require("./src/routes/comments");
 const eventRoutes = require("./src/routes/events");
-const settingsRoutes = require("./src/routes/settings");
 const activityRoutes = require("./src/routes/activity");
 const devRoutes = require("./src/routes/dev");
 const { failureLog } = require("./src/middleware/failureLog");
@@ -84,7 +83,6 @@ async function main() {
   app.use("/api/users", userRoutes);
   app.use("/api/comments", commentRoutes);
   app.use("/api/events", eventRoutes);
-  app.use("/api/settings", settingsRoutes);
   app.use("/api/activity", activityRoutes);
   // Development-only outbox for the automated tests (DEV_MAILBOX=1, never in
   // production); the route refuses otherwise.

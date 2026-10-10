@@ -2,7 +2,7 @@ const Budget = require("../models/Budget");
 const Transaction = require("../models/Transaction");
 const { notify } = require("./notifications");
 const { todayISO } = require("../utils/dates");
-const { getSettings } = require("./settings");
+const { budgetWarningPercent: BUDGET_WARNING_PERCENT } = require("./settings");
 const { OVERALL_BUDGET } = require("../utils/categories");
 
 // Warns a user when a recorded expense pushes a category past 80% or 100% of
@@ -12,8 +12,6 @@ const { OVERALL_BUDGET } = require("../utils/categories");
 //
 // Only the threshold this expense actually crossed is reported, so a user is
 // told once at 80% and once when they go over, not after every purchase.
-// The warning level (80% by default) is a system setting the Admin manages;
-// going over (100%) always warns.
 const label = (b) => (b.category === OVERALL_BUDGET ? "overall monthly" : b.category);
 const thresholds = (warnPercent) => [
   { at: 1.0, message: (b, spent) => `You are over your ${label(b)} budget for this month: ₱${fmt(spent)} spent of ₱${fmt(b.limit)} (over by ₱${fmt(spent - b.limit)}).` },
@@ -41,12 +39,11 @@ async function checkBudget(tx) {
     date: { $gte: month + "-01", $lte: month + "-31" },
   }).select("amount category").lean();
 
-  const { budgetWarningPercent } = await getSettings();
   for (const budget of budgets) {
     const counted = budget.category === OVERALL_BUDGET ? monthEntries : monthEntries.filter((t) => t.category === tx.category);
     const spent = counted.reduce((s, t) => s + t.amount, 0);
     const before = spent - tx.amount;
-    const crossed = thresholds(budgetWarningPercent).find((t) => before < t.at * budget.limit && spent >= t.at * budget.limit);
+    const crossed = thresholds(BUDGET_WARNING_PERCENT).find((t) => before < t.at * budget.limit && spent >= t.at * budget.limit);
     if (crossed) await notify("budget", crossed.message(budget, spent), tx.submittedBy);
   }
 }

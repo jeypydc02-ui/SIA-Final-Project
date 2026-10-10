@@ -27,7 +27,6 @@ import BudgetsScreen from "./screens/BudgetsScreen.jsx";
 import BillsScreen from "./screens/BillsScreen.jsx";
 import RevisionHistoryScreen from "./screens/RevisionHistoryScreen.jsx";
 import EntriesScreen from "./screens/EntriesScreen.jsx";
-import SystemSettingsScreen from "./screens/SystemSettingsScreen.jsx";
 import NotesScreen from "./screens/NotesScreen.jsx";
 import PaymentHistoryScreen from "./screens/PaymentHistoryScreen.jsx";
 import NotificationsScreen from "./screens/NotificationsScreen.jsx";
@@ -509,9 +508,6 @@ function FinTrackStark() {
 
           <Route element={<RequireRole session={session} path="/audit" />}>
             <Route path="/audit" element={<AuditLogScreen auditLog={auditLog} />} />
-          </Route>
-          <Route element={<RequireRole session={session} path="/system" />}>
-            <Route path="/system" element={<SystemSettingsScreen onSaved={fireToast} />} />
           </Route>
           <Route element={<RequireRole session={session} path="/users" />}>
             <Route path="/users" element={<UsersScreen users={users} session={session} setUserActive={setUserActive} deleteUser={deleteUser} />} />

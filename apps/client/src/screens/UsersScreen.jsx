@@ -1,7 +1,7 @@
 import { useState } from "react";
 
 const RBAC = [
-  { role: "Admin", access: "The one account that administers the system (created on the server, never from the app): manages user accounts, deactivates and reactivates them, changes the system settings, and reads the security log (sign-ins, sign-ups, account changes). Never sees a User's money or their own activity. Keeps no wallet of their own." },
+    { role: "Admin", access: "The one account that administers the system (created on the server, never from the app): manages user accounts, deactivates and reactivates them, and reads the security log (sign-ins, sign-ups, account changes). Never sees a User's money or their own activity. Keeps no wallet of their own." },
   { role: "User", access: "Records own bills, payments, income and expenses; sees only their own wallet, reports, history, budgets, notes and activity." },
 ];
 

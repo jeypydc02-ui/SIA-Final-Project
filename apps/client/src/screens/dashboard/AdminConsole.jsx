@@ -60,7 +60,6 @@ export default function AdminConsole({ users, auditLog, onNavigate }) {
 
   const ACTIONS = [
     { label: "Manage users", hint: "Deactivate, reactivate, remove", icon: "users", to: "/users" },
-    { label: "System settings", hint: "Reminders, budgets, sessions", icon: "server", to: "/system" },
     { label: "Audit log", hint: "Sign-ins and account changes", icon: "history", to: "/audit" },
   ];
 

@@ -10,7 +10,6 @@ const Comment = require("../apps/server/src/models/Comment");
 const Session = require("../apps/server/src/models/Session");
 const PendingRegistration = require("../apps/server/src/models/PendingRegistration");
 const PasswordReset = require("../apps/server/src/models/PasswordReset");
-const Setting = require("../apps/server/src/models/Setting");
 const { todayISO: phToday, addDaysISO } = require("../apps/server/src/utils/dates");
 
 // `npm run seed -- --reset` wipes the collections first. Used when the schema
@@ -40,7 +39,7 @@ async function seed() {
     await Promise.all([
       User.deleteMany({}), Bill.deleteMany({}), Transaction.deleteMany({}),
       Budget.deleteMany({}), Notification.deleteMany({}), AuditLog.deleteMany({}),
-      Comment.deleteMany({}), Session.deleteMany({}), Setting.deleteMany({}),
+      Comment.deleteMany({}), Session.deleteMany({}),
       PendingRegistration.deleteMany({}), PasswordReset.deleteMany({}),
       mongoose.connection.collection("receipts").deleteMany({}),
     ]);

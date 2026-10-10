@@ -3,7 +3,7 @@
 // address you can bookmark, share, or reload.
 //
 // Two roles: a User keeps their own wallet; an Admin runs the system
-// (accounts, settings, the security log) with no wallet of their own.
+// (accounts, the security log) with no wallet of their own.
 const MEMBER = ["User"];
 const ADMIN = ["Admin"];
 
@@ -29,7 +29,6 @@ export const NAV = [
     { path: "/audit", label: "Audit Log", icon: "shield", roles: ADMIN },
     { path: "/reports", label: "Reports", icon: "chart", roles: MEMBER },
     { path: "/users", label: "User & Role Mgmt", icon: "users", roles: ADMIN },
-    { path: "/system", label: "System Settings", icon: "server", roles: ADMIN },
     { path: "/settings", label: "Settings", icon: "gear" },
   ]},
 ];
