@@ -43,7 +43,8 @@ test("E2E-01 a new account records, corrects and reports an expense", async ({ b
 
   // --- 2. A new account starts empty, and can set its own budget ---
   await member.locator(".nav-item", { hasText: "Budgets" }).click();
-  await expect(member.locator(".empty")).toContainText("No budgets yet");
+  await expect(member.getByRole("button", { name: "+ Add Budget" })).toBeVisible();
+  await expect(member.locator(".empty", { hasText: "No budgets yet" })).toBeVisible();
 
   await member.getByRole("button", { name: "+ Add Budget" }).click();
   await member.locator(".modal select").selectOption("Food");
