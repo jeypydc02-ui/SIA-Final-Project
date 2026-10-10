@@ -96,7 +96,7 @@ Open http://localhost:5173. Demo accounts (local database only, never on the liv
 
 | Role | Email | Password |
 |---|---|---|
-| User | jp@fintrackstark.app | demo123 |
+| User |    | demo123 |
 | User | arvy@fintrackstark.app | demo456 |
 | Admin | admin@fintrackstark.app | admin123 |
 
