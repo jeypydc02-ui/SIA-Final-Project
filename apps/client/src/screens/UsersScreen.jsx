@@ -2,11 +2,13 @@ import { useState } from "react";
 
 const RBAC = [
     { role: "Admin", access: "The one account that administers the system (created on the server, never from the app): manages user accounts, deactivates and reactivates them, and reads the security log (sign-ins, sign-ups, account changes). Never sees a User's money or their own activity. Keeps no wallet of their own." },
+      { role: "Approver", access: "Reviews bill payment requests sent by Users: approves, rejects or asks for a revision, with remarks. Sees only the request details (who, which bill, amount, due date), never a User's wallet. Keeps no wallet of their own. Assigned by the Admin." },
   { role: "User", access: "Records own bills, payments, income and expenses; sees only their own wallet, reports, history, budgets, notes and activity." },
 ];
 
-export default function UsersScreen({ users, session, setUserActive, deleteUser }) {
+export default function UsersScreen({ users, session, setUserActive, setUserRole, deleteUser }) {
   const [statusTarget, setStatusTarget] = useState(null); // user whose status is about to change
+    const [roleTarget, setRoleTarget] = useState(null); // user whose role is about to change
   const [busy, setBusy] = useState(false);
 
   if (session.role !== "Admin") {
@@ -19,6 +21,14 @@ export default function UsersScreen({ users, session, setUserActive, deleteUser 
     const ok = await setUserActive(statusTarget, statusTarget.active === false);
     setBusy(false);
     if (ok) setStatusTarget(null);
+  }
+
+  async function confirmRole() {
+    if (busy) return;
+    setBusy(true);
+    const ok = await setUserRole(roleTarget, roleTarget.role === "Approver" ? "User" : "Approver");
+    setBusy(false);
+    if (ok) setRoleTarget(null);
   }
 
   const deactivating = statusTarget && statusTarget.active !== false;
@@ -49,6 +59,9 @@ export default function UsersScreen({ users, session, setUserActive, deleteUser 
                     <td><span className={"badge " + (isActive ? "ok" : "danger")}>{isActive ? "Active" : "Deactivated"}</span></td>
                     <td><span className="badge neutral">{u.role}</span></td>
                     <td style={{ display: "flex", gap: 6 }}>
+                      {!isSelf && !isAdmin && isActive && (
+                        <button className="btn small ghost" onClick={() => setRoleTarget(u)}>{u.role === "Approver" ? "Make User" : "Make Approver"}</button>
+                      )}
                       {!isSelf && !isAdmin && (
                         <button className="btn small ghost" onClick={() => setStatusTarget(u)}>{isActive ? "Deactivate" : "Reactivate"}</button>
                       )}
@@ -64,7 +77,7 @@ export default function UsersScreen({ users, session, setUserActive, deleteUser 
           </table>
         </div>
         <p style={{ fontSize: 11.5, color: "var(--text-dim)", margin: "12px 0 0" }}>
-          The system has one Admin, and roles are not changed from the app: everyone who signs up is a User.
+          The system has one Admin. Everyone who signs up is a User; the Admin can make a User an Approver (and back).
           The Admin account cannot be deactivated or deleted, so the system is never left without an administrator.
           People who forget their password reset it themselves from the sign-in page; it is e-mailed to them.
         </p>
@@ -79,6 +92,26 @@ export default function UsersScreen({ users, session, setUserActive, deleteUser 
           </tbody>
         </table>
       </div>
+
+            {roleTarget && (
+        <div className="modal-overlay" onClick={() => !busy && setRoleTarget(null)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <h3>{roleTarget.role === "Approver" ? "Make User" : "Make Approver"}</h3>
+            <p style={{ fontSize: 13 }}>
+              Change <strong>{roleTarget.name}</strong> ({roleTarget.email}) to {roleTarget.role === "Approver" ? "a User" : "an Approver"}?
+            </p>
+            <p style={{ fontSize: 12, color: "var(--text-dim)" }}>
+              {roleTarget.role === "Approver"
+                ? "They go back to managing their own bills and payments, and stop seeing the approval queue."
+                : "They can then review payment requests. An Approver keeps no wallet, so their own bills, budgets and entries stay saved but hidden until they are made a User again. A separate account is usually the better choice."}
+            </p>
+            <div className="actions">
+              <button className="btn ghost" onClick={() => setRoleTarget(null)} disabled={busy}>Cancel</button>
+              <button className="btn" onClick={confirmRole} disabled={busy}>{busy ? "Saving…" : "Confirm"}</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {statusTarget && (
         <div className="modal-overlay" onClick={() => !busy && setStatusTarget(null)}>

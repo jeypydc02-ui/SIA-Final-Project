@@ -8,7 +8,7 @@ const UserSchema = new Schema({
   name: { type: String, required: true },
   email: { type: String, required: true, unique: true, lowercase: true, trim: true, maxlength: [160, "Email cannot be longer than 160 characters."] },
   passwordHash: { type: String, required: true },
-  role: { type: String, enum: ["Admin", "User"], required: true },
+    role: { type: String, enum: ["Admin", "Approver", "User"], required: true },
   // False when an Admin deactivates the account: it cannot sign in, and its
   // data is kept until it is reactivated or deleted.
   active: { type: Boolean, default: true },

@@ -642,7 +642,7 @@ button.row:hover{background:var(--row-hover);}
 .kpi.alarm{border-color:var(--danger);} .kpi.alarm .kpi-value{color:var(--danger);}
 .console-grid{display:grid; grid-template-columns:1fr 1fr; gap:14px;}
 .stacked{display:flex; height:12px; border-radius:6px; overflow:hidden; background:var(--tint-neutral); gap:2px;}
-.seg-admin{background:var(--text);} .seg-reviewer{background:var(--warn);} .seg-user{background:var(--primary);}
+.seg-admin{background:var(--text);} .seg-reviewer{background:var(--warn);} .seg-approver{background:var(--warn);} .seg-user{background:var(--primary);}
 .legend-inline{display:flex; gap:16px; flex-wrap:wrap; font-size:12.5px; color:var(--text-dim); margin-top:8px;}
 .legend-inline strong{color:var(--text);}
 .dot{display:inline-block; width:9px; height:9px; border-radius:50%; margin-right:6px; vertical-align:middle;}

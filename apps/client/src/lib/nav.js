@@ -6,6 +6,7 @@
 // (accounts, the security log) with no wallet of their own.
 const MEMBER = ["User"];
 const ADMIN = ["Admin"];
+const APPROVER = ["Approver"];
 
 export const NAV = [
   { group: "Overview", items: [
@@ -22,6 +23,7 @@ export const NAV = [
     { path: "/entries", label: "My Entries", icon: "wallet", roles: MEMBER },
     { path: "/notes", label: "Notes / Feedback", icon: "message", roles: MEMBER },
     { path: "/payments", label: "Payment History", icon: "card", roles: MEMBER },
+    { path: "/approvals", label: "Payment Approvals", icon: "check", roles: APPROVER },
   ]},
   { group: "System", items: [
     { path: "/notifications", label: "Notification Log", icon: "bell" },

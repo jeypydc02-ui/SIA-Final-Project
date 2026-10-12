@@ -35,6 +35,17 @@ export function billStatus(due, paid) {
   if (diff === 0) return "Due Today";
   return "Upcoming";
 }
+
+// Payment requests (the approval workflow).
+export const requestLabel = (s) => ({
+  Pending: "Awaiting approval", Revision: "Needs revision", Rejected: "Rejected",
+  Approved: "Approved · awaiting gateway", Paid: "Paid", Failed: "Gateway failed",
+}[s] || s);
+export const requestBadge = (s) => ({
+  Pending: "warn", Revision: "warn", Rejected: "danger", Approved: "neutral", Paid: "ok", Failed: "danger",
+}[s] || "neutral");
+export const isActiveRequest = (r) => !!r && ["Pending", "Revision", "Approved"].includes(r.status);
+
 export function statusBadgeClass(s) {
   return { Paid: "ok", "Due Today": "warn", Overdue: "danger", Upcoming: "neutral" }[s] || "neutral";
 }

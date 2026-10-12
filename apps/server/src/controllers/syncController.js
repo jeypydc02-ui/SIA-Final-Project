@@ -6,6 +6,7 @@ const Notification = require("../models/Notification");
 const Comment = require("../models/Comment");
 const AuditLog = require("../models/AuditLog");
 const { visibilityFilter } = require("./commentController");
+const { listFor } = require("../services/paymentRequests");
 
 // GET /api/sync — everything the signed-in screens show, in one response.
 //
@@ -23,9 +24,10 @@ async function sync(req, res) {
   const isAdmin = me.role === "Admin";
   // Users have a wallet and their own activity feed; an Admin has the system
   // lists (accounts, and the security/system activity log).
-  const wallet = (query) => (isAdmin ? Promise.resolve([]) : query);
+  // Only a User has a wallet; an Admin or an Approver gets empty wallet lists.
+  const wallet = (query) => (me.role === "User" ? query : Promise.resolve([]));
 
-  const [user, bills, transactions, budgets, notifications, comments, auditLog, users, activity] = await Promise.all([
+  const [user, bills, transactions, budgets, notifications, comments, auditLog, users, activity, paymentRequests] = await Promise.all([
     User.findById(me.id).select("-passwordHash").lean(),
     wallet(Bill.find({ createdBy: me.id }).sort({ due: 1 }).lean()),
     wallet(Transaction.find({ submittedBy: me.id }).sort({ createdAt: -1 }).lean()),
@@ -35,7 +37,9 @@ async function sync(req, res) {
     isAdmin ? AuditLog.find({ scope: { $in: ["system", "both"] } }).sort({ ts: -1 }).limit(300).lean() : null,
     isAdmin ? User.find().select("-passwordHash").sort({ role: 1, name: 1 }).lean() : null,
     wallet(AuditLog.find({ actorId: me.id, scope: { $in: ["user", "both"] } }).sort({ ts: -1 }).limit(100).lean()),
+    listFor(me),
   ]);
+
 
   if (!user || user.active === false) return res.status(401).json({ error: "Account no longer exists.", sessionEnded: true });
 
@@ -46,7 +50,10 @@ async function sync(req, res) {
     users: users || [],
     // Users only: their own activity (My Activity).
     activity,
+    // Users: their payment requests. Approvers: the review queue and what they reviewed.
+    paymentRequests,
   });
+
 }
 
 module.exports = { sync };

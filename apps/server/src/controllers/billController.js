@@ -1,5 +1,7 @@
 const Bill = require("../models/Bill");
 const Transaction = require("../models/Transaction");
+const PaymentRequest = require("../models/PaymentRequest");
+const { ACTIVE_STATUSES } = require("../services/paymentRequests");
 const { logAction } = require("../services/audit");
 const { notify } = require("../services/notifications");
 const { checkBudget } = require("../services/budgetAlerts");
@@ -151,7 +153,9 @@ async function update(req, res) {
   if (bill.paid) {
     return res.status(400).json({ error: "A paid bill can no longer be edited." });
   }
-
+  if (await PaymentRequest.exists({ bill: bill._id, status: { $in: ACTIVE_STATUSES } })) {
+    return res.status(400).json({ error: "This bill has a payment request in progress, so it cannot be edited right now." });
+  }
   const { name, category, amount, due, repeat } = req.body || {};
   if (repeat !== undefined && !REPEATS.includes(repeat)) {
     return res.status(400).json({ error: "Repeat must be none or monthly." });
@@ -203,6 +207,9 @@ async function remove(req, res) {
   }
   if (bill.paid) {
     return res.status(400).json({ error: "A paid bill is part of the payment record and cannot be deleted." });
+  }
+    if (await PaymentRequest.exists({ bill: bill._id, status: { $in: ACTIVE_STATUSES } })) {
+    return res.status(400).json({ error: "This bill has a payment request in progress, so it cannot be deleted right now." });
   }
   // Same race as update(): only an unpaid bill may go.
   const removed = await Bill.deleteOne({ _id: bill._id, paid: false });
