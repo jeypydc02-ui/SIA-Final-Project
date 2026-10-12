@@ -13,6 +13,6 @@ router.get("/", ...member, billController.list);
 router.post("/", ...member, billController.create);
 router.put("/:id", ...member, billController.update);
 router.delete("/:id", ...member, billController.remove);
-router.post("/:id/pay", ...member, billController.pay);
+
 
 module.exports = router;

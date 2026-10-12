@@ -96,6 +96,13 @@ async function seed() {
     role: "Admin",
   });
 
+    await User.create({
+    firstName: "Demo", lastName: "Approver", name: "Demo Approver",
+    email: "approver@fintrackstark.app",
+    passwordHash: await bcrypt.hash("approver123", 10),
+    role: "Approver",
+  });
+
   // Budgets are per-user, so the demo User gets their own set.
   await Budget.insertMany([
     { user: jp._id, category: "Food", limit: 6000 },

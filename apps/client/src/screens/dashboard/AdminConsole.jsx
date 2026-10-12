@@ -34,7 +34,7 @@ export default function AdminConsole({ users, auditLog, onNavigate }) {
   }, []);
 
   const deactivated = users.filter((u) => u.active === false).length;
-  const roles = ["Admin", "User"].map((r) => ({ role: r, n: users.filter((u) => u.role === r).length }));
+  const roles = ["Admin", "Approver","User"].map((r) => ({ role: r, n: users.filter((u) => u.role === r).length }));
   const weekAgo = Date.now() - 7 * 86400000;
   const newThisWeek = users.filter((u) => createdAt(u._id).getTime() >= weekAgo).length;
   const newest = [...users].sort((a, b) => createdAt(b._id) - createdAt(a._id)).slice(0, 5);

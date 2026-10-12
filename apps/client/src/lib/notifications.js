@@ -7,6 +7,12 @@ const KINDS = {
   payment: { title: "Payment recorded", icon: "card", path: "/payments", tone: "ok" },
   budget: { title: "Budget alert", icon: "pie", path: "/budgets", tone: "warn" },
   role: { title: "Account", icon: "shield", path: "/settings" },
+    // The payment approval workflow.
+  approval: { title: "Approval needed", icon: "check", path: "/approvals", tone: "warn" },
+  "payment-approved": { title: "Payment approved", icon: "check", path: "/bills", tone: "ok" },
+  "payment-rejected": { title: "Payment rejected", icon: "alert", path: "/bills", tone: "danger" },
+  "payment-revision": { title: "Revision requested", icon: "edit", path: "/bills", tone: "warn" },
+  "payment-failed": { title: "Payment failed", icon: "alert", path: "/bills", tone: "danger" },
   // Left over from the retired review steps, so old messages still read well.
   "receipt-verified": { title: "Receipt verified", icon: "check", path: "/entries", tone: "ok" },
   "receipt-revision": { title: "Receipt needs revision", icon: "receipt", path: "/entries", tone: "warn" },

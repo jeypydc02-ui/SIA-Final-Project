@@ -13,6 +13,8 @@ const budgetRoutes = require("./src/routes/budgets");
 const notificationRoutes = require("./src/routes/notifications");
 const auditLogRoutes = require("./src/routes/auditLog");
 const userRoutes = require("./src/routes/users");
+const paymentRequestRoutes = require("./src/routes/paymentRequests");
+const mockGatewayRoutes = require("./src/routes/mockGateway");
 const commentRoutes = require("./src/routes/comments");
 const eventRoutes = require("./src/routes/events");
 const activityRoutes = require("./src/routes/activity");
@@ -81,6 +83,8 @@ async function main() {
   app.use("/api/notifications", notificationRoutes);
   app.use("/api/audit-log", auditLogRoutes);
   app.use("/api/users", userRoutes);
+  app.use("/api/payment-requests", paymentRequestRoutes);
+  app.use("/api/mock-gateway", mockGatewayRoutes);
   app.use("/api/comments", commentRoutes);
   app.use("/api/events", eventRoutes);
   app.use("/api/activity", activityRoutes);
