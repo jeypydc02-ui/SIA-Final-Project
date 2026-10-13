@@ -25,6 +25,7 @@ import { CategoryList, CategoryDetailRoute } from "./screens/CategoriesScreen.js
 import LogEntryScreen from "./screens/LogEntryScreen.jsx";
 import BudgetsScreen from "./screens/BudgetsScreen.jsx";
 import BillsScreen from "./screens/BillsScreen.jsx";
+import ApprovalsScreen from "./screens/ApprovalsScreen.jsx";
 import RevisionHistoryScreen from "./screens/RevisionHistoryScreen.jsx";
 import EntriesScreen from "./screens/EntriesScreen.jsx";
 import NotesScreen from "./screens/NotesScreen.jsx";
@@ -62,6 +63,8 @@ function FinTrackStark() {
   const [notifs, setNotifs] = useState([]);
   const [auditLog, setAuditLog] = useState([]);
   const [comments, setComments] = useState([]);
+    // Payment requests: a User's own, or an Approver's review queue.
+  const [requests, setRequests] = useState([]);
   // A User's own activity (My Activity). The Admin's log is auditLog.
   const [activity, setActivity] = useState([]);
   const [toast, setToast] = useState(null);
@@ -168,6 +171,7 @@ function FinTrackStark() {
         setNotifs(data.notifications); setComments(data.comments);
         setAuditLog(data.auditLog); setUsers(data.users);
         setActivity(data.activity || []);
+        setRequests(data.paymentRequests || []);
         // A role or name changed elsewhere (by an Admin, or on another device).
         setSession((s) => (s ? { ...s, ...data.me } : s));
         announceNew(data.notifications);
@@ -306,6 +310,7 @@ function FinTrackStark() {
     setSessionEnded(false);
     setBills([]); setTx([]); setBudgets([]); setNotifs([]); setAuditLog([]); setUsers([]); setComments([]);
     setActivity([]);
+    setRequests([]);
     setDataReady(false);
     setLoadError("");
     seenNotifs.current = null;
@@ -327,6 +332,26 @@ function FinTrackStark() {
   const markPaid = (billId, amount) => perform(
     () => api("/api/bills/" + billId + "/pay", { method: "POST", body: { amount } }),
     "✓ Bill marked as paid — dashboard & logs updated."
+  );
+
+    // ---- Payment approval workflow ----
+  // A User asks; an Approver decides; the server does the rest (gateway, e-mail, audit).
+  const requestPayment = (billId, amount, note) => perform(
+    () => api("/api/payment-requests", { method: "POST", body: { billId, amount, note } }),
+    "Payment request sent — waiting for an approver."
+  );
+  const resubmitRequest = (id, amount, note) => perform(
+    () => api("/api/payment-requests/" + id + "/resubmit", { method: "PUT", body: { amount, note } }),
+    "Request sent again for approval."
+  );
+  const DECISION_TOAST = {
+    approve: "Approved — payment sent to the simulated gateway.",
+    reject: "Request rejected.",
+    revise: "Sent back to the requester for revision.",
+  };
+  const decideRequest = (id, decision, remarks) => perform(
+    () => api("/api/payment-requests/" + id + "/decision", { method: "PATCH", body: { decision, remarks } }),
+    DECISION_TOAST[decision]
   );
   const addBill = (b) => perform(() => api("/api/bills", { method: "POST", body: b }), "Bill added — reminder scheduled.");
   const editBill = (id, patch) => perform(() => api("/api/bills/" + id, { method: "PUT", body: patch }), "Bill updated.");
@@ -402,6 +427,11 @@ function FinTrackStark() {
       await perform(() => api("/api/users/" + user._id, { method: "DELETE" }), "Account deleted.");
     }, "Delete Account");
   }
+    const setUserRole = (user, role) => perform(
+    () => api("/api/users/" + user._id + "/role", { method: "PUT", body: { role } }),
+    role === "Approver" ? `${user.name} is now an Approver.` : `${user.name} is a User again.`
+  );
+
   const setUserActive = (user, active) => perform(
     () => api("/api/users/" + user._id + "/status", { method: "PUT", body: { active } }),
     active ? `${user.name} can sign in again.` : `${user.name} was deactivated and signed out.`
@@ -484,18 +514,18 @@ function FinTrackStark() {
         <Route
           element={
             <RequireAuth session={session}>
-              <Shell session={session} logout={requestLogout} theme={theme} setTheme={setTheme} notifs={notifs} loadError={loadError} dataReady={dataReady} onRetry={refreshAll} />
+              <Shell session={session} logout={requestLogout} theme={theme} setTheme={setTheme} notifs={notifs} loadError={loadError} dataReady={dataReady} pendingApprovals={requests.filter((r) => r.status === "Pending").length}onRetry={refreshAll} />
             </RequireAuth>
           }
         >
-          <Route path="/dashboard" element={<DashboardScreen session={session} bills={bills} tx={tx} budgets={budgets} notifs={notifs} users={users} auditLog={auditLog} onNavigate={navigate} />} />
+          <Route path="/dashboard" element={<DashboardScreen session={session} bills={bills} tx={tx} budgets={budgets} notifs={notifs} users={users} auditLog={auditLog} requests={requests} onNavigate={navigate} />} />
           {/* A User's own money. An Admin has no wallet (separation of duties). */}
           <Route element={<RequireRole session={session} roles={["User"]} />}>
           <Route path="/categories" element={<CategoryList bills={bills} onOpen={(name) => navigate("/categories/" + encodeURIComponent(name))} />} />
           <Route path="/categories/:name" element={<CategoryDetailRoute bills={bills} />} />
           <Route path="/submit" element={<LogEntryScreen addTx={addTx} />} />
           <Route path="/budgets" element={<BudgetsScreen budgets={budgets} tx={tx} addBudget={addBudget} editBudget={editBudget} deleteBudget={deleteBudget} />} />
-          <Route path="/bills" element={<BillsScreen bills={bills} addBill={addBill} markPaid={markPaid} editBill={editBill} deleteBill={deleteBill} />} />
+          <Route path="/bills" element={<BillsScreen bills={bills} requests={requests} addBill={addBill} requestPayment={requestPayment} resubmitRequest={resubmitRequest} editBill={editBill} deleteBill={deleteBill} />} />
           <Route path="/revisions" element={<RevisionHistoryScreen tx={tx} />} />
           <Route path="/entries" element={<EntriesScreen tx={tx} editTx={editTx} deleteTx={deleteTx} onNavigate={navigate} />} />
           <Route path="/notes" element={<NotesScreen comments={comments} addNote={addNote} editNote={editNote} deleteNote={deleteNote} tx={tx} me={session?.id} />} />
@@ -506,11 +536,14 @@ function FinTrackStark() {
           <Route path="/notifications" element={<NotificationsScreen notifs={notifs} markRead={markNotifRead} markAllRead={markAllNotifsRead} onNavigate={navigate} />} />
           <Route path="/settings" element={<SettingsScreen session={session} updateProfile={updateProfile} changePassword={changePassword} theme={theme} setTheme={setTheme} />} />
 
+          <Route element={<RequireRole session={session} path="/approvals" />}>
+          <Route path="/approvals" element={<ApprovalsScreen requests={requests} decide={decideRequest} />} />
+          </Route>
           <Route element={<RequireRole session={session} path="/audit" />}>
             <Route path="/audit" element={<AuditLogScreen auditLog={auditLog} />} />
           </Route>
           <Route element={<RequireRole session={session} path="/users" />}>
-            <Route path="/users" element={<UsersScreen users={users} session={session} setUserActive={setUserActive} deleteUser={deleteUser} />} />
+            <Route path="/users" element={<UsersScreen users={users} session={session} setUserActive={setUserActive} setUserRole={setUserRole} deleteUser={deleteUser} />} />
           </Route>
 
           <Route path="*" element={<NotFoundScreen onHome={() => navigate("/dashboard")} />} />

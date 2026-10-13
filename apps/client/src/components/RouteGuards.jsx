@@ -17,8 +17,8 @@ export function RequireRole({ session, path, roles }) {
       <div className="card">
         <div className="empty">
           <div className="big">—</div>
-          {session.role === "Admin" && allowed.includes("User")
-            ? "Admin accounts administer the system; they do not keep a wallet of their own."
+                    {session.role !== "User" && allowed.includes("User")
+            ? "Admin and Approver accounts do not keep a wallet of their own."
             : `Restricted — this page is for ${allowed.join(" and ")} accounts. You are signed in as ${session.role}.`}
         </div>
       </div>

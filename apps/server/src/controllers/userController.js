@@ -5,7 +5,10 @@ const Notification = require("../models/Notification");
 const Comment = require("../models/Comment");
 const Transaction = require("../models/Transaction");
 const mongoose = require("mongoose");
-const { destroyUserSessions } = require("../services/sessions");
+const PaymentRequest = require("../models/PaymentRequest");
+const { destroyUserSessions, refreshUserSessions } = require("../services/sessions");
+const { notify } = require("../services/notifications");
+const { ACTIVE_STATUSES } = require("../services/paymentRequests");
 const { logAction } = require("../services/audit");
 const { publish } = require("../services/events");
 
@@ -45,6 +48,46 @@ async function setStatus(req, res) {
   res.json({ id: user._id, name: user.name, email: user.email, role: user.role, active: user.active });
 }
 
+// PUT /api/users/:id/role { role: "User" | "Approver" } — the Admin decides who
+// reviews payment requests. The Admin account itself never changes, and nobody
+// can change their own role.
+async function setRole(req, res) {
+  const { role } = req.body || {};
+  if (role !== "User" && role !== "Approver") {
+    return res.status(400).json({ error: "Role must be User or Approver." });
+  }
+  const user = await User.findById(req.params.id);
+  if (!user) return res.status(404).json({ error: "User not found." });
+  if (String(user._id) === req.user.id) {
+    return res.status(400).json({ error: "You cannot change your own role." });
+  }
+  if (user.role === "Admin") {
+    return res.status(400).json({ error: "The Admin account's role cannot be changed." });
+  }
+  if (user.role === role) {
+    return res.status(400).json({ error: `${user.name} is already ${role === "Approver" ? "an Approver" : "a User"}.` });
+  }
+  // A person with a payment request still in progress would be stranded: an
+  // Approver has no wallet screen to follow it on.
+  if (user.role === "User") {
+    const open = await PaymentRequest.exists({ requester: user._id, status: { $in: ACTIVE_STATUSES } });
+    if (open) {
+      return res.status(400).json({ error: `${user.name} still has a payment request in progress. Wait until it is closed first.` });
+    }
+  }
+  user.role = role;
+  await user.save();
+  // Their open sessions carry the new role at once.
+  await refreshUserSessions(user._id, { role });
+  publish(user._id, "session");
+  await notify("role", role === "Approver"
+    ? "The Admin made you an Approver. You can now review payment requests under Payment Approvals."
+    : "The Admin changed your role to User. You can manage your own bills and payments again.", user._id);
+  await logAction(req.user, "Role Changed", `${user.name} (${user.email}) is now ${role}.`, { ref: user._id });
+  res.json({ id: user._id, name: user.name, email: user.email, role: user.role, active: user.active });
+}
+
+
 async function remove(req, res) {
   const user = await User.findById(req.params.id);
   if (!user) return res.status(404).json({ error: "User not found." });
@@ -66,6 +109,7 @@ async function remove(req, res) {
     Notification.deleteMany({ user: user._id }),
     Comment.deleteMany({ authorId: user._id }),
     Transaction.deleteMany({ submittedBy: user._id }),
+    PaymentRequest.deleteMany({ requester: user._id }),
     // Receipts from the retired receipt-review feature, if any remain.
     mongoose.connection.collection("receipts").deleteMany({ owner: user._id }),
   ]);
@@ -74,4 +118,4 @@ async function remove(req, res) {
   res.json({ ok: true });
 }
 
-module.exports = { list, setStatus, remove };
+module.exports = { list, setStatus, setRole, remove };
