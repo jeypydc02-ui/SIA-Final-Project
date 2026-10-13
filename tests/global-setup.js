@@ -29,6 +29,7 @@ module.exports = async () => {
     user: { email: "jp@fintrackstark.app", password: "demo123" },
     other: { email: "arvy@fintrackstark.app", password: "demo456" },
     admin: { email: "admin@fintrackstark.app", password: "admin123" },
+    approver: { email: "approver@fintrackstark.app", password: "approver123" },
   };
 
   const tokens = {};

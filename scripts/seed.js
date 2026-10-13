@@ -186,6 +186,7 @@ async function seed() {
   console.log("  User   -> jp@fintrackstark.app / demo123");
   console.log("  User   -> arvy@fintrackstark.app / demo456");
   console.log("  Admin  -> admin@fintrackstark.app / admin123");
+  console.log("  Approver -> approver@fintrackstark.app / approver123");
 
   await mongoose.disconnect();
 }

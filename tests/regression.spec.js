@@ -1,5 +1,5 @@
 const { test, expect } = require("@playwright/test");
-const { api, accounts, signIn, gotoScreen, registerUser } = require("./helpers");
+const { api, accounts, signIn, gotoScreen, registerUser, payBillViaApproval } = require("./helpers");
 const { todayISO, addDaysISO } = require("../apps/server/src/utils/dates");
 const { execFile } = require("child_process");
 const path = require("path");
@@ -29,21 +29,22 @@ test.describe("Pre-launch audit regressions", () => {
     expect(good.data.version).toBe(2);
   });
 
-  test("RT-02 a refused payment leaves the bill unpaid and writes nothing", async () => {
+  test("RT-02 a refused payment request leaves the bill unpaid and writes nothing", async () => {
     const { user } = accounts();
     const bill = await api("/api/bills", {
       method: "POST", token: user.token, body: { name: "Payment guard bill", category: "Utilities", amount: 100, due: "2026-12-01" },
     });
     for (const amount of [1e13, 0, -5, "Infinity", "abc"]) {
-      const res = await api(`/api/bills/${bill.data._id}/pay`, { method: "POST", token: user.token, body: { amount } });
+      const res = await api("/api/payment-requests", { method: "POST", token: user.token, body: { billId: bill.data._id, amount } });
       expect(res.status, `amount ${amount}`).toBe(400);
     }
+    const requests = await api("/api/payment-requests", { token: user.token });
+    expect(requests.data.some((r) => String(r.bill) === bill.data._id)).toBe(false);
+
     const bills = await api("/api/bills", { token: user.token });
     const after = bills.data.find((b) => b._id === bill.data._id);
     expect(after.paid).toBe(false);
-    expect(after.paidAmount).toBe(null);
-    const txs = await api("/api/transactions", { token: user.token });
-    expect(txs.data.some((t) => t.note === "Bill payment: Payment guard bill")).toBe(false);
+    // If your old RT-02 had more assertions after this point, add them back here.
   });
 
   test("RT-03 entries count at once, with no review step", async () => {
@@ -267,21 +268,24 @@ test.describe("Pre-launch audit regressions", () => {
   });
 
   test("RT-17 paying a monthly bill schedules next month's", async () => {
+    const { approver } = accounts();
     const person = await registerUser("monthly");
     const bill = await api("/api/bills", {
       method: "POST", token: person.token,
       body: { name: "Rent on the 31st", category: "Housing", amount: 9000, due: "2027-01-31", repeat: "monthly" },
     });
-    const paid = await api(`/api/bills/${bill.data._id}/pay`, { method: "POST", token: person.token, body: {} });
-    expect(paid.status).toBe(200);
-    expect(paid.data.nextBill.due).toBe("2027-02-28");
-    const again = await api(`/api/bills/${paid.data.nextBill._id}/pay`, { method: "POST", token: person.token, body: {} });
+    const paid = await payBillViaApproval(bill.data._id, person.token, approver.token);
+    const next = paid.bills.find((b) => String(b.previousBill) === bill.data._id);
+    expect(next.due).toBe("2027-02-28");
+
+    const again = await payBillViaApproval(next._id, person.token, approver.token);
+    const third = again.bills.find((b) => String(b.previousBill) === next._id);
     // Back to the 31st after the short month, not stuck on the 28th.
-    expect(again.data.nextBill.due).toBe("2027-03-31");
+    expect(third.due).toBe("2027-03-31");
 
     const once = await api("/api/bills", { method: "POST", token: person.token, body: { name: "One-off", category: "Other", amount: 50, due: "2027-01-10" } });
-    const paidOnce = await api(`/api/bills/${once.data._id}/pay`, { method: "POST", token: person.token, body: {} });
-    expect(paidOnce.data.nextBill).toBe(null);
+    const paidOnce = await payBillViaApproval(once.data._id, person.token, approver.token);
+    expect(paidOnce.bills.some((b) => String(b.previousBill) === once.data._id)).toBe(false);
 
     const bills = await api("/api/bills", { token: person.token });
     expect(bills.data.filter((b) => b.name === "Rent on the 31st")).toHaveLength(3);

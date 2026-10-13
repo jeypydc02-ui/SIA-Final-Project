@@ -77,4 +77,42 @@ async function registerUser(prefix = "test", password = "testpass123") {
   return { email, password, token: res.data.token, user: res.data.user };
 }
 
-module.exports = { BASE, api, accounts, signIn, gotoScreen, registerUser, mailTo, codeIn, linkIn, uniqueEmail };
+
+
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+// Waits until the payment of a bill is fully recorded. The gateway confirms by
+// webhook a moment after the approval, so the test polls. "Payment Recorded" is
+// the LAST thing the cascade writes (after the expense and the next bill), so
+// once it shows up, everything the cascade creates exists.
+async function waitForPayment(billId, userToken) {
+  for (let i = 0; i < 80; i++) {
+    const activity = await api("/api/activity", { token: userToken });
+    if (activity.data && activity.data.some((l) => l.action === "Payment Recorded" && l.detail.includes(billId))) {
+      const bills = await api("/api/bills", { token: userToken });
+      return { bills: bills.data, bill: bills.data.find((b) => b._id === billId) };
+    }
+    await sleep(100);
+  }
+  throw new Error("the gateway did not confirm the payment in time");
+}
+
+// Pays a bill the way the system now does: the User asks, an Approver approves,
+// and the simulated gateway confirms. Resolves once the bill is Paid.
+async function payBillViaApproval(billId, userToken, approverToken, { amount, note } = {}) {
+  const body = { billId };
+  if (amount !== undefined) body.amount = amount;
+  if (note) body.note = note;
+  const request = await api("/api/payment-requests", { method: "POST", token: userToken, body });
+  if (request.status !== 201) throw new Error("request refused: " + JSON.stringify(request.data));
+  const decision = await api(`/api/payment-requests/${request.data._id}/decision`, {
+    method: "PATCH", token: approverToken, body: { decision: "approve" },
+  });
+  if (decision.status !== 200) throw new Error("approval refused: " + JSON.stringify(decision.data));
+  const done = await waitForPayment(billId, userToken);
+  return { request, decision, ...done };
+}
+
+
+
+module.exports = { BASE, api, accounts, signIn, gotoScreen, registerUser, mailTo, codeIn, linkIn, uniqueEmail, waitForPayment, payBillViaApproval };

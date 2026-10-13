@@ -19,8 +19,8 @@ function runReminderSweep() {
 // the messaging simulation that routes events to the right recipient.
 
 test.describe("Integration", () => {
-  test("IT-01 paying a bill cascades into an expense, a notification, and an audit entry", async ({ page }) => {
-    const { user, admin } = accounts();
+    test("IT-01 a bill payment goes through approval, then cascades into an expense, a notification, and an audit entry", async ({ page }) => {
+    const { user, admin, approver } = accounts();
 
     const before = await api("/api/transactions", { token: user.token });
     const bill = await api("/api/bills", {
@@ -32,14 +32,28 @@ test.describe("Integration", () => {
     await gotoScreen(page, "Bill Reminders");
 
     const row = page.locator("tr", { hasText: "Cascade Test Bill" });
-    await row.getByRole("button", { name: "Mark Paid" }).click();
-    await page.getByRole("button", { name: "Confirm Payment" }).click();
-    await expect(page.locator(".toast")).toContainText("marked as paid");
+    await row.getByRole("button", { name: "Request Payment" }).click();
+    await page.getByRole("button", { name: "Send for Approval" }).click();
+    await expect(page.locator(".toast")).toContainText("Payment request sent");
 
-    // 1. the bill itself moved to Paid
-    await expect(page.locator("tr", { hasText: "Cascade Test Bill" })).toContainText("Paid");
+    // Nothing is paid yet: the request waits for an Approver.
+    await expect(page.locator("tr", { hasText: "Cascade Test Bill" })).toContainText("Awaiting approval");
+    const mid = await api("/api/transactions", { token: user.token });
+    expect(mid.data.length).toBe(before.data.length);
 
-    // 2. an auto-approved expense transaction was created by the workflow
+    // The Approver approves; the simulated gateway then confirms by webhook.
+    const queue = await api("/api/payment-requests", { token: approver.token });
+    const request = queue.data.find((r) => r.billName === "Cascade Test Bill");
+    expect(request.status).toBe("Pending");
+    const decision = await api(`/api/payment-requests/${request._id}/decision`, {
+      method: "PATCH", token: approver.token, body: { decision: "approve" },
+    });
+    expect(decision.status).toBe(200);
+
+    // 1. the bill moves to Paid, on the open screen, without a refresh
+    await expect(page.locator("tr", { hasText: "Cascade Test Bill" })).toContainText("Paid", { timeout: 15000 });
+
+    // 2. an expense entry was created by the workflow
     const after = await api("/api/transactions", { token: user.token });
     expect(after.data.length).toBe(before.data.length + 1);
     const generated = after.data.find((t) => t.note === "Bill payment: Cascade Test Bill");
@@ -52,12 +66,15 @@ test.describe("Integration", () => {
     const notifs = await api("/api/notifications", { token: user.token });
     expect(notifs.data.some((n) => n.type === "payment" && n.message.includes("Cascade Test Bill"))).toBe(true);
 
-    // 4. the action was recorded in the payer's own activity log — not in
-    // the Admin's security log, which never shows anyone's money
+    // 4. the payer's own activity has the payment; the Admin's log has the
+    //    approval and the gateway lines, but never the bill or the amount.
     const activity = await api("/api/activity", { token: user.token });
     expect(activity.data.some((l) => l.action === "Payment Recorded" && l.detail.includes("Cascade Test Bill"))).toBe(true);
     const audit = await api("/api/audit-log", { token: admin.token });
     expect(audit.data.some((l) => l.action === "Payment Recorded")).toBe(false);
+    expect(audit.data.some((l) => l.action === "Payment Approved")).toBe(true);
+    expect(audit.data.some((l) => l.action === "Gateway Callback")).toBe(true);
+    expect(audit.data.some((l) => l.detail.includes("Cascade Test Bill"))).toBe(false);
   });
 
   test("IT-02 a notification reaches an open screen without a refresh", async ({ page }) => {

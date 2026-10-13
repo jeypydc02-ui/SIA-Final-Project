@@ -40,6 +40,7 @@ module.exports = defineConfig({
       RATE_LIMIT_LOGIN_MAX: "200",
       RATE_LIMIT_REGISTER_MAX: "200",
       RATE_LIMIT_MAIL_MAX: "200",
+      MOCK_GATEWAY_DELAY_MS: "100",
       // Sign-up codes and reset links are kept in memory and read back
       // through /api/dev/outbox instead of being e-mailed.
       DEV_MAILBOX: "1",

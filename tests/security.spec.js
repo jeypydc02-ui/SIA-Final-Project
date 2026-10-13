@@ -46,7 +46,7 @@ test.describe("Security and access control", () => {
     expect(theirNotifs.data.length).toBe(0);
 
     // Write isolation: naming the id directly does not help either.
-    expect((await api(`/api/bills/${bill.data._id}/pay`, { method: "POST", token: intruder.token, body: { amount: 9000 } })).status).toBe(403);
+    expect((await api("/api/payment-requests", { method: "POST", token: intruder.token, body: { billId: bill.data._id, amount: 9000 } })).status).toBe(403);
     expect((await api(`/api/bills/${bill.data._id}`, { method: "PUT", token: intruder.token, body: { amount: 1 } })).status).toBe(403);
     expect((await api(`/api/bills/${bill.data._id}`, { method: "DELETE", token: intruder.token })).status).toBe(403);
     expect((await api(`/api/budgets/${victimBudget._id}`, { method: "PUT", token: intruder.token, body: { limit: 1 } })).status).toBe(403);
@@ -70,13 +70,17 @@ test.describe("Security and access control", () => {
     // A User may not administer accounts or read the audit trail.
     expect((await api("/api/users", { token: user.token })).status).toBe(403);
     expect((await api("/api/audit-log", { token: user.token })).status).toBe(403);
-    // There is no way to change a role from the app, for anyone: the system
-    // has one Admin, and everyone else is a User.
-    for (const who of [user, admin]) {
-      expect((await api(`/api/users/${other.user.id}/role`, {
-        method: "PUT", token: who.token, body: { role: "Admin" },
-      })).status).toBe(404);
-    }
+   // Only the Admin can change a role, and only between User and Approver:
+// nobody can be made an Admin, and nobody can change their own role.
+expect((await api(`/api/users/${other.user.id}/role`, {
+  method: "PUT", token: user.token, body: { role: "Approver" },
+})).status).toBe(403);
+expect((await api(`/api/users/${other.user.id}/role`, {
+  method: "PUT", token: admin.token, body: { role: "Admin" },
+})).status).toBe(400);
+expect((await api(`/api/users/${admin.user.id}/role`, {
+  method: "PUT", token: admin.token, body: { role: "User" },
+})).status).toBe(400);
 
     // Registration never grants elevated rights, whatever the caller asks for.
     const sneakyEmail = uniqueEmail("sneaky");

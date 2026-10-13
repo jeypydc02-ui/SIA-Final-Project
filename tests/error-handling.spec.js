@@ -1,5 +1,7 @@
 const { test, expect } = require("@playwright/test");
-const { api, accounts, signIn, gotoScreen, registerUser, mailTo, codeIn, linkIn, uniqueEmail } = require("./helpers");
+const { api, accounts, signIn, gotoScreen, registerUser, mailTo, codeIn, linkIn, uniqueEmail, payBillViaApproval } = require("./helpers");
+
+
 
 // Error-handling test cases (spec section 16: minimum 5), covering what
 // section 7.5 asks for: missing, invalid, duplicate, and failed data.
@@ -52,7 +54,7 @@ test.describe("Error handling", () => {
     expect(badVersion.status).toBe(400);
     expect(badVersion.data.error).toContain("not valid");
 
-    const badBill = await api("/api/bills/12345/pay", { method: "POST", token: user.token, body: { amount: 10 } });
+    const badBill = await api("/api/payment-requests", { method: "POST", token: user.token, body: { billId: "12345", amount: 10 } });
     expect(badBill.status).toBe(400);
 
     // A well-formed id that does not exist is a 404, not a 400.
@@ -61,22 +63,29 @@ test.describe("Error handling", () => {
   });
 
   test("ET-05 an invalid workflow transition is refused", async () => {
-    const { user } = accounts();
+    const { user, approver } = accounts();
 
     // A bill cannot be paid twice.
     const bill = await api("/api/bills", {
       method: "POST", token: user.token,
       body: { name: "Double Pay Guard", category: "Credit", amount: 500, due: "2026-12-01" },
     });
-    const first = await api(`/api/bills/${bill.data._id}/pay`, { method: "POST", token: user.token, body: { amount: 500 } });
-    expect(first.status).toBe(200);
-    const second = await api(`/api/bills/${bill.data._id}/pay`, { method: "POST", token: user.token, body: { amount: 500 } });
+       const first = await payBillViaApproval(bill.data._id, user.token, approver.token, { amount: 500 });
+    expect(first.bill.paid).toBe(true);
+    const second = await api("/api/payment-requests", { method: "POST", token: user.token, body: { billId: bill.data._id, amount: 500 } });
     expect(second.status).toBe(400);
     expect(second.data.error).toContain("already marked as paid");
 
+    // A request that was already decided cannot be decided again.
+    const again = await api(`/api/payment-requests/${first.request.data._id}/decision`, {
+      method: "PATCH", token: approver.token, body: { decision: "approve" },
+    });
+    expect(again.status).toBe(409);
+
     // The expense that payment created follows its bill: it cannot be edited
     // or deleted on its own.
-    const fromBill = first.data.transaction._id;
+    const all = await api("/api/transactions", { token: user.token });
+    const fromBill = all.data.find((t) => t.note === "Bill payment: Double Pay Guard")._id;
     expect((await api(`/api/transactions/${fromBill}`, { method: "PUT", token: user.token, body: { amount: 1 } })).status).toBe(400);
     expect((await api(`/api/transactions/${fromBill}`, { method: "DELETE", token: user.token })).status).toBe(400);
 
